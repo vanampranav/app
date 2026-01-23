@@ -4,6 +4,7 @@ import '../screens/home_screen.dart';
 import '../screens/shop_screen.dart';
 import '../screens/wishlist_screen.dart';
 import '../screens/cart_screen.dart';
+import '../screens/devices_screen.dart';
 import '../screens/profile_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../screens/auth_screen.dart';
@@ -42,7 +43,7 @@ class _MainLayoutState extends State<MainLayout> {
   }
 
   void _onItemTapped(int index) async {
-    if (index == 4 && !_isAuthenticated) {
+    if (index == 5 && !_isAuthenticated) {
       final result = await Navigator.of(context).push<bool>(
         MaterialPageRoute(
           builder: (context) => const AuthScreen(),
@@ -81,6 +82,9 @@ class _MainLayoutState extends State<MainLayout> {
         page = const CartScreen();
         break;
       case 4:
+        page = const DevicesScreen();
+        break;
+      case 5:
         page = const ProfileScreen();
         break;
       default:

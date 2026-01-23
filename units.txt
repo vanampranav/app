@@ -1,0 +1,20 @@
+Compiled from "ICConstant.java"
+public final class cn.icomon.icdevicemanager.model.other.ICConstant$ICKitchenScaleUnit extends java.lang.Enum<cn.icomon.icdevicemanager.model.other.ICConstant$ICKitchenScaleUnit> {
+  public static final cn.icomon.icdevicemanager.model.other.ICConstant$ICKitchenScaleUnit ICKitchenScaleUnitG;
+  public static final cn.icomon.icdevicemanager.model.other.ICConstant$ICKitchenScaleUnit ICKitchenScaleUnitMl;
+  public static final cn.icomon.icdevicemanager.model.other.ICConstant$ICKitchenScaleUnit ICKitchenScaleUnitLb;
+  public static final cn.icomon.icdevicemanager.model.other.ICConstant$ICKitchenScaleUnit ICKitchenScaleUnitOz;
+  public static final cn.icomon.icdevicemanager.model.other.ICConstant$ICKitchenScaleUnit ICKitchenScaleUnitMg;
+  public static final cn.icomon.icdevicemanager.model.other.ICConstant$ICKitchenScaleUnit ICKitchenScaleUnitMlMilk;
+  public static final cn.icomon.icdevicemanager.model.other.ICConstant$ICKitchenScaleUnit ICKitchenScaleUnitFlOzWater;
+  public static final cn.icomon.icdevicemanager.model.other.ICConstant$ICKitchenScaleUnit ICKitchenScaleUnitFlOzMilk;
+  private final int value;
+  private static final cn.icomon.icdevicemanager.model.other.ICConstant$ICKitchenScaleUnit[] $VALUES;
+  public static cn.icomon.icdevicemanager.model.other.ICConstant$ICKitchenScaleUnit[] values();
+  public static cn.icomon.icdevicemanager.model.other.ICConstant$ICKitchenScaleUnit valueOf(java.lang.String);
+  private cn.icomon.icdevicemanager.model.other.ICConstant$ICKitchenScaleUnit(int);
+  public int getValue();
+  public static cn.icomon.icdevicemanager.model.other.ICConstant$ICKitchenScaleUnit value(int);
+  private static cn.icomon.icdevicemanager.model.other.ICConstant$ICKitchenScaleUnit[] $values();
+  static {};
+}

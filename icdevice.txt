@@ -1,0 +1,9 @@
+Compiled from "ICDevice.java"
+public class cn.icomon.icdevicemanager.model.device.ICDevice {
+  public java.lang.String macAddr;
+  public cn.icomon.icdevicemanager.model.device.ICDevice();
+  public java.lang.String getMacAddr();
+  public void setMacAddr(java.lang.String);
+  public boolean equals(java.lang.Object);
+  public java.lang.String toString();
+}

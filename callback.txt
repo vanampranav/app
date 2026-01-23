@@ -1,0 +1,4 @@
+Compiled from "ICDeviceManagerSettingManager.java"
+public interface cn.icomon.icdevicemanager.ICDeviceManagerSettingManager$ICSettingCallback {
+  public abstract void onCallBack(cn.icomon.icdevicemanager.model.other.ICConstant$ICSettingCallBackCode);
+}
