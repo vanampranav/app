@@ -1,0 +1,202 @@
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../models/member_model.dart';
+
+/// Service for managing members and measurements
+class MemberService {
+  static const String _membersKey = 'members_list';
+  static const String _activeMemberKey = 'active_member_id';
+  static const String _measurementsKeyPrefix = 'measurements_';
+
+  SharedPreferences? _prefs;
+
+  /// Initialize shared preferences
+  Future<void> _ensureInitialized() async {
+    _prefs ??= await SharedPreferences.getInstance();
+  }
+
+  /// Get all members
+  Future<List<Member>> getMembers() async {
+    await _ensureInitialized();
+    final json = _prefs!.getString(_membersKey);
+    if (json == null) return [];
+    
+    try {
+      final List<dynamic> list = jsonDecode(json);
+      return list.map((e) => Member.fromJson(e)).toList();
+    } catch (e) {
+      print('Error loading members: $e');
+      return [];
+    }
+  }
+
+  /// Get member by ID
+  Future<Member?> getMember(String id) async {
+    final members = await getMembers();
+    try {
+      return members.firstWhere((m) => m.id == id);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// Get active member
+  Future<Member?> getActiveMember() async {
+    await _ensureInitialized();
+    final activeId = _prefs!.getString(_activeMemberKey);
+    if (activeId == null) {
+      // Return first member if no active member set
+      final members = await getMembers();
+      return members.isNotEmpty ? members.first : null;
+    }
+    return getMember(activeId);
+  }
+
+  /// Set active member
+  Future<void> setActiveMember(String memberId) async {
+    await _ensureInitialized();
+    await _prefs!.setString(_activeMemberKey, memberId);
+  }
+
+  /// Add a new member
+  Future<Member> addMember(Member member) async {
+    await _ensureInitialized();
+    final members = await getMembers();
+    members.add(member);
+    await _saveMembers(members);
+    
+    // Set as active if it's the first member
+    if (members.length == 1) {
+      await setActiveMember(member.id);
+    }
+    
+    return member;
+  }
+
+  /// Update a member
+  Future<Member> updateMember(Member member) async {
+    await _ensureInitialized();
+    final members = await getMembers();
+    final index = members.indexWhere((m) => m.id == member.id);
+    if (index != -1) {
+      members[index] = member.copyWith(updatedAt: DateTime.now());
+      await _saveMembers(members);
+    }
+    return member;
+  }
+
+  /// Delete a member
+  Future<void> deleteMember(String memberId) async {
+    await _ensureInitialized();
+    final members = await getMembers();
+    members.removeWhere((m) => m.id == memberId);
+    await _saveMembers(members);
+    
+    // Clear measurements for this member
+    await _prefs!.remove('$_measurementsKeyPrefix$memberId');
+    
+    // Update active member if deleted
+    final activeId = _prefs!.getString(_activeMemberKey);
+    if (activeId == memberId && members.isNotEmpty) {
+      await setActiveMember(members.first.id);
+    }
+  }
+
+  /// Save members list
+  Future<void> _saveMembers(List<Member> members) async {
+    final json = jsonEncode(members.map((m) => m.toJson()).toList());
+    await _prefs!.setString(_membersKey, json);
+  }
+
+  /// Get measurements for a member
+  Future<List<BodyMeasurement>> getMeasurements(String memberId, {int? limit}) async {
+    await _ensureInitialized();
+    final key = '$_measurementsKeyPrefix$memberId';
+    final json = _prefs!.getString(key);
+    if (json == null) return [];
+    
+    try {
+      final List<dynamic> list = jsonDecode(json);
+      var measurements = list.map((e) => BodyMeasurement.fromJson(e)).toList();
+      // Sort by timestamp descending (newest first)
+      measurements.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      if (limit != null && measurements.length > limit) {
+        measurements = measurements.sublist(0, limit);
+      }
+      return measurements;
+    } catch (e) {
+      print('Error loading measurements: $e');
+      return [];
+    }
+  }
+
+  /// Get latest measurement for a member
+  Future<BodyMeasurement?> getLatestMeasurement(String memberId) async {
+    final measurements = await getMeasurements(memberId, limit: 1);
+    return measurements.isNotEmpty ? measurements.first : null;
+  }
+
+  /// Add a measurement
+  Future<BodyMeasurement> addMeasurement(BodyMeasurement measurement) async {
+    await _ensureInitialized();
+    final key = '$_measurementsKeyPrefix${measurement.memberId}';
+    final measurements = await getMeasurements(measurement.memberId);
+    measurements.add(measurement);
+    
+    final json = jsonEncode(measurements.map((m) => m.toJson()).toList());
+    await _prefs!.setString(key, json);
+    
+    return measurement;
+  }
+
+  /// Delete a measurement
+  Future<void> deleteMeasurement(String memberId, String measurementId) async {
+    await _ensureInitialized();
+    final key = '$_measurementsKeyPrefix$memberId';
+    final measurements = await getMeasurements(memberId);
+    measurements.removeWhere((m) => m.id == measurementId);
+    
+    final json = jsonEncode(measurements.map((m) => m.toJson()).toList());
+    await _prefs!.setString(key, json);
+  }
+
+  /// Get measurements for a date range
+  Future<List<BodyMeasurement>> getMeasurementsInRange(
+    String memberId, 
+    DateTime start, 
+    DateTime end,
+  ) async {
+    final measurements = await getMeasurements(memberId);
+    return measurements.where((m) => 
+      m.timestamp.isAfter(start) && m.timestamp.isBefore(end)
+    ).toList();
+  }
+
+  /// Generate a unique ID
+  static String generateId() {
+    return DateTime.now().millisecondsSinceEpoch.toString() + 
+           '_${DateTime.now().microsecond}';
+  }
+
+  /// Create default member if none exist
+  Future<Member> createDefaultMember() async {
+    final member = Member(
+      id: generateId(),
+      nickname: 'User',
+      gender: Gender.male,
+      birthdate: DateTime(1990, 1, 1),
+      heightCm: 170,
+      userType: UserType.standard,
+    );
+    return addMember(member);
+  }
+
+  /// Ensure at least one member exists
+  Future<Member> ensureMemberExists() async {
+    final members = await getMembers();
+    if (members.isEmpty) {
+      return createDefaultMember();
+    }
+    return (await getActiveMember()) ?? members.first;
+  }
+}

@@ -2,7 +2,9 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/fitdays_service.dart';
+import '../services/member_service.dart';
 import '../models/device_model.dart';
+import '../models/member_model.dart';
 import '../theme/app_theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'measurement_screen.dart';
@@ -268,26 +270,14 @@ class _DevicesScreenState extends State<DevicesScreen> {
     // We strictly rely on real-time data from connection
     // await prefs.remove('last_measurement'); // Optional: Clear it if we want to enforce fresh start
 
-    final gender = prefs.getString('user_gender') ?? 'male';
-    final heightStr = prefs.getString('user_height') ?? '170';
-    final birthdayStr = prefs.getString('user_birthday');
+    // Use member management data for SDK initialization
+    final memberService = MemberService();
+    final activeMember = await memberService.ensureMemberExists();
     
-    int age = 25;
-    if (birthdayStr != null) {
-      final birthday = DateTime.parse(birthdayStr);
-      final now = DateTime.now();
-      age = now.year - birthday.year;
-      if (now.month < birthday.month || (now.month == birthday.month && now.day < birthday.day)) {
-        age--;
-      }
-    }
-    
-    int height = int.tryParse(heightStr) ?? 170;
-
     await _fitDaysService.initializeSDK(
-      age: age,
-      height: height,
-      sex: gender,
+      age: activeMember.age,
+      height: activeMember.heightCm,
+      sex: activeMember.gender.sdkSexType,
     );
   }
 

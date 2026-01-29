@@ -26,15 +26,11 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   bool _isAuthenticated = false;
   String? _userEmail;
-  String _gender = 'male';
-  DateTime? _birthday;
-  final TextEditingController _heightController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _checkAuthStatus();
-    _loadUserProfile();
   }
 
   Future<void> _checkAuthStatus() async {
@@ -45,30 +41,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _isAuthenticated = token != null;
       _userEmail = email;
     });
-  }
-
-  Future<void> _loadUserProfile() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _gender = prefs.getString('user_gender') ?? 'male';
-      final birthdayStr = prefs.getString('user_birthday');
-      if (birthdayStr != null) {
-        _birthday = DateTime.parse(birthdayStr);
-      }
-      _heightController.text = prefs.getString('user_height') ?? '';
-    });
-  }
-
-  Future<void> _saveUserProfile() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('user_gender', _gender);
-    if (_birthday != null) {
-      await prefs.setString('user_birthday', _birthday!.toIso8601String());
-    }
-    await prefs.setString('user_height', _heightController.text);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Profile saved successfully')),
-    );
   }
 
   Future<void> _signOut() async {
@@ -306,75 +278,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ListTile(
             leading: const Icon(Icons.email),
             title: Text(_userEmail!),
-          ),
-          const Divider(),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Physical Profile (Required for Scale)',
-                    style: TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  value: _gender,
-                  decoration: const InputDecoration(
-                    labelText: 'Gender',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.person),
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: 'male', child: Text('Male')),
-                    DropdownMenuItem(value: 'female', child: Text('Female')),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) setState(() => _gender = value);
-                  },
-                ),
-                const SizedBox(height: 16),
-                InkWell(
-                  onTap: () async {
-                    final date = await showDatePicker(
-                      context: context,
-                      initialDate: _birthday ?? DateTime(1995),
-                      firstDate: DateTime(1900),
-                      lastDate: DateTime.now(),
-                    );
-                    if (date != null) setState(() => _birthday = date);
-                  },
-                  child: InputDecorator(
-                    decoration: const InputDecoration(
-                      labelText: 'Birthday',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.calendar_today),
-                    ),
-                    child: Text(
-                      _birthday != null
-                          ? '${_birthday!.day}/${_birthday!.month}/${_birthday!.year}'
-                          : 'Select Birthday',
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _heightController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Height (cm)',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.height),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: _saveUserProfile,
-                    child: const Text('Save Profile'),
-                  ),
-                ),
-              ],
-            ),
           ),
         const Divider(),
         _buildThemeToggle(context),
