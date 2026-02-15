@@ -141,12 +141,53 @@ class MemberService {
     await _ensureInitialized();
     final key = '$_measurementsKeyPrefix${measurement.memberId}';
     final measurements = await getMeasurements(measurement.memberId);
+    
+    // Check for duplicates (within 1 minute threshold)
+    final existingIndex = measurements.indexWhere((m) => 
+      m.timestamp.difference(measurement.timestamp).inMinutes.abs() < 1 &&
+      m.weightKg == measurement.weightKg &&
+      m.bodyFatPercent == measurement.bodyFatPercent
+    );
+
+    if (existingIndex != -1) {
+       // Update existing if needed, or just return it
+       // For now, let's just return the existing one to avoid duplication
+       return measurements[existingIndex];
+    }
+
     measurements.add(measurement);
     
     final json = jsonEncode(measurements.map((m) => m.toJson()).toList());
     await _prefs!.setString(key, json);
     
     return measurement;
+  }
+
+  /// Remove duplicate measurements
+  Future<void> removeDuplicates(String memberId) async {
+    await _ensureInitialized();
+    final key = '$_measurementsKeyPrefix$memberId';
+    final measurements = await getMeasurements(memberId);
+    
+    final uniqueMeasurements = <BodyMeasurement>[];
+    final seen = <String>{};
+    
+    for (var m in measurements) {
+      // Create a unique key based on time (to minute) and weight
+      // timestamp is DateTime, let's round to minute
+      final timeKey = '${m.timestamp.year}-${m.timestamp.month}-${m.timestamp.day} ${m.timestamp.hour}:${m.timestamp.minute}';
+      final uniqueKey = '$timeKey-${m.weightKg}-${m.bodyFatPercent}';
+      
+      if (!seen.contains(uniqueKey)) {
+        seen.add(uniqueKey);
+        uniqueMeasurements.add(m);
+      }
+    }
+    
+    if (uniqueMeasurements.length != measurements.length) {
+       final json = jsonEncode(uniqueMeasurements.map((m) => m.toJson()).toList());
+       await _prefs!.setString(key, json);
+    }
   }
 
   /// Delete a measurement

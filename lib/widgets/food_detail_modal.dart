@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/food_models.dart';
+import '../models/device_model.dart';
 import '../services/nutrition_service.dart';
 import '../theme/app_theme.dart';
 
@@ -7,12 +8,14 @@ class FoodDetailModal extends StatefulWidget {
   final FoodItem food;
   final double weight;
   final NutritionService nutritionService;
+  final Stream<WeightMeasurement>? weightStream;
 
   const FoodDetailModal({
     Key? key,
     required this.food,
     required this.weight,
     required this.nutritionService,
+    this.weightStream,
   }) : super(key: key);
 
   @override
@@ -32,6 +35,33 @@ class _FoodDetailModalState extends State<FoodDetailModal> {
     super.initState();
     _weightController = TextEditingController(text: widget.weight.toStringAsFixed(1));
     _calculateNutrition();
+    _setupWeightListener();
+  }
+
+  void _setupWeightListener() {
+    if (widget.weightStream != null) {
+      widget.weightStream!.listen((measurement) {
+         if (mounted) {
+           // FitDays returns weight in kg or lb dependent on unit.
+           // We need to ensure we display it correctly or convert to grams if that's what we expect.
+           // For now, assuming the stream provides raw values and we might need to check units.
+           // However, looking at KitchenScaleScreen, it converts to grams before passing `currentWeight`.
+           // But the STREAM sends raw `WeightMeasurement` objects.
+           
+           double weightInGrams = measurement.weight;
+           // Basic conversion logic mirroring KitchenScaleScreen (simplified for now, ideally reused)
+           switch (measurement.unit.toLowerCase()) {
+             case 'kg': weightInGrams *= 1000; break;
+             case 'lb': weightInGrams *= 453.592; break;
+             case 'oz': weightInGrams *= 28.3495; break;
+             // Add other cases if needed or move conversion logic to a shared helper
+           }
+           
+           _weightController.text = weightInGrams.toStringAsFixed(1);
+           _calculateNutrition(); // Debouncing might be good here but keeping it simple first
+         }
+      });
+    }
   }
 
   @override

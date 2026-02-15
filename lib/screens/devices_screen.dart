@@ -621,20 +621,20 @@ class _DevicesScreenState extends State<DevicesScreen> {
               ),
             );
           } else {
-            // Other devices: Connect first, then navigate
+            // Other devices: Connect if needed, but ALWAYS navigate to support offline mode
             if (!isConnected) {
               _connectDevice(device);
-            } else {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => MeasurementScreen(
-                    connectedDevice: device,
-                    fitDaysService: _fitDaysService,
-                  ),
-                ),
-              );
             }
+            // Navigate immediately to allow offline access
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => MeasurementScreen(
+                  connectedDevice: device,
+                  fitDaysService: _fitDaysService,
+                ),
+              ),
+            );
           }
         },
         borderRadius: BorderRadius.circular(12),

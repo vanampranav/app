@@ -152,13 +152,14 @@ class _KitchenScaleScreenState extends State<KitchenScaleScreen> {
           meal: meal,
           currentWeight: currentWeight,
           nutritionService: _nutritionService,
+          weightStream: widget.fitDaysService.weightDataStream,
         ),
       ),
     );
 
-    if (result != null && result is MealEntry) {
+    if (result != null && result is List<MealEntry>) {
       setState(() {
-        _dailySummary?.entries.add(result);
+        _dailySummary?.entries.addAll(result);
       });
       await _saveDailySummary();
     }

@@ -421,13 +421,81 @@ public class FitDaysSDKManager implements ICDeviceManagerDelegate, ICScanDeviceD
              unit = "g";
         }
         
+        /* 
+        // --- DEBUGGING REMOVED FOR PERFORMANCE ---
+        // Verify via logs only if absolutely necessary
+        */
+
+        // Handle negative weights
+        // SDK Documentation: https://sdk.fitdays.cn/Android/english/api.html#ickitchenscaledatakitchen-scale-data-class
+        // value_g (and other value fields) always return positive numbers
+        // isNegative indicates whether the value should be treated as negative
+        // Example: value_g = 100, isNegative = true → actual value is -100
+        boolean isNegative = data.isNegative;
+        
+        if (isNegative) {
+            weight = -Math.abs(weight);
+            android.util.Log.d("FitDaysSDK", "Negative weight detected: " + weight + " " + unit);
+        }
+
         weightData.put("weight", weight);
         weightData.put("unit", unit);
         weightData.put("isStabilized", true); 
         weightData.put("hasBodyComposition", false);
         
-        android.util.Log.d("FitDaysSDK", "Emitting weight: " + weight + " " + unit);
+        android.util.Log.d("FitDaysSDK", "Emitting weight (Kitchen): " + weight + " " + unit + (isNegative ? " (Negative)" : ""));
         sendEvent("weightData", weightData);
+    }
+
+    @Override
+    public void onReceiveWeightCenterData(ICDevice device, ICWeightCenterData data) {
+        android.util.Log.d("FitDaysSDK", "onReceiveWeightCenterData called");
+        
+        // This callback is usually for body balance scales, but checking just in case
+        // ICWeightCenterData has left_weight_g, right_weight_g, etc.
+        // We'll inspect it via reflection for safety as we did above, or just read known fields.
+        // Documentation says it has value_g-like fields? No, it has left_weight_g/right_weight_g.
+        
+        double totalWeight = 0.0;
+        try {
+            // Try to sum left and right if available, or find a total weight field
+            // Note: Documentation says ICWeightCenterData has precision_kg, kg_scale_division, left_weight_g, right_weight_g
+            // It commonly does NOT have a simple "weight" field, it's for balance.
+            
+            // However, we can verify if it has any data relevant to us
+            // Let's log all fields to be sure
+            for (java.lang.reflect.Field field : data.getClass().getDeclaredFields()) {
+                field.setAccessible(true);
+                Object val = field.get(data);
+                android.util.Log.d("FitDaysSDK", "WeightCenterData Field: " + field.getName() + " = " + val);
+            }
+            
+            // If we find a "weight_kg" or similar, we use it.
+            // Check for weight_kg
+            try {
+                java.lang.reflect.Field wField = data.getClass().getDeclaredField("weight_kg");
+                wField.setAccessible(true);
+                Object wVal = wField.get(data);
+                if (wVal instanceof Number) {
+                    totalWeight = ((Number) wVal).doubleValue();
+                }
+            } catch (Exception e) {}
+
+        } catch (Exception e) {
+            android.util.Log.e("FitDaysSDK", "Error parsing WeightCenterData", e);
+        }
+        
+        // If we found a valid weight, send it
+        if (totalWeight > 0) {
+             Map<String, Object> weightData = new HashMap<>();
+             weightData.put("weight", totalWeight);
+             weightData.put("unit", "kg"); // Assuming kg for Center Data usually
+             weightData.put("isStabilized", true);
+             weightData.put("hasBodyComposition", false);
+             
+             android.util.Log.d("FitDaysSDK", "Emitting weight (CenterData): " + totalWeight);
+             sendEvent("weightData", weightData);
+        }
     }
     
     @Override
@@ -468,9 +536,7 @@ public class FitDaysSDKManager implements ICDeviceManagerDelegate, ICScanDeviceD
     @Override
     public void onReceiveRulerHistoryData(ICDevice device, ICRulerData data) {}
     
-    @Override
-    public void onReceiveWeightCenterData(ICDevice device, 
-                                         ICWeightCenterData data) {}
+
     
     @Override
     public void onReceiveWeightUnitChanged(ICDevice device, 
@@ -494,11 +560,25 @@ public class FitDaysSDKManager implements ICDeviceManagerDelegate, ICScanDeviceD
          eventData.put("step", step.toString());
          
          // Check if data is weight data regardless of step (Weighing or Over)
-         if (data != null && data instanceof ICWeightData) {
-             android.util.Log.d("FitDaysSDK", "Measure Step: " + step + " - Formatting data");
-             onReceiveWeightData(device, (ICWeightData) data);
-         } else {
-             android.util.Log.d("FitDaysSDK", "Data is NOT ICWeightData, skipping");
+         if (data != null) {
+             if (data instanceof ICWeightData) {
+                 android.util.Log.d("FitDaysSDK", "Measure Step: " + step + " - Formatting Body Fat Data");
+                 onReceiveWeightData(device, (ICWeightData) data);
+             } else if (data instanceof ICKitchenScaleData) {
+                 android.util.Log.d("FitDaysSDK", "Measure Step: " + step + " - Formatting Kitchen Scale Data");
+                 onReceiveKitchenScaleData(device, (ICKitchenScaleData) data);
+             } else {
+                 android.util.Log.d("FitDaysSDK", "Data is NOT known type (ICWeightData/ICKitchenScaleData), skipping");
+                 // Dump unknown data just in case
+                 if (data != null) {
+                    try {
+                        for (java.lang.reflect.Field f : data.getClass().getDeclaredFields()) {
+                            f.setAccessible(true);
+                            android.util.Log.d("FitDaysSDK", "Unknown Data Field: " + f.getName() + " = " + f.get(data));
+                        }
+                    } catch (Exception e) {}
+                 }
+             }
          }
          // Forward specific steps if needed
          sendEvent("measureStep", eventData);

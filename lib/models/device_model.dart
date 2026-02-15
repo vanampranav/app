@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'member_model.dart';
 
 // FitDays Device Models
 // Represents Bluetooth devices and their data
@@ -159,6 +159,25 @@ class WeightMeasurement {
       visceralFat: map['visceralFat'] != null ? (map['visceralFat'] as num).toDouble() : null,
       skeletalMuscle: map['skeletalMuscle'] != null ? (map['skeletalMuscle'] as num).toDouble() : null,
       physicalAge: map['physicalAge'] as int?,
+    );
+  }
+
+  factory WeightMeasurement.fromBodyMeasurement(BodyMeasurement measurement) {
+    return WeightMeasurement(
+      weight: measurement.weightKg,
+      unit: 'kg', // Stored measurements are in kg
+      isStabilized: true, // Stored measurements are stable
+      bmi: measurement.bmi,
+      bodyFat: measurement.bodyFatPercent,
+      muscle: measurement.muscleRatePercent,
+      water: measurement.bodyWaterPercent,
+      boneMass: measurement.boneMassKg,
+      protein: measurement.proteinPercent,
+      bmr: measurement.bmr,
+      visceralFat: measurement.visceralFat,
+      skeletalMuscle: measurement.skeletalMusclePercent,
+      physicalAge: measurement.bodyAge,
+      timestamp: measurement.timestamp,
     );
   }
 

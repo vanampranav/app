@@ -111,9 +111,10 @@ class _MeasurementScreenState extends State<MeasurementScreen> {
   final MemberService _memberService = MemberService();
   
   WeightMeasurement? _latestMeasurement;
+  WeightMeasurement? _compareMeasurement;
   Member? _activeMember;
   List<Member> _members = [];
-  bool _isConnected = true;
+  bool _isConnected = false;
   bool _isLoading = true;
   
   /// Get all body index metrics with their ranges based on user profile
@@ -472,11 +473,23 @@ class _MeasurementScreenState extends State<MeasurementScreen> {
       
       // Update SDK with current user info
       if (_activeMember != null) {
+        // Clean up duplicates first
+        await _memberService.removeDuplicates(_activeMember!.id);
+        
         await widget.fitDaysService.initializeSDK(
           age: _activeMember!.age,
           height: _activeMember!.heightCm,
           sex: _activeMember!.gender.sdkSexType,
         );
+
+        // Load latest measurement for offline access
+        final measurements = await _memberService.getMeasurements(_activeMember!.id, limit: 2);
+        if (measurements.isNotEmpty) {
+          _latestMeasurement = WeightMeasurement.fromBodyMeasurement(measurements.first);
+          if (measurements.length > 1) {
+            _compareMeasurement = WeightMeasurement.fromBodyMeasurement(measurements[1]);
+          }
+        }
       }
     } catch (e) {
       print('Error loading data: $e');
@@ -632,7 +645,7 @@ class _MeasurementScreenState extends State<MeasurementScreen> {
                     _buildBodyIndexSection(),
                     _buildDisclaimerSection(),
                     _buildTrendSection(),
-                    _buildBabyPetModeCard(),
+                    // _buildBabyPetModeCard() removed
                     _buildTargetCard(),
                     const SizedBox(height: 20),
                   ],
@@ -764,40 +777,128 @@ class _MeasurementScreenState extends State<MeasurementScreen> {
   }
 
   Widget _buildComparedSection() {
-    return Container(
-      margin: const EdgeInsets.all(12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+    return GestureDetector(
+      onTap: _showComparisonSelector,
+      child: Container(
+        margin: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Compared',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                ),
+                Row(
+                  children: [
+                    Text(
+                      _compareMeasurement != null 
+                          ? DateFormat('MMM d, yyyy HH:mm').format(_compareMeasurement!.timestamp)
+                          : 'Select record',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                    ),
+                    Icon(Icons.chevron_right, size: 16, color: Colors.grey[400]),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                _buildCompareItem(
+                  'Weight', 
+                  _latestMeasurement?.weight, 
+                  _compareMeasurement?.weight, 
+                  'kg'
+                ),
+                _buildCompareItem(
+                  'BMI', 
+                  _latestMeasurement?.bmi, 
+                  _compareMeasurement?.bmi, 
+                  ''
+                ),
+                _buildCompareItem(
+                  'Body Fat', 
+                  _latestMeasurement?.bodyFat, 
+                  _compareMeasurement?.bodyFat, 
+                  '%'
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
+    );
+  }
+
+  Widget _buildCompareItem(String label, double? current, double? previous, String unit) {
+    String diffText = '--';
+    Color diffColor = Colors.grey;
+    IconData? diffIcon;
+
+    if (current != null && previous != null) {
+      final diff = current - previous;
+      final absDiff = diff.abs();
+      
+      if (absDiff < 0.01) {
+        diffText = '0.0';
+        diffColor = Colors.grey;
+      } else {
+        diffText = '${diff > 0 ? '+' : '-'}${absDiff.toStringAsFixed(1)}'; // Changed to show sign
+        // Usually lower is better for weight/fat, but context depends. 
+        // Keeping it simple: Green for decrease, Red for increase for weight/fat? 
+        // Or just neutral colors? The designs usually use specific colors.
+        // Let's assume generic trend colors: 
+        if (label == 'Muscle Rate') {
+             diffColor = diff > 0 ? Colors.green : Colors.red;
+        } else {
+             // For weight/fat/BMI, usually decrease is "good" visually in these apps, 
+             // but technically not always. Let's use neutral or arrow indicators.
+             // Following the user's screenshot style if possible. 
+             // Screenshot shows '4.05 kg' with down arrow.
+             diffColor = Colors.black87; // The value itself
+        }
+        
+        diffIcon = diff > 0 ? Icons.arrow_upward : Icons.arrow_downward;
+      }
+      
+      // Override formatting to match screenshot: Value Unit
+      if (unit.isNotEmpty) {
+          diffText = '$diffText $unit';
+      }
+    } else if (current != null) {
+         diffText = '${current.toStringAsFixed(1)} $unit';
+    }
+
+    return Expanded(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Compared',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-              ),
-              Row(
-                children: [
-                  Text(
-                    DateFormat('MMM d, yyyy HH:mm').format(DateTime.now()),
-                    style: TextStyle(fontSize: 12, color: Colors.grey[500]),
-                  ),
-                  Icon(Icons.chevron_right, size: 16, color: Colors.grey[400]),
-                ],
-              ),
-            ],
+           Text(
+            label, // e.g. "Weight" (The screenshot shows "- Weight")
+            style: TextStyle(fontSize: 12, color: Colors.grey[500]),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 4),
           Row(
             children: [
-              _buildCompareItem('Weight', '${_latestMeasurement?.weight.toStringAsFixed(1) ?? '0.0'} kg'),
-              _buildCompareItem('BMI', _latestMeasurement?.bmi?.toStringAsFixed(1) ?? '0.0'),
-              _buildCompareItem('Body Fat', '${_latestMeasurement?.bodyFat?.toStringAsFixed(1) ?? '0.0'} %'),
+                if (diffIcon != null && current != null && previous != null)
+                   Icon(diffIcon, size: 12, color:  (current - previous) > 0 ? Colors.red : Colors.green), // Assuming weight control context
+                
+                Text(
+                    diffText.replaceAll('+', '').replaceAll('-', ''), // Value only
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
+                ),
+                if (unit.isNotEmpty && current != null && previous != null) ...[
+                     const SizedBox(width: 2),
+                     Text(unit, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                ]
             ],
           ),
         ],
@@ -805,23 +906,136 @@ class _MeasurementScreenState extends State<MeasurementScreen> {
     );
   }
 
-  Widget _buildCompareItem(String label, String value) {
-    return Expanded(
-      child: Column(
-        children: [
-          Text(
-            '- $label',
-            style: TextStyle(fontSize: 12, color: Colors.grey[500]),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-          ),
-        ],
+  Future<void> _showComparisonSelector() async {
+    if (_activeMember == null) return;
+
+    final measurements = await _memberService.getMeasurements(_activeMember!.id);
+    
+    // Sort by new to old
+    // measurements are already sorted by member_service.dart
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.7,
+        decoration: const BoxDecoration(
+          color: Color(0xFFF5F7FA),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              ),
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                  const Expanded(
+                    child: Center(
+                      child: Text(
+                        'Compare Record',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 48), // Balance for back button
+                ],
+              ),
+            ),
+            Expanded(
+              child: ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: measurements.length,
+                itemBuilder: (context, index) {
+                  final measurement = measurements[index];
+                  // Group by date logic could be added here for section headers
+                  
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: RadioListTile<String>(
+                      value: measurement.id,
+                      groupValue: _compareMeasurement?.timestamp == measurement.timestamp ? measurement.id : null,
+                      onChanged: (val) {
+                        setState(() {
+                          _compareMeasurement = WeightMeasurement.fromBodyMeasurement(measurement);
+                        });
+                        Navigator.pop(context);
+                      },
+                      title: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                           Column(
+                             crossAxisAlignment: CrossAxisAlignment.start,
+                             children: [
+                                Text(
+                                  DateFormat('HH:mm').format(measurement.timestamp),
+                                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w500),
+                                ),
+                                Text(
+                                  _getDateLabel(measurement.timestamp),
+                                  style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                                ),
+                             ],
+                           ),
+                           Row(
+                             children: [
+                               Column(
+                                 crossAxisAlignment: CrossAxisAlignment.end,
+                                 children: [
+                                   Text('Weight', style: TextStyle(fontSize: 12, color: Colors.grey[500])),
+                                   Text('${measurement.weightKg.toStringAsFixed(2)} kg', style: const TextStyle(fontWeight: FontWeight.w500)),
+                                 ],
+                               ),
+                               const SizedBox(width: 16),
+                               Column(
+                                 crossAxisAlignment: CrossAxisAlignment.end,
+                                 children: [
+                                   Text('Body Fat', style: TextStyle(fontSize: 12, color: Colors.grey[500])),
+                                   Text('${measurement.bodyFatPercent?.toStringAsFixed(1) ?? '--'} %', style: const TextStyle(fontWeight: FontWeight.w500)),
+                                 ],
+                               ),
+                             ],
+                           )
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
+
+  String _getDateLabel(DateTime timestamp) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final date = DateTime(timestamp.year, timestamp.month, timestamp.day);
+    
+    if (date == today) {
+      return 'Today';
+    } else if (date == today.subtract(const Duration(days: 1))) {
+      return 'Yesterday';
+    } else {
+      return DateFormat('MMM d, yyyy').format(timestamp);
+    }
+  }
+
+
 
   Widget _buildBodyIndexSection() {
     return Container(
@@ -954,25 +1168,7 @@ class _MeasurementScreenState extends State<MeasurementScreen> {
     );
   }
 
-  Widget _buildBabyPetModeCard() {
-    return Container(
-      margin: const EdgeInsets.all(12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.child_care, color: AppTheme.primaryColor, size: 24),
-          const SizedBox(width: 12),
-          const Text('Baby / Pet Mode', style: TextStyle(fontSize: 16)),
-          const Spacer(),
-          Icon(Icons.chevron_right, color: Colors.grey[400]),
-        ],
-      ),
-    );
-  }
+
 
   Widget _buildTargetCard() {
     return Container(
@@ -1283,32 +1479,34 @@ class _MetricDetailSheetState extends State<_MetricDetailSheet> with SingleTicke
               ),
               // User position marker
               if (userPosition != null)
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  top: -4,
+                Positioned.fill(
                   child: LayoutBuilder(
                     builder: (context, constraints) {
                       final markerX = userPosition! * constraints.maxWidth;
                       return Stack(
+                        clipBehavior: Clip.none,
                         children: [
                           Positioned(
-                            left: markerX - 8,
-                            child: Container(
-                              width: 16,
-                              height: 16,
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                shape: BoxShape.circle,
-                                border: Border.all(color: AppTheme.primaryColor, width: 3),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.1),
-                                    blurRadius: 4,
-                                    offset: const Offset(0, 2),
+                            left: markerX - 25, // Centered (50px width)
+                            width: 50,
+                            bottom: 24, // Touch the bar top (40px stack - 16px to bar top)
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  value!.toStringAsFixed(metric.unit == 'kcal' || metric.id == 'bodyAge' ? 0 : 1),
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppTheme.primaryColor,
                                   ),
-                                ],
-                              ),
+                                ),
+                                const SizedBox(height: 2),
+                                CustomPaint(
+                                  size: const Size(12, 8),
+                                  painter: _TrianglePainter(color: AppTheme.primaryColor),
+                                ),
+                              ],
                             ),
                           ),
                         ],
@@ -1344,4 +1542,27 @@ class _MetricDetailSheetState extends State<_MetricDetailSheet> with SingleTicke
       ],
     );
   }
+}
+
+class _TrianglePainter extends CustomPainter {
+  final Color color;
+  _TrianglePainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    var paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+
+    var path = Path();
+    path.moveTo(0, 0);
+    path.lineTo(size.width, 0);
+    path.lineTo(size.width / 2, size.height);
+    path.close();
+
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(CustomPainter oldDelegate) => false;
 }
