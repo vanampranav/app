@@ -51,6 +51,14 @@
 		<string>remote-notification</string>
 		<string>background-fetch</string>
 	</array>
+	<!-- Bluetooth Permissions for FitDays SDK -->
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>We need Bluetooth access to connect to your smart scale and receive weight data.</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>We need Bluetooth access to scan for and connect to your smart scale.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>We need location access to scan for Bluetooth Low Energy devices.</string>
+	
 	<!-- Firebase Cloud Messaging -->
 	<key>FirebaseMessagingAutoInitEnabled</key>
 	<true/>
