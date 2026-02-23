@@ -1,7 +1,6 @@
 import Flutter
 import UIKit
 import CoreBluetooth
-import FitDaysSDK // Standard import if Framework is added
 
 class FitDaysSDKManager: NSObject, ICDeviceManagerDelegate, ICScanDeviceDelegate {
     
@@ -22,19 +21,19 @@ class FitDaysSDKManager: NSObject, ICDeviceManagerDelegate, ICScanDeviceDelegate
     
     func initializeSDK(age: Int, height: Int, sex: String) {
         let userInfo = ICUserInfo()
-        userInfo.age = age
-        userInfo.height = height
-        userInfo.sex = (sex.lowercased() == "female") ? .female : .male
-        userInfo.peopleType = .normal
+        userInfo.age = UInt(age)
+        userInfo.height = UInt(height)
+        userInfo.sex = (sex.lowercased() == "female") ? ICSexTypeFemal : ICSexTypeMale
+        userInfo.peopleType = ICPeopleTypeNormal
         
-        ICDeviceManager.shared.updateUserInfo(userInfo)
+        ICDeviceManager.shared().updateUserInfo(userInfo)
         
         if isSdkInitialized {
             return
         }
         
-        ICDeviceManager.shared.delegate = self
-        ICDeviceManager.shared.initMgr()
+        ICDeviceManager.shared().delegate = self
+        ICDeviceManager.shared().initMgr()
         
         // Simulate async init success for consistency with Android flow
         isSdkInitialized = true
@@ -42,7 +41,7 @@ class FitDaysSDKManager: NSObject, ICDeviceManagerDelegate, ICScanDeviceDelegate
     }
     
     func getSDKVersion() -> String {
-        return ICDeviceManager.shared.version ?? "Unknown"
+        return ICDeviceManager.version() ?? "Unknown"
     }
     
     // MARK: - Permissions
@@ -66,14 +65,14 @@ class FitDaysSDKManager: NSObject, ICDeviceManagerDelegate, ICScanDeviceDelegate
         
         if !isScanning {
             isScanning = true
-            ICDeviceManager.shared.scanDevice(self)
+            ICDeviceManager.shared().scanDevice(self)
             sendEvent("scanStarted", data: nil)
         }
     }
     
     func stopScan() {
         if isScanning {
-            ICDeviceManager.shared.stopScan()
+            ICDeviceManager.shared().stopScan()
             isScanning = false
             sendEvent("scanStopped", data: nil)
         }
@@ -86,8 +85,8 @@ class FitDaysSDKManager: NSObject, ICDeviceManagerDelegate, ICScanDeviceDelegate
         device.macAddr = macAddress
         
         // Demo uses addDevice for connection
-        ICDeviceManager.shared.addDevice(device) { (dev, code) in
-            if code == .success {
+        ICDeviceManager.shared().addDevice(device) { (dev, code) in
+            if code == ICAddDeviceCallBackCodeSuccess {
                 self.connectedDevice = dev
                 self.sendEvent("connectionStateChanged", data: ["macAddress": macAddress, "state": "connected"])
             } else {
@@ -99,7 +98,7 @@ class FitDaysSDKManager: NSObject, ICDeviceManagerDelegate, ICScanDeviceDelegate
     func disconnectDevice(macAddress: String) {
         if let device = connectedDevice, device.macAddr == macAddress {
             // Demo uses removeDevice for disconnection
-            ICDeviceManager.shared.removeDevice(device) { (dev, code) in
+            ICDeviceManager.shared().removeDevice(device) { (dev, code) in
                 self.connectedDevice = nil
                 self.sendEvent("connectionStateChanged", data: ["macAddress": macAddress, "state": "disconnected"])
             }
@@ -114,8 +113,8 @@ class FitDaysSDKManager: NSObject, ICDeviceManagerDelegate, ICScanDeviceDelegate
             return
         }
         
-        ICDeviceManager.shared.settingManager.deleteTareWeight(device) { (code) in
-            completion(code == .success)
+        ICDeviceManager.shared().getSettingManager().deleteTareWeight(device) { (code) in
+            completion(code == ICSettingCallBackCodeSuccess)
         }
     }
     
@@ -125,21 +124,21 @@ class FitDaysSDKManager: NSObject, ICDeviceManagerDelegate, ICScanDeviceDelegate
             return
         }
         
-        var sdkUnit: ICKitchenScaleUnit = .g
+        var sdkUnit: ICKitchenScaleUnit = ICKitchenScaleUnitG
         switch unit {
-        case "g": sdkUnit = .g
-        case "ml": sdkUnit = .ml
-        case "oz": sdkUnit = .oz
-        case "lb": sdkUnit = .lb
-        case "ml_m": sdkUnit = .mlMilk
-        case "fl_oz_m": sdkUnit = .flOzMilk
-        case "fl_oz": sdkUnit = .flOzWater
-        case "mg": sdkUnit = .mg
-        default: sdkUnit = .g
+        case "g": sdkUnit = ICKitchenScaleUnitG
+        case "ml": sdkUnit = ICKitchenScaleUnitMl
+        case "oz": sdkUnit = ICKitchenScaleUnitOz
+        case "lb": sdkUnit = ICKitchenScaleUnitLb
+        case "ml_m": sdkUnit = ICKitchenScaleUnitMlMilk
+        case "fl_oz_m": sdkUnit = ICKitchenScaleUnitFlOzMilk
+        case "fl_oz": sdkUnit = ICKitchenScaleUnitFlOzWater
+        case "mg": sdkUnit = ICKitchenScaleUnitMg
+        default: sdkUnit = ICKitchenScaleUnitG
         }
         
-        ICDeviceManager.shared.settingManager.setKitchenScaleUnit(device, unit: sdkUnit) { (code) in
-            completion(code == .success)
+        ICDeviceManager.shared().getSettingManager().setKitchenScaleUnit(device, unit: sdkUnit) { (code) in
+            completion(code == ICSettingCallBackCodeSuccess)
         }
     }
     
@@ -148,7 +147,7 @@ class FitDaysSDKManager: NSObject, ICDeviceManagerDelegate, ICScanDeviceDelegate
     func onScanResult(_ deviceInfo: ICScanDeviceInfo?) {
         guard let info = deviceInfo else { return }
         
-        var data: [String: Any] = [
+        let data: [String: Any] = [
             "name": info.name ?? "Unknown",
             "macAddress": info.macAddr ?? "",
             "rssi": info.rssi
@@ -159,14 +158,14 @@ class FitDaysSDKManager: NSObject, ICDeviceManagerDelegate, ICScanDeviceDelegate
     
     // MARK: - ICDeviceManagerDelegate
     
-    func onDeviceConnectionChanged(_ device: ICDevice?, state: ICDeviceConnectState) {
+    func onDeviceConnectionChanged(_ device: ICDevice!, state: ICDeviceConnectState) {
         guard let device = device else { return }
         
         var status = "connecting"
-        if state == .connected {
+        if state == ICDeviceConnectStateConnected {
             status = "connected"
             self.connectedDevice = device
-        } else if state == .disconnected {
+        } else if state == ICDeviceConnectStateDisconnected {
             status = "disconnected"
             if self.connectedDevice?.macAddr == device.macAddr {
                 self.connectedDevice = nil
@@ -176,27 +175,22 @@ class FitDaysSDKManager: NSObject, ICDeviceManagerDelegate, ICScanDeviceDelegate
         sendEvent("connectionStateChanged", data: ["macAddress": device.macAddr, "state": status])
     }
     
-    func onReceiveKitchenScaleData(_ device: ICDevice?, data: ICKitchenScaleData?) {
+    func onReceiveKitchenScaleData(_ device: ICDevice!, data: ICKitchenScaleData!) {
         guard let data = data else { return }
         
         // Negative Weight Handling
         var weight = data.value_g // Default to grams for simplicity or map per unit
-        // Mapping conceptual logic from Android
-        // Need to check specific unit values if implementing full unit support here, 
-        // but typically we standardize on one or pass raw values.
-        // Let's assume we pass what we get or standard grams.
-        // For accurate display, we should respect the unit. 
         
         var unitStr = "g"
         switch data.unit {
-            case .g: weight = data.value_g; unitStr = "g"
-            case .ml: weight = data.value_ml; unitStr = "ml"
-            case .oz: weight = data.value_oz; unitStr = "oz"
-            case .lb: weight = data.value_lb_oz; unitStr = "lb" // Assuming double support in Swift SDK
-            case .mg: weight = data.value_mg; unitStr = "mg"
-            case .mlMilk: weight = data.value_ml_milk; unitStr = "ml_m"
-            case .flOzMilk: weight = data.value_fl_oz_milk; unitStr = "fl_oz_m"
-            case .flOzWater: weight = data.value_fl_oz; unitStr = "fl_oz"
+            case ICKitchenScaleUnitG: weight = data.value_g; unitStr = "g"
+            case ICKitchenScaleUnitMl: weight = data.value_ml; unitStr = "ml"
+            case ICKitchenScaleUnitOz: weight = data.value_oz; unitStr = "oz"
+            case ICKitchenScaleUnitLb: weight = data.value_lb_oz; unitStr = "lb"
+            case ICKitchenScaleUnitMg: weight = data.value_mg; unitStr = "mg"
+            case ICKitchenScaleUnitMlMilk: weight = data.value_ml_milk; unitStr = "ml_m"
+            case ICKitchenScaleUnitFlOzMilk: weight = data.value_fl_oz_milk; unitStr = "fl_oz_m"
+            case ICKitchenScaleUnitFlOzWater: weight = data.value_fl_oz; unitStr = "fl_oz"
             default: weight = data.value_g; unitStr = "g"
         }
         
@@ -215,7 +209,7 @@ class FitDaysSDKManager: NSObject, ICDeviceManagerDelegate, ICScanDeviceDelegate
         sendEvent("weightData", data: eventData)
     }
     
-    func onReceiveWeightData(_ device: ICDevice?, data: ICWeightData?) {
+    func onReceiveWeightData(_ device: ICDevice!, data: ICWeightData!) {
         guard let data = data else { return }
         
         var eventData: [String: Any] = [
@@ -240,24 +234,24 @@ class FitDaysSDKManager: NSObject, ICDeviceManagerDelegate, ICScanDeviceDelegate
         sendEvent("weightData", data: eventData)
     }
     
-    func onReceiveBattery(_ device: ICDevice?, battery: Int, ext: Any?) {
+    func onReceiveBattery(_ device: ICDevice!, battery: Int32, ext: Any!) {
         guard let device = device else { return }
-        sendEvent("batteryLevel", data: ["macAddress": device.macAddr ?? "", "battery": battery])
+        sendEvent("batteryLevel", data: ["macAddress": device.macAddr ?? "", "battery": Int(battery)])
     }
     
-    func onReceiveKitchenScaleUnitChanged(_ device: ICDevice?, unit: ICKitchenScaleUnit) {
+    func onReceiveKitchenScaleUnitChanged(_ device: ICDevice!, unit: ICKitchenScaleUnit) {
         guard let device = device else { return }
         
         var unitStr = "g"
         switch unit {
-        case .g: unitStr = "g"
-        case .ml: unitStr = "ml"
-        case .oz: unitStr = "oz"
-        case .lb: unitStr = "lb"
-        case .mg: unitStr = "mg"
-        case .mlMilk: unitStr = "ml_m"
-        case .flOzMilk: unitStr = "fl_oz_m"
-        case .flOzWater: unitStr = "fl_oz"
+        case ICKitchenScaleUnitG: unitStr = "g"
+        case ICKitchenScaleUnitMl: unitStr = "ml"
+        case ICKitchenScaleUnitOz: unitStr = "oz"
+        case ICKitchenScaleUnitLb: unitStr = "lb"
+        case ICKitchenScaleUnitMg: unitStr = "mg"
+        case ICKitchenScaleUnitMlMilk: unitStr = "ml_m"
+        case ICKitchenScaleUnitFlOzMilk: unitStr = "fl_oz_m"
+        case ICKitchenScaleUnitFlOzWater: unitStr = "fl_oz"
         default: unitStr = "g"
         }
         
