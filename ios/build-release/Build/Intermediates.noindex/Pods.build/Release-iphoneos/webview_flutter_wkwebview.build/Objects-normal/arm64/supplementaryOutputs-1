@@ -1,0 +1,12 @@
+{
+  "/Users/vanampranav/.pub-cache/hosted/pub.dev/webview_flutter_wkwebview-3.23.0/darwin/webview_flutter_wkwebview/Sources/webview_flutter_wkwebview/AuthenticationChallengeResponse.swift" : {
+    "abi-baseline-json" : "/Users/vanampranav/StudioProjects/app/ios/build-release/Build/Intermediates.noindex/Pods.build/Release-iphoneos/webview_flutter_wkwebview.build/Objects-normal/arm64/webview_flutter_wkwebview.abi.json",
+    "const-values" : "/Users/vanampranav/StudioProjects/app/ios/build-release/Build/Intermediates.noindex/Pods.build/Release-iphoneos/webview_flutter_wkwebview.build/Objects-normal/arm64/webview_flutter_wkwebview-primary.swiftconstvalues",
+    "dependencies" : "/Users/vanampranav/StudioProjects/app/ios/build-release/Build/Intermediates.noindex/Pods.build/Release-iphoneos/webview_flutter_wkwebview.build/Objects-normal/arm64/webview_flutter_wkwebview-primary.d",
+    "diagnostics" : "/Users/vanampranav/StudioProjects/app/ios/build-release/Build/Intermediates.noindex/Pods.build/Release-iphoneos/webview_flutter_wkwebview.build/Objects-normal/arm64/webview_flutter_wkwebview-primary.dia",
+    "objc-header" : "/Users/vanampranav/StudioProjects/app/ios/build-release/Build/Intermediates.noindex/Pods.build/Release-iphoneos/webview_flutter_wkwebview.build/Objects-normal/arm64/webview_flutter_wkwebview-Swift.h",
+    "swiftdoc" : "/Users/vanampranav/StudioProjects/app/ios/build-release/Build/Intermediates.noindex/Pods.build/Release-iphoneos/webview_flutter_wkwebview.build/Objects-normal/arm64/webview_flutter_wkwebview.swiftdoc",
+    "swiftmodule" : "/Users/vanampranav/StudioProjects/app/ios/build-release/Build/Intermediates.noindex/Pods.build/Release-iphoneos/webview_flutter_wkwebview.build/Objects-normal/arm64/webview_flutter_wkwebview.swiftmodule",
+    "swiftsourceinfo" : "/Users/vanampranav/StudioProjects/app/ios/build-release/Build/Intermediates.noindex/Pods.build/Release-iphoneos/webview_flutter_wkwebview.build/Objects-normal/arm64/webview_flutter_wkwebview.swiftsourceinfo"
+  }
+}

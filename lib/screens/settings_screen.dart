@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
 import '../services/shopify_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -151,7 +150,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         SnackBar(
           content: Text(
             'Account deletion request submitted. You will receive a confirmation email at $_userEmail within 24 hours.',
-            style: GoogleFonts.poppins(),
+            style: TextStyle(fontFamily: "Helvetica", ),
           ),
           backgroundColor: Colors.green,
           duration: const Duration(seconds: 5),
@@ -171,7 +170,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         SnackBar(
           content: Text(
             'Failed to submit deletion request. Please try again or contact support.',
-            style: GoogleFonts.poppins(),
+            style: TextStyle(fontFamily: "Helvetica", ),
           ),
           backgroundColor: Colors.red,
         ),
@@ -199,7 +198,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 children: [
                   Text(
                     'Notifications',
-                    style: GoogleFonts.poppins(
+                    style: TextStyle(fontFamily: "Helvetica", 
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
                     ),
@@ -243,7 +242,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 children: [
                   Text(
                     'Privacy & Data',
-                    style: GoogleFonts.poppins(
+                    style: TextStyle(fontFamily: "Helvetica", 
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
                     ),
@@ -292,7 +291,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   children: [
                     Text(
                       'Account Management',
-                      style: GoogleFonts.poppins(
+                      style: TextStyle(fontFamily: "Helvetica", 
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
                       ),
@@ -325,7 +324,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 children: [
                   Text(
                     'App Information',
-                    style: GoogleFonts.poppins(
+                    style: TextStyle(fontFamily: "Helvetica", 
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
                     ),

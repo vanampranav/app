@@ -7,7 +7,6 @@ import 'package:flutter_carousel_widget/flutter_carousel_widget.dart';
 import 'package:provider/provider.dart';
 import '../models/cart_model.dart';
 import '../models/wishlist_model.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../providers/location_provider.dart';
 import '../screens/shop_screen.dart';
 
@@ -265,7 +264,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         children: [
                           Text(
                             'Stay active together!',
-                            style: GoogleFonts.poppins(
+                            style: TextStyle(fontFamily: "Helvetica", 
                               color: Colors.white,
                               fontSize: height * 0.05,
                               fontWeight: FontWeight.w500,
@@ -274,7 +273,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           SizedBox(height: height * 0.03),
                           Text(
                             'SERVE YOUR\nBEST GAME!',
-                            style: GoogleFonts.poppins(
+                            style: TextStyle(fontFamily: "Helvetica", 
                               color: Colors.white,
                               fontSize: height * 0.1,
                               fontWeight: FontWeight.bold,
@@ -297,7 +296,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                             child: Text(
                               'Shop and stay fit',
-                              style: GoogleFonts.poppins(
+                              style: TextStyle(fontFamily: "Helvetica", 
                                 fontWeight: FontWeight.bold,
                                 fontSize: height * 0.04,
                               ),
@@ -333,7 +332,7 @@ class _HomeScreenState extends State<HomeScreen> {
               return Center(
                 child: Text(
                   promo,
-                  style: GoogleFonts.poppins(
+                  style: TextStyle(fontFamily: "Helvetica", 
                     color: Colors.white,
                     fontSize: 14,
                     fontWeight: FontWeight.bold,
@@ -379,7 +378,7 @@ class _HomeScreenState extends State<HomeScreen> {
       children: [
         Text(
           'SHOP BY CATEGORY',
-          style: GoogleFonts.poppins(
+          style: TextStyle(fontFamily: "Helvetica", 
             fontSize: 20,
             fontWeight: FontWeight.bold,
           ),
@@ -430,13 +429,13 @@ class _HomeScreenState extends State<HomeScreen> {
                     const SizedBox(height: 8),
                     Text(
                       category['name'] as String,
-                      style: GoogleFonts.poppins(
+                      style: TextStyle(fontFamily: "Helvetica", 
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                     Text(
                       category['count'] as String,
-                      style: GoogleFonts.poppins(
+                      style: TextStyle(fontFamily: "Helvetica", 
                         color: AppTheme.secondaryTextColor,
                         fontSize: 12,
                       ),
@@ -467,7 +466,7 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 Text(
                   'FEATURED',
-                  style: GoogleFonts.poppins(
+                  style: TextStyle(fontFamily: "Helvetica", 
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
                   ),
@@ -484,7 +483,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   icon: const Icon(Icons.shopping_bag_outlined),
                   label: Text(
                     'Shop all',
-                    style: GoogleFonts.poppins(),
+                    style: TextStyle(fontFamily: "Helvetica", ),
                   ),
                 ),
               ],
@@ -627,7 +626,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         children: [
                           Text(
                             product['title'] ?? '',
-                            style: GoogleFonts.poppins(
+                            style: TextStyle(fontFamily: "Helvetica", 
                               fontWeight: FontWeight.bold,
                               fontSize: 12,
                             ),
@@ -642,7 +641,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 context.read<LocationProvider>().formatPrice(
                                   double.tryParse(product['priceRange']['minVariantPrice']['amount'].toString()) ?? 0.0
                                 ),
-                                style: GoogleFonts.poppins(
+                                style: TextStyle(fontFamily: "Helvetica", 
                                   color: AppTheme.accentColor,
                                   fontWeight: FontWeight.bold,
                                   fontSize: 16,
@@ -672,7 +671,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                       SnackBar(
                                         content: Text(
                                           'Added to cart',
-                                          style: GoogleFonts.poppins(),
+                                          style: TextStyle(fontFamily: "Helvetica", ),
                                         ),
                                         duration: const Duration(seconds: 2),
                                       ),
@@ -730,7 +729,7 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               Text(
                 'BEST-SELLING PRODUCTS',
-                style: GoogleFonts.poppins(
+                style: TextStyle(fontFamily: "Helvetica", 
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
                 ),
@@ -747,7 +746,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   icon: const Icon(Icons.shopping_bag_outlined),
                   label: Text(
                     'Shop all',
-                    style: GoogleFonts.poppins(),
+                    style: TextStyle(fontFamily: "Helvetica", ),
                   ),
                 ),
               ],
@@ -756,7 +755,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 //onPressed: () {},
                 //child: Text(
                   //'Shop all',
-                  //style: GoogleFonts.poppins(),
+                  //style: TextStyle(fontFamily: "Helvetica", ),
                 //),
               //),
            // ],
@@ -879,7 +878,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           children: [
                             Text(
                               product['title'] ?? '',
-                              style: GoogleFonts.poppins(
+                              style: TextStyle(fontFamily: "Helvetica", 
                                 fontWeight: FontWeight.bold,
                                 fontSize: 14,
                               ),
@@ -896,7 +895,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     context.read<LocationProvider>().formatPrice(
                                       double.tryParse(product['priceRange']['minVariantPrice']['amount'].toString()) ?? 0.0
                                     ),
-                                    style: GoogleFonts.poppins(
+                                    style: TextStyle(fontFamily: "Helvetica", 
                                       color: AppTheme.accentColor,
                                       fontWeight: FontWeight.bold,
                                       fontSize: 14,
@@ -931,7 +930,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                         SnackBar(
                                           content: Text(
                                             'Added to cart',
-                                            style: GoogleFonts.poppins(),
+                                            style: TextStyle(fontFamily: "Helvetica", ),
                                           ),
                                           duration: const Duration(seconds: 2),
                                         ),

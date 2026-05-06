@@ -1,0 +1,37 @@
+moduledependenciestarget: \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalCore/OneSignalCore.framework/Modules/module.modulemap \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalCore/OneSignalCore.framework/Headers/OneSignalCore.h \
+  /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk/System/Library/Frameworks/Foundation.framework/Modules/module.modulemap \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalCore/OneSignalCore.framework/Headers/OneSignalUserDefaults.h \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalCore/OneSignalCore.framework/Headers/OneSignalCommonDefines.h \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalCore/OneSignalCore.framework/Headers/OSNotification.h \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalCore/OneSignalCore.framework/Headers/OSNotification+Internal.h \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalCore/OneSignalCore.framework/Headers/OSNotificationClasses.h \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalCore/OneSignalCore.framework/Headers/OneSignalLog.h \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalCore/OneSignalCore.framework/Headers/NSURL+OneSignal.h \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalCore/OneSignalCore.framework/Headers/NSString+OneSignal.h \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalCore/OneSignalCore.framework/Headers/NSDateFormatter+OneSignal.h \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalCore/OneSignalCore.framework/Headers/OSRequests.h \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalCore/OneSignalCore.framework/Headers/OneSignalRequest.h \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalCore/OneSignalCore.framework/Headers/OneSignalClient.h \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalCore/OneSignalCore.framework/Headers/OneSignalClientError.h \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalCore/OneSignalCore.framework/Headers/OneSignalCoreHelper.h \
+  /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk/System/Library/Frameworks/UIKit.framework/Modules/module.modulemap \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalCore/OneSignalCore.framework/Headers/OneSignalTrackFirebaseAnalytics.h \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalCore/OneSignalCore.framework/Headers/OSMacros.h \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalCore/OneSignalCore.framework/Headers/OSJSONHandling.h \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalCore/OneSignalCore.framework/Headers/OSPrivacyConsentController.h \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalCore/OneSignalCore.framework/Headers/OSDeviceUtils.h \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalCore/OneSignalCore.framework/Headers/OSNetworkingUtils.h \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalCore/OneSignalCore.framework/Headers/OSObservable.h \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalCore/OneSignalCore.framework/Headers/OSDialogInstanceManager.h \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalCore/OneSignalCore.framework/Headers/SwizzlingForwarder.h \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalCore/OneSignalCore.framework/Headers/OneSignalSelectorHelpers.h \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalCore/OneSignalCore.framework/Headers/OneSignalConfigManager.h \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalCore/OneSignalCore.framework/Headers/OSRemoteParamController.h \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalCore/OneSignalCore.framework/Headers/OneSignalMobileProvision.h \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalCore/OneSignalCore.framework/Headers/OneSignalWrapper.h \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalCore/OneSignalCore.framework/Headers/OSInAppMessages.h \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalCore/OneSignalCore.framework/Headers/OSLocation.h \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalCore/OneSignalCore.framework/Headers/OSBundleUtils.h \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalCore/OneSignalCore.framework/Headers/OneSignalBadgeHelpers.h

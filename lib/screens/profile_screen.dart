@@ -4,7 +4,6 @@ import '../services/shopify_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'auth_screen.dart';
 import 'settings_screen.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../providers/theme_provider.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -146,7 +145,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             SnackBar(
               content: Text(
                 'Password reset link sent to $email. Please check your email.',
-                style: GoogleFonts.poppins(),
+                style: TextStyle(fontFamily: "Helvetica", ),
               ),
               backgroundColor: Colors.green,
               duration: const Duration(seconds: 5),
@@ -159,7 +158,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             SnackBar(
               content: Text(
                 errorMessage,
-                style: GoogleFonts.poppins(),
+                style: TextStyle(fontFamily: "Helvetica", ),
               ),
               backgroundColor: Colors.red,
               duration: const Duration(seconds: 4),
@@ -172,7 +171,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           SnackBar(
             content: Text(
               'Failed to send reset email. Please try again.',
-              style: GoogleFonts.poppins(),
+              style: TextStyle(fontFamily: "Helvetica", ),
             ),
             backgroundColor: Colors.red,
           ),
@@ -188,7 +187,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         SnackBar(
           content: Text(
             'An error occurred. Please try again.',
-            style: GoogleFonts.poppins(),
+            style: TextStyle(fontFamily: "Helvetica", ),
           ),
           backgroundColor: Colors.red,
         ),

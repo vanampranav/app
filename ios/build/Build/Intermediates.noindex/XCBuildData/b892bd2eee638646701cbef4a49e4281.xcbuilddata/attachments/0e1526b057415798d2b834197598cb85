@@ -1,0 +1,23 @@
+{
+  "version": 0,
+  "use-external-names": false,
+  "case-sensitive": false,
+  "roots": [{
+    "type": "directory",
+    "name": "/Users/vanampranav/StudioProjects/app/ios/build/Build/Products/Debug-iphoneos/connectivity_plus/connectivity_plus.framework/Modules",
+    "contents": [{
+      "type": "file",
+      "name": "module.modulemap",
+      "external-contents": "/Users/vanampranav/StudioProjects/app/ios/build/Build/Intermediates.noindex/Pods.build/Debug-iphoneos/connectivity_plus.build/unextended-module.modulemap",
+    }]
+    },
+    {
+    "type": "directory",
+    "name": "/Users/vanampranav/StudioProjects/app/ios/build/Build/Products/Debug-iphoneos/connectivity_plus/connectivity_plus.framework/Headers",
+    "contents": [{
+      "type": "file",
+      "name": "connectivity_plus-Swift.h",
+      "external-contents": "/Users/vanampranav/StudioProjects/app/ios/build/Build/Intermediates.noindex/Pods.build/Debug-iphoneos/connectivity_plus.build/unextended-interface-header.h",
+    }]
+  }]
+}

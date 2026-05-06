@@ -1,0 +1,39 @@
+{
+  "" : {
+    "diagnostics" : "/Users/vanampranav/StudioProjects/app/ios/build/Build/Intermediates.noindex/Runner.build/Debug-iphoneos/Runner.build/Objects-normal/arm64/Runner-primary.dia",
+    "emit-module-dependencies" : "/Users/vanampranav/StudioProjects/app/ios/build/Build/Intermediates.noindex/Runner.build/Debug-iphoneos/Runner.build/Objects-normal/arm64/Runner-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Users/vanampranav/StudioProjects/app/ios/build/Build/Intermediates.noindex/Runner.build/Debug-iphoneos/Runner.build/Objects-normal/arm64/Runner-primary-emit-module.dia",
+    "pch" : "/Users/vanampranav/StudioProjects/app/ios/build/Build/Intermediates.noindex/Runner.build/Debug-iphoneos/Runner.build/Objects-normal/arm64/Runner-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Users/vanampranav/StudioProjects/app/ios/build/Build/Intermediates.noindex/Runner.build/Debug-iphoneos/Runner.build/Objects-normal/arm64/Runner-primary.swiftdeps"
+  },
+  "/Users/vanampranav/StudioProjects/app/ios/Runner/AppDelegate.swift" : {
+    "const-values" : "/Users/vanampranav/StudioProjects/app/ios/build/Build/Intermediates.noindex/Runner.build/Debug-iphoneos/Runner.build/Objects-normal/arm64/AppDelegate.swiftconstvalues",
+    "dependencies" : "/Users/vanampranav/StudioProjects/app/ios/build/Build/Intermediates.noindex/Runner.build/Debug-iphoneos/Runner.build/Objects-normal/arm64/AppDelegate.d",
+    "diagnostics" : "/Users/vanampranav/StudioProjects/app/ios/build/Build/Intermediates.noindex/Runner.build/Debug-iphoneos/Runner.build/Objects-normal/arm64/AppDelegate.dia",
+    "index-unit-output-path" : "/Runner.build/Debug-iphoneos/Runner.build/Objects-normal/arm64/AppDelegate.o",
+    "llvm-bc" : "/Users/vanampranav/StudioProjects/app/ios/build/Build/Intermediates.noindex/Runner.build/Debug-iphoneos/Runner.build/Objects-normal/arm64/AppDelegate.bc",
+    "object" : "/Users/vanampranav/StudioProjects/app/ios/build/Build/Intermediates.noindex/Runner.build/Debug-iphoneos/Runner.build/Objects-normal/arm64/AppDelegate.o",
+    "swift-dependencies" : "/Users/vanampranav/StudioProjects/app/ios/build/Build/Intermediates.noindex/Runner.build/Debug-iphoneos/Runner.build/Objects-normal/arm64/AppDelegate.swiftdeps",
+    "swiftmodule" : "/Users/vanampranav/StudioProjects/app/ios/build/Build/Intermediates.noindex/Runner.build/Debug-iphoneos/Runner.build/Objects-normal/arm64/AppDelegate~partial.swiftmodule"
+  },
+  "/Users/vanampranav/StudioProjects/app/ios/Runner/FitDaysSDKManager.swift" : {
+    "const-values" : "/Users/vanampranav/StudioProjects/app/ios/build/Build/Intermediates.noindex/Runner.build/Debug-iphoneos/Runner.build/Objects-normal/arm64/FitDaysSDKManager.swiftconstvalues",
+    "dependencies" : "/Users/vanampranav/StudioProjects/app/ios/build/Build/Intermediates.noindex/Runner.build/Debug-iphoneos/Runner.build/Objects-normal/arm64/FitDaysSDKManager.d",
+    "diagnostics" : "/Users/vanampranav/StudioProjects/app/ios/build/Build/Intermediates.noindex/Runner.build/Debug-iphoneos/Runner.build/Objects-normal/arm64/FitDaysSDKManager.dia",
+    "index-unit-output-path" : "/Runner.build/Debug-iphoneos/Runner.build/Objects-normal/arm64/FitDaysSDKManager.o",
+    "llvm-bc" : "/Users/vanampranav/StudioProjects/app/ios/build/Build/Intermediates.noindex/Runner.build/Debug-iphoneos/Runner.build/Objects-normal/arm64/FitDaysSDKManager.bc",
+    "object" : "/Users/vanampranav/StudioProjects/app/ios/build/Build/Intermediates.noindex/Runner.build/Debug-iphoneos/Runner.build/Objects-normal/arm64/FitDaysSDKManager.o",
+    "swift-dependencies" : "/Users/vanampranav/StudioProjects/app/ios/build/Build/Intermediates.noindex/Runner.build/Debug-iphoneos/Runner.build/Objects-normal/arm64/FitDaysSDKManager.swiftdeps",
+    "swiftmodule" : "/Users/vanampranav/StudioProjects/app/ios/build/Build/Intermediates.noindex/Runner.build/Debug-iphoneos/Runner.build/Objects-normal/arm64/FitDaysSDKManager~partial.swiftmodule"
+  },
+  "/Users/vanampranav/StudioProjects/app/ios/build/Build/Intermediates.noindex/Runner.build/Debug-iphoneos/Runner.build/DerivedSources/GeneratedAssetSymbols.swift" : {
+    "const-values" : "/Users/vanampranav/StudioProjects/app/ios/build/Build/Intermediates.noindex/Runner.build/Debug-iphoneos/Runner.build/Objects-normal/arm64/GeneratedAssetSymbols.swiftconstvalues",
+    "dependencies" : "/Users/vanampranav/StudioProjects/app/ios/build/Build/Intermediates.noindex/Runner.build/Debug-iphoneos/Runner.build/Objects-normal/arm64/GeneratedAssetSymbols.d",
+    "diagnostics" : "/Users/vanampranav/StudioProjects/app/ios/build/Build/Intermediates.noindex/Runner.build/Debug-iphoneos/Runner.build/Objects-normal/arm64/GeneratedAssetSymbols.dia",
+    "index-unit-output-path" : "/Runner.build/Debug-iphoneos/Runner.build/Objects-normal/arm64/GeneratedAssetSymbols.o",
+    "llvm-bc" : "/Users/vanampranav/StudioProjects/app/ios/build/Build/Intermediates.noindex/Runner.build/Debug-iphoneos/Runner.build/Objects-normal/arm64/GeneratedAssetSymbols.bc",
+    "object" : "/Users/vanampranav/StudioProjects/app/ios/build/Build/Intermediates.noindex/Runner.build/Debug-iphoneos/Runner.build/Objects-normal/arm64/GeneratedAssetSymbols.o",
+    "swift-dependencies" : "/Users/vanampranav/StudioProjects/app/ios/build/Build/Intermediates.noindex/Runner.build/Debug-iphoneos/Runner.build/Objects-normal/arm64/GeneratedAssetSymbols.swiftdeps",
+    "swiftmodule" : "/Users/vanampranav/StudioProjects/app/ios/build/Build/Intermediates.noindex/Runner.build/Debug-iphoneos/Runner.build/Objects-normal/arm64/GeneratedAssetSymbols~partial.swiftmodule"
+  }
+}

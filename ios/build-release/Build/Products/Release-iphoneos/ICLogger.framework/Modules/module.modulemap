@@ -1,0 +1,6 @@
+framework module ICLogger {
+  umbrella header "ICLogger.h"
+
+  export *
+  module * { export * }
+}

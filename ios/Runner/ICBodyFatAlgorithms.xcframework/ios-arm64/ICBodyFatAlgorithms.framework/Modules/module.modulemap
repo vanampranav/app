@@ -1,0 +1,6 @@
+framework module ICBodyFatAlgorithms {
+  umbrella header "ICBodyFatAlgorithms.h"
+  export *
+
+  module * { export * }
+}

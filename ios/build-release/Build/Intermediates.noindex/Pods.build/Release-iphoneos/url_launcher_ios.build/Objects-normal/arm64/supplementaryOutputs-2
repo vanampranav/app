@@ -1,0 +1,12 @@
+{
+  "/Users/vanampranav/.pub-cache/hosted/pub.dev/url_launcher_ios-6.3.3/ios/url_launcher_ios/Sources/url_launcher_ios/Launcher.swift" : {
+    "abi-baseline-json" : "/Users/vanampranav/StudioProjects/app/ios/build-release/Build/Intermediates.noindex/Pods.build/Release-iphoneos/url_launcher_ios.build/Objects-normal/arm64/url_launcher_ios.abi.json",
+    "const-values" : "/Users/vanampranav/StudioProjects/app/ios/build-release/Build/Intermediates.noindex/Pods.build/Release-iphoneos/url_launcher_ios.build/Objects-normal/arm64/url_launcher_ios-primary.swiftconstvalues",
+    "dependencies" : "/Users/vanampranav/StudioProjects/app/ios/build-release/Build/Intermediates.noindex/Pods.build/Release-iphoneos/url_launcher_ios.build/Objects-normal/arm64/url_launcher_ios-primary.d",
+    "diagnostics" : "/Users/vanampranav/StudioProjects/app/ios/build-release/Build/Intermediates.noindex/Pods.build/Release-iphoneos/url_launcher_ios.build/Objects-normal/arm64/url_launcher_ios-primary.dia",
+    "objc-header" : "/Users/vanampranav/StudioProjects/app/ios/build-release/Build/Intermediates.noindex/Pods.build/Release-iphoneos/url_launcher_ios.build/Objects-normal/arm64/url_launcher_ios-Swift.h",
+    "swiftdoc" : "/Users/vanampranav/StudioProjects/app/ios/build-release/Build/Intermediates.noindex/Pods.build/Release-iphoneos/url_launcher_ios.build/Objects-normal/arm64/url_launcher_ios.swiftdoc",
+    "swiftmodule" : "/Users/vanampranav/StudioProjects/app/ios/build-release/Build/Intermediates.noindex/Pods.build/Release-iphoneos/url_launcher_ios.build/Objects-normal/arm64/url_launcher_ios.swiftmodule",
+    "swiftsourceinfo" : "/Users/vanampranav/StudioProjects/app/ios/build-release/Build/Intermediates.noindex/Pods.build/Release-iphoneos/url_launcher_ios.build/Objects-normal/arm64/url_launcher_ios.swiftsourceinfo"
+  }
+}

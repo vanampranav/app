@@ -1,0 +1,23 @@
+moduledependenciestarget: \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalOutcomes/OneSignalOutcomes.framework/Modules/module.modulemap \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalOutcomes/OneSignalOutcomes.framework/Headers/OneSignalOutcomes.h \
+  /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk/System/Library/Frameworks/Foundation.framework/Modules/module.modulemap \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalOutcomes/OneSignalOutcomes.framework/Headers/OSSessionManager.h \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalOutcomes/OneSignalOutcomes.framework/Headers/OSInfluence.h \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalOutcomes/OneSignalOutcomes.framework/Headers/OSTrackerFactory.h \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalOutcomes/OneSignalOutcomes.framework/Headers/OSInfluenceDataRepository.h \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalOutcomes/OneSignalOutcomes.framework/Headers/OSChannelTracker.h \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalCore/OneSignalCore.framework/Modules/module.modulemap \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalOutcomes/OneSignalOutcomes.framework/Headers/OSIndirectInfluence.h \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalOutcomes/OneSignalOutcomes.framework/Headers/OSInAppMessageOutcome.h \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalOutcomes/OneSignalOutcomes.framework/Headers/OSOutcomeEvent.h \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalOutcomes/OneSignalOutcomes.framework/Headers/OSOutcomeEventParams.h \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalOutcomes/OneSignalOutcomes.framework/Headers/OSOutcomeSource.h \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalOutcomes/OneSignalOutcomes.framework/Headers/OSOutcomeSourceBody.h \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalOutcomes/OneSignalOutcomes.framework/Headers/OSInfluenceDataDefines.h \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalOutcomes/OneSignalOutcomes.framework/Headers/OSOutcomeEventsCache.h \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalOutcomes/OneSignalOutcomes.framework/Headers/OSCachedUniqueOutcome.h \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalOutcomes/OneSignalOutcomes.framework/Headers/OneSignalOutcomeEventsController.h \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalOutcomes/OneSignalOutcomes.framework/Headers/OSOutcomeEventsFactory.h \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalOutcomes/OneSignalOutcomes.framework/Headers/OSOutcomeEventsRepository.h \
+  /Users/vanampranav/StudioProjects/app/ios/build-release/Build/Products/Release-iphoneos/XCFrameworkIntermediates/OneSignalXCFramework/OneSignalOutcomes/OneSignalOutcomes.framework/Headers/OSFocusInfluenceParam.h

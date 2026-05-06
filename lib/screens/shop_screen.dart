@@ -5,7 +5,6 @@ import '../utils/constants.dart';
 import 'package:provider/provider.dart';
 import '../models/cart_model.dart';
 import '../models/wishlist_model.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../providers/location_provider.dart';
 
 class ShopScreen extends StatefulWidget {
@@ -273,7 +272,7 @@ class _ShopScreenState extends State<ShopScreen> {
                               children: [
                                 Text(
                                   product['title'] ?? '',
-                                  style: GoogleFonts.poppins(
+                                  style: TextStyle(fontFamily: "Helvetica", 
                                     fontWeight: FontWeight.bold,
                                     fontSize: 14,
                                   ),
@@ -288,7 +287,7 @@ class _ShopScreenState extends State<ShopScreen> {
                                       context.read<LocationProvider>().formatPrice(
                                         double.tryParse(product['priceRange']['minVariantPrice']['amount'].toString()) ?? 0.0
                                       ),
-                                      style: GoogleFonts.poppins(
+                                      style: TextStyle(fontFamily: "Helvetica", 
                                         color: AppTheme.accentColor,
                                         fontWeight: FontWeight.bold,
                                         fontSize: 16,
@@ -319,7 +318,7 @@ class _ShopScreenState extends State<ShopScreen> {
                                             SnackBar(
                                               content: Text(
                                                 'Added to cart',
-                                                style: GoogleFonts.poppins(),
+                                                style: TextStyle(fontFamily: "Helvetica", ),
                                               ),
                                               duration: const Duration(seconds: 2),
                                             ),

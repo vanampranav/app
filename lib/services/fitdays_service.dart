@@ -52,7 +52,7 @@ class FitDaysService {
     );
   }
 
-  /// Handle events from native Android code
+  /// Handle events from native platform (Android & iOS)
   void _handleEvent(Map<String, dynamic> event) {
     final type = event['type'] as String?;
     // Properly cast the data from Object? to Map<String, dynamic>?
@@ -77,6 +77,9 @@ class FitDaysService {
         break;
 
       case 'weightData':
+      // Safety fallback: iOS used to send kitchen scale readings as 'kitchenScaleData'
+      // (now fixed in Swift to send 'weightData'). Keep this case to stay resilient.
+      case 'kitchenScaleData':
         if (data != null) {
           final measurement = WeightMeasurement.fromMap(data);
           _weightDataController.add(measurement);

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../models/address_model.dart';
 import '../theme/app_theme.dart';
 
@@ -107,7 +106,7 @@ class _AddressScreenState extends State<AddressScreen> {
                 Expanded(
                   child: Text(
                     address.fullName,
-                    style: GoogleFonts.poppins(
+                    style: TextStyle(fontFamily: "Helvetica", 
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
                     ),
@@ -122,7 +121,7 @@ class _AddressScreenState extends State<AddressScreen> {
                     ),
                     child: Text(
                       'DEFAULT',
-                      style: GoogleFonts.poppins(
+                      style: TextStyle(fontFamily: "Helvetica", 
                         color: Colors.white,
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
@@ -186,7 +185,7 @@ class _AddressScreenState extends State<AddressScreen> {
             if (address.company.isNotEmpty) ...[
               Text(
                 address.company,
-                style: GoogleFonts.poppins(
+                style: TextStyle(fontFamily: "Helvetica", 
                   fontSize: 14,
                   color: Colors.grey[600],
                 ),
@@ -195,13 +194,13 @@ class _AddressScreenState extends State<AddressScreen> {
             ],
             Text(
               address.fullAddress,
-              style: GoogleFonts.poppins(fontSize: 14),
+              style: TextStyle(fontFamily: "Helvetica", fontSize: 14),
             ),
             if (address.phone.isNotEmpty) ...[
               const SizedBox(height: 4),
               Text(
                 address.phone,
-                style: GoogleFonts.poppins(
+                style: TextStyle(fontFamily: "Helvetica", 
                   fontSize: 14,
                   color: Colors.grey[600],
                 ),

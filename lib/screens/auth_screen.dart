@@ -3,7 +3,6 @@ import '../theme/app_theme.dart';
 import '../services/shopify_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/constants.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({Key? key}) : super(key: key);
@@ -227,7 +226,7 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
             SnackBar(
               content: Text(
                 'Password reset link sent to $email. Please check your email.',
-                style: GoogleFonts.poppins(),
+                style: TextStyle(fontFamily: "Helvetica", ),
               ),
               backgroundColor: Colors.green,
               duration: const Duration(seconds: 5),
@@ -240,7 +239,7 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
             SnackBar(
               content: Text(
                 errorMessage,
-                style: GoogleFonts.poppins(),
+                style: TextStyle(fontFamily: "Helvetica", ),
               ),
               backgroundColor: Colors.red,
               duration: const Duration(seconds: 4),
@@ -253,7 +252,7 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
           SnackBar(
             content: Text(
               'Failed to send reset email. Please try again.',
-              style: GoogleFonts.poppins(),
+              style: TextStyle(fontFamily: "Helvetica", ),
             ),
             backgroundColor: Colors.red,
           ),
@@ -269,7 +268,7 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
         SnackBar(
           content: Text(
             'An error occurred. Please try again.',
-            style: GoogleFonts.poppins(),
+            style: TextStyle(fontFamily: "Helvetica", ),
           ),
           backgroundColor: Colors.red,
         ),
