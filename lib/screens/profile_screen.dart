@@ -1,19 +1,10 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
-import '../services/shopify_service.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'auth_screen.dart';
+import '../services/firebase_rest_service.dart';
 import 'settings_screen.dart';
-import 'package:provider/provider.dart';
-import '../providers/theme_provider.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
-import '../providers/location_provider.dart';
-import '../screens/OrdersScreen.dart';
-import '../screens/HelpScreen.dart';
-import '../screens/address_screen.dart';
-import '../models/address_model.dart';
-import '../services/onesignal_service.dart';
-import '../services/navigation_service.dart';
+import 'OrdersScreen.dart';
+import 'HelpScreen.dart';
+import 'address_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({Key? key}) : super(key: key);
@@ -23,380 +14,265 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  bool _isAuthenticated = false;
-  String? _userEmail;
+  final FirebaseRestService _fbService = FirebaseRestService();
+  Map<String, dynamic>? _profile;
+  bool _isLoading = false;
+  String? _error;
+
+  final _emailCtrl = TextEditingController();
+  final _passwordCtrl = TextEditingController();
+  bool _obscurePassword = true;
 
   @override
   void initState() {
     super.initState();
-    _checkAuthStatus();
+    _initAndCheckAuth();
   }
 
-  Future<void> _checkAuthStatus() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('auth_token');
-    final email = prefs.getString('user_email');
-    setState(() {
-      _isAuthenticated = token != null;
-      _userEmail = email;
-    });
-  }
-
-  Future<void> _signOut() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('auth_token');
-    await prefs.remove('user_email');
-    setState(() {
-      _isAuthenticated = false;
-      _userEmail = null;
-    });
-  }
-
-  void _showPasswordRecoveryDialog() {
-    print('Password recovery dialog triggered');
-    final emailController = TextEditingController(text: _userEmail ?? '');
-    final formKey = GlobalKey<FormState>();
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Reset Password'),
-        content: Form(
-          key: formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Enter your email address and we\'ll send you a link to reset your password.',
-                style: TextStyle(fontSize: 14),
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: emailController,
-                keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(
-                  labelText: 'Email',
-                  hintText: 'Enter your email',
-                  prefixIcon: Icon(Icons.email),
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter your email';
-                  }
-                  if (!value.contains('@')) {
-                    return 'Please enter a valid email';
-                  }
-                  return null;
-                },
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              if (formKey.currentState!.validate()) {
-                Navigator.pop(context);
-                await _sendPasswordResetEmail(emailController.text);
-              }
-            },
-            child: const Text('Send Reset Link'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _sendPasswordResetEmail(String email) async {
-    print('Sending password reset email to: $email');
-    
-    // Show loading indicator
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const Center(
-        child: CircularProgressIndicator(),
-      ),
-    );
-
-    try {
-      final shopifyService = ShopifyService();
-      print('Calling Shopify customerRecover...');
-      final result = await shopifyService.customerRecover(email: email);
-      print('Shopify result: $result');
-
-      if (!mounted) return;
-      
-      // Close loading indicator
-      Navigator.pop(context);
-
-      if (result != null) {
-        final errors = result['customerRecover']?['customerUserErrors'] as List?;
-        
-        if (errors == null || errors.isEmpty) {
-          // Success
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Password reset link sent to $email. Please check your email.',
-                style: TextStyle(fontFamily: "Helvetica", ),
-              ),
-              backgroundColor: Colors.green,
-              duration: const Duration(seconds: 5),
-            ),
-          );
-        } else {
-          // Show error
-          final errorMessage = errors.first['message'] ?? 'Failed to send reset email';
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                errorMessage,
-                style: TextStyle(fontFamily: "Helvetica", ),
-              ),
-              backgroundColor: Colors.red,
-              duration: const Duration(seconds: 4),
-            ),
-          );
-        }
-      } else {
-        // Network or other error
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Failed to send reset email. Please try again.',
-              style: TextStyle(fontFamily: "Helvetica", ),
-            ),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } catch (e) {
-      if (!mounted) return;
-      
-      // Close loading indicator if still showing
-      Navigator.pop(context);
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'An error occurred. Please try again.',
-            style: TextStyle(fontFamily: "Helvetica", ),
-          ),
-          backgroundColor: Colors.red,
-        ),
-      );
+  Future<void> _initAndCheckAuth() async {
+    await _fbService.init();
+    if (_fbService.isLoggedIn) {
+      await _fetchProfile();
     }
+  }
+
+  Future<void> _fetchProfile() async {
+    setState(() { _isLoading = true; _error = null; });
+    try {
+      final profile = await _fbService.getUserProfile();
+      setState(() { _profile = profile; _isLoading = false; });
+    } catch (e) {
+      setState(() { _error = e.toString(); _isLoading = false; });
+    }
+  }
+
+  Future<void> _login() async {
+    final email = _emailCtrl.text.trim();
+    final password = _passwordCtrl.text.trim();
+    if (email.isEmpty || password.isEmpty) return;
+
+    setState(() { _isLoading = true; _error = null; });
+    try {
+      await _fbService.signIn(email, password);
+      await _fetchProfile();
+    } catch (e) {
+      setState(() {
+        _error = e.toString().replaceAll('Exception: ', '');
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _logout() async {
+    await _fbService.signOut();
+    setState(() { _profile = null; });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.black,
       appBar: AppBar(
-        title: const Text('Profile'),
-        actions: _isAuthenticated
-            ? [
-                IconButton(
-                  icon: const Icon(Icons.logout),
-                  onPressed: () async {
-                    await _signOut();
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Signed out successfully')),
-                      );
-                    }
-                  },
-                ),
-              ]
+        backgroundColor: const Color(0xFF0F0F0F),
+        title: const Text('Profile', style: TextStyle(fontWeight: FontWeight.w900, color: Colors.white)),
+        actions: _profile != null
+            ? [IconButton(icon: const Icon(Icons.logout, color: AppTheme.accentColor), onPressed: _logout)]
             : null,
       ),
-      body: _isAuthenticated ? _buildProfileContent() : _buildSignInPrompt(),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator(color: AppTheme.accentColor))
+          : _profile != null
+              ? _buildProfileContent()
+              : _buildLoginForm(),
     );
   }
 
-  Widget _buildSignInPrompt() {
+  Widget _buildLoginForm() {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.account_circle_outlined,
-            size: 64,
-            color: Theme.of(context).primaryColor.withOpacity(0.5),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Sign in to view your profile',
-            style: Theme.of(context).textTheme.headlineSmall,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Access your orders, wishlist, and more',
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-              color: Theme.of(context).textTheme.bodySmall?.color,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 80, height: 80,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(colors: [AppTheme.accentColor.withOpacity(0.3), AppTheme.accentColor.withOpacity(0.1)]),
+              ),
+              child: const Icon(Icons.person_outline, size: 40, color: AppTheme.accentColor),
             ),
-          ),
-          const SizedBox(height: 24),
-          ElevatedButton(
-            onPressed: () async {
-              final result = await Navigator.of(context).push<bool>(
-                MaterialPageRoute(
-                  builder: (context) => const AuthScreen(),
+            const SizedBox(height: 24),
+            const Text('Sign In', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w900)),
+            const SizedBox(height: 8),
+            Text('Access your fitness profile', style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 14)),
+            const SizedBox(height: 32),
+
+            TextField(
+              controller: _emailCtrl,
+              style: const TextStyle(color: Colors.white, fontSize: 14),
+              keyboardType: TextInputType.emailAddress,
+              decoration: _inputDeco('EMAIL', 'you@email.com', Icons.email_outlined),
+            ),
+            const SizedBox(height: 16),
+
+            TextField(
+              controller: _passwordCtrl,
+              obscureText: _obscurePassword,
+              style: const TextStyle(color: Colors.white, fontSize: 14),
+              decoration: _inputDeco('PASSWORD', '••••••••', Icons.lock_outline).copyWith(
+                suffixIcon: IconButton(
+                  icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility, color: Colors.white.withOpacity(0.3)),
+                  onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                 ),
-              );
-              if (result == true) {
-                await _checkAuthStatus();
-              }
-            },
-            child: const Text('Sign In'),
-          ),
-          const SizedBox(height: 16),
-          TextButton.icon(
-            onPressed: () {
-              _showPasswordRecoveryDialog();
-            },
-            icon: const Icon(Icons.lock_reset),
-            label: const Text('Forgot Password?'),
-          ),
-        ],
+              ),
+              onSubmitted: (_) => _login(),
+            ),
+            const SizedBox(height: 24),
+
+            if (_error != null)
+              Container(
+                margin: const EdgeInsets.only(bottom: 16),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(color: Colors.red.withOpacity(0.1), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.red.withOpacity(0.2))),
+                child: Text(_error!, style: const TextStyle(color: Colors.redAccent, fontSize: 12), textAlign: TextAlign.center),
+              ),
+
+            SizedBox(
+              width: double.infinity, height: 52,
+              child: ElevatedButton(
+                onPressed: _login,
+                style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accentColor, foregroundColor: Colors.black, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)), elevation: 0),
+                child: const Text('Sign In', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15)),
+              ),
+            ),
+          ],
+        ),
       ),
+    );
+  }
+
+  InputDecoration _inputDeco(String label, String hint, IconData icon) {
+    return InputDecoration(
+      labelText: label,
+      labelStyle: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 2),
+      hintText: hint,
+      hintStyle: TextStyle(color: Colors.white.withOpacity(0.15)),
+      filled: true,
+      fillColor: const Color(0xFF1A1A1A),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: Colors.white.withOpacity(0.05))),
+      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: AppTheme.accentColor.withOpacity(0.5))),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+      prefixIcon: Icon(icon, color: Colors.white.withOpacity(0.3)),
     );
   }
 
   Widget _buildProfileContent() {
+    final p = _profile!;
+    final firstName = p['firstName'] ?? '';
+    final lastName = p['lastName'] ?? '';
+    final displayName = '$firstName $lastName'.trim();
+    final email = p['email'] ?? _fbService.email ?? '';
+    final profileImg = p['profileImageUrl'] ?? p['profileImageURL'];
+
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       children: [
-        if (_userEmail != null)
-          ListTile(
-            leading: const Icon(Icons.email),
-            title: Text(_userEmail!),
+        // Avatar & Name
+        Center(
+          child: Column(
+            children: [
+              CircleAvatar(
+                radius: 44,
+                backgroundColor: const Color(0xFF1A1A1A),
+                backgroundImage: profileImg != null ? NetworkImage(profileImg) : null,
+                child: profileImg == null ? Text(displayName.isNotEmpty ? displayName[0].toUpperCase() : '?', style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: AppTheme.accentColor)) : null,
+              ),
+              const SizedBox(height: 16),
+              Text(displayName.isNotEmpty ? displayName : 'User', style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w900)),
+              const SizedBox(height: 4),
+              Text(email, style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 13)),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                decoration: BoxDecoration(color: AppTheme.accentColor.withOpacity(0.15), borderRadius: BorderRadius.circular(20)),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('⭐ ', style: TextStyle(fontSize: 14)),
+                    Text('${p['credits'] ?? 0} Credits', style: const TextStyle(color: AppTheme.accentColor, fontSize: 12, fontWeight: FontWeight.w900)),
+                  ],
+                ),
+              ),
+            ],
           ),
-        const Divider(),
-        _buildThemeToggle(context),
-        if (kIsWeb) ...[
-          const Divider(),
-          ListTile(
-            leading: const Icon(Icons.language),
-            title: const Text('Select Region'),
-            trailing: DropdownButton<String>(
-              value: context.watch<LocationProvider>().countryCode,
-              items: const [
-                DropdownMenuItem(value: 'US', child: Text('United States (USD)')),
-                DropdownMenuItem(value: 'IN', child: Text('India (INR)')),
-              ],
-              onChanged: (String? newValue) {
-                if (newValue != null) {
-                  context.read<LocationProvider>().setCountry(newValue);
-                }
-              },
-            ),
-          ),
+        ),
+        const SizedBox(height: 32),
+
+        // Fitness Data Section
+        _sectionHeader('FITNESS DATA'),
+        const SizedBox(height: 12),
+        Row(children: [
+          Expanded(child: _dataCard('⚖️', 'Weight', p['weight'] != null ? '${p['weight']} kg' : '—')),
+          const SizedBox(width: 12),
+          Expanded(child: _dataCard('🎯', 'Target', p['targetWeight'] != null ? '${p['targetWeight']} kg' : '—')),
+        ]),
+        const SizedBox(height: 12),
+        Row(children: [
+          Expanded(child: _dataCard('📏', 'Height', p['height'] != null ? '${p['height']} cm' : '—')),
+          const SizedBox(width: 12),
+          Expanded(child: _dataCard('🎂', 'Age', p['age'] != null ? '${p['age']} yrs' : '—')),
+        ]),
+        const SizedBox(height: 12),
+        Row(children: [
+          Expanded(child: _dataCard('🚻', 'Gender', (p['gender'] ?? '—').toString().toUpperCase())),
+          const SizedBox(width: 12),
+          Expanded(child: _dataCard('🏃', 'Activity', (p['activityLevel'] ?? '—').toString().toUpperCase())),
+        ]),
+
+        if (p['dietaryRestrictions'] != null && p['dietaryRestrictions'].toString().isNotEmpty) ...[
+          const SizedBox(height: 12),
+          _dataCard('🥗', 'Dietary', p['dietaryRestrictions'].toString()),
         ],
-        const Divider(),
-        ListTile(
-          leading: const Icon(Icons.shopping_bag_outlined),
-          title: const Text('My Orders'),
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (context) => const OrdersScreen(),
-              ),
-            );
-          },
-        ),
-        ListTile(
-          leading: const Icon(Icons.location_on_outlined),
-          title: const Text('Shipping Addresses'),
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (context) => const AddressScreen(),
-              ),
-            );
-          },
-        ),
-        const Divider(),
-        ListTile(
-          leading: const Icon(Icons.lock_reset),
-          title: const Text('Change Password'),
-          onTap: () {
-            _showPasswordRecoveryDialog();
-          },
-        ),
-        ListTile(
-          leading: const Icon(Icons.settings_outlined),
-          title: const Text('Settings'),
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (context) => const SettingsScreen(),
-              ),
-            );
-          },
-        ),
-        ListTile(
-          leading: const Icon(Icons.info_outline),
-          title: const Text('About'),
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (context) => const HelpScreen(),
-              ),
-            );
-          },
-        ),
-        //ListTile(
-          //leading: const Icon(Icons.help_outline),
-          //title: const Text('Help & Support'),
-          //onTap: () {
-            // Navigate to help screen
-          //},
-        //),
-        ListTile(
-          leading: const Icon(Icons.logout),
-          title: const Text('Sign Out'),
-          onTap: () async {
-            await _signOut();
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Signed out successfully')),
-              );
-            }
-          },
-        ),
+
+        const SizedBox(height: 32),
+        _sectionHeader('SETTINGS'),
+        const SizedBox(height: 12),
+        _settingsTile(Icons.shopping_bag_outlined, 'My Orders', () => Navigator.push(context, MaterialPageRoute(builder: (_) => const OrdersScreen()))),
+        _settingsTile(Icons.location_on_outlined, 'Addresses', () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AddressScreen()))),
+        _settingsTile(Icons.settings_outlined, 'Settings', () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()))),
+        _settingsTile(Icons.info_outline, 'About', () => Navigator.push(context, MaterialPageRoute(builder: (_) => const HelpScreen()))),
+        _settingsTile(Icons.logout, 'Sign Out', _logout, isDestructive: true),
       ],
     );
   }
 
-  Widget _buildThemeToggle(BuildContext context) {
-    return Consumer<ThemeProvider>(
-      builder: (context, themeProvider, child) {
-        final isDark = themeProvider.themeMode == ThemeMode.dark;
-        return ListTile(
-          leading: Icon(
-            isDark ? Icons.dark_mode : Icons.light_mode,
-            color: Theme.of(context).iconTheme.color,
-          ),
-          title: Text(
-            'Dark Mode',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          trailing: Switch(
-            value: isDark,
-            onChanged: (value) {
-              themeProvider.toggleTheme();
-            },
-            activeColor: AppTheme.accentColor,
-          ),
-        );
-      },
+  Widget _sectionHeader(String label) => Text(label, style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 2));
+
+  Widget _dataCard(String emoji, String label, String value) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: const Color(0xFF111111), borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFF212121))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [Text(emoji, style: const TextStyle(fontSize: 16)), const SizedBox(width: 8), Text(label.toUpperCase(), style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.5))]),
+        const SizedBox(height: 10),
+        Text(value, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w900)),
+      ]),
+    );
+  }
+
+  Widget _settingsTile(IconData icon, String title, VoidCallback onTap, {bool isDestructive = false}) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(color: const Color(0xFF111111), borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0xFF212121))),
+      child: ListTile(
+        leading: Icon(icon, color: isDestructive ? Colors.redAccent : Colors.white.withOpacity(0.5), size: 22),
+        title: Text(title, style: TextStyle(color: isDestructive ? Colors.redAccent : Colors.white, fontSize: 14, fontWeight: FontWeight.w700)),
+        trailing: Icon(Icons.chevron_right, color: Colors.white.withOpacity(0.2), size: 20),
+        onTap: onTap,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      ),
     );
   }
 }

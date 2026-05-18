@@ -9,6 +9,7 @@ import '../models/cart_model.dart';
 import '../models/wishlist_model.dart';
 import '../providers/location_provider.dart';
 import '../screens/shop_screen.dart';
+import '../screens/ai_coach/ai_coach_screen.dart' as ai_coach;
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -170,6 +171,19 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ],
         ),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const ai_coach.AiCoachScreen(),
+            ),
+          );
+        },
+        backgroundColor: AppTheme.accentColor,
+        icon: const Icon(Icons.auto_awesome, color: Colors.black),
+        label: const Text('AI Coach', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
       ),
     );
   }

@@ -33,7 +33,7 @@ dependencies:
   # OneSignal for push notifications and in-app messages
   onesignal_flutter: ^5.3.4
   
-  # Keep Firebase core for other services (if needed)
+  # Firebase (core only — auth + firestore done via REST to avoid version conflicts)
   firebase_core: ^2.24.2
 
 dev_dependencies:
