@@ -25,7 +25,7 @@ class _NotificationTestWidgetState extends State<NotificationTestWidget> {
       final token = await FirebaseMessagingService.getToken();
       setState(() => _token = token);
     } catch (e) {
-      print('Error loading token: $e');
+      debugPrint('Error loading token: $e');
     } finally {
       setState(() => _isLoading = false);
     }

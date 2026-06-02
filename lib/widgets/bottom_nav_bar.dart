@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
-import '../theme/app_theme.dart';
+import 'package:provider/provider.dart';
+import '../models/cart_model.dart';
+import 'ef_components.dart';
 
+export 'ef_components.dart' show EFNavBar;
+
+// Thin backwards-compat wrapper — new code should use EFNavBar directly.
 class AnimatedBottomNavBar extends StatelessWidget {
   final int selectedIndex;
   final Function(int) onItemSelected;
@@ -13,42 +18,11 @@ class AnimatedBottomNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BottomNavigationBar(
-      currentIndex: selectedIndex,
-      onTap: onItemSelected,
-      type: BottomNavigationBarType.fixed,
-      items: const [
-        BottomNavigationBarItem(
-          icon: Icon(Icons.home_outlined),
-          activeIcon: Icon(Icons.home),
-          label: 'Home',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.shopping_bag_outlined),
-          activeIcon: Icon(Icons.shopping_bag),
-          label: 'Shop',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.favorite_border),
-          activeIcon: Icon(Icons.favorite),
-          label: 'Wishlist',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.shopping_cart_outlined),
-          activeIcon: Icon(Icons.shopping_cart),
-          label: 'Cart',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.bluetooth_outlined),
-          activeIcon: Icon(Icons.bluetooth),
-          label: 'Devices',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.person_outline),
-          activeIcon: Icon(Icons.person),
-          label: 'Profile',
-        ),
-      ],
+    final cartCount = context.watch<CartModel>().itemCount;
+    return EFNavBar(
+      selectedIndex: selectedIndex,
+      onItemSelected: onItemSelected,
+      cartCount: cartCount,
     );
   }
 }

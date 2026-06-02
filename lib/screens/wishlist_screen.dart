@@ -284,7 +284,7 @@ class WishlistScreen extends StatelessWidget {
             Navigator.of(context).pushReplacement(
               MaterialPageRoute(
                 builder: (context) => MainLayout(
-                  currentIndex: 3, // Cart tab
+                  currentIndex: 2, // Cart tab
                   child: const CartScreen(),
                 ),
               ),

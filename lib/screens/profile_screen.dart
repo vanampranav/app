@@ -1,13 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 import '../theme/app_theme.dart';
 import '../services/firebase_rest_service.dart';
 import 'settings_screen.dart';
 import 'OrdersScreen.dart';
 import 'HelpScreen.dart';
 import 'address_screen.dart';
-
+import 'wishlist_screen.dart';
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({Key? key}) : super(key: key);
+  final bool showAiCoachNav;
+  final VoidCallback? onAiAssistantTap;
+  final VoidCallback? onWeeklyScheduleTap;
+  const ProfileScreen({Key? key, this.showAiCoachNav = false, this.onAiAssistantTap, this.onWeeklyScheduleTap}) : super(key: key);
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -29,20 +34,40 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _initAndCheckAuth();
   }
 
+  static const _cacheKey = 'profile_cache';
+
   Future<void> _initAndCheckAuth() async {
-    await _fbService.init();
-    if (_fbService.isLoggedIn) {
-      await _fetchProfile();
+    // 1. Load cached profile instantly (no spinner, no network)
+    final prefs = await SharedPreferences.getInstance();
+    final cached = prefs.getString(_cacheKey);
+    if (cached != null) {
+      try {
+        if (mounted) setState(() => _profile = Map<String, dynamic>.from(jsonDecode(cached)));
+      } catch (_) {}
     }
+
+    // 2. Init auth (reads secure storage — fast local I/O)
+    await _fbService.init();
+    if (!_fbService.isLoggedIn) return;
+
+    // 3. Refresh from network in background — no blocking spinner
+    _fetchProfile(background: _profile != null);
   }
 
-  Future<void> _fetchProfile() async {
-    setState(() { _isLoading = true; _error = null; });
+  Future<void> _fetchProfile({bool background = false}) async {
+    if (!background) setState(() { _isLoading = true; _error = null; });
     try {
       final profile = await _fbService.getUserProfile();
-      setState(() { _profile = profile; _isLoading = false; });
+      if (profile != null && mounted) {
+        setState(() { _profile = profile; _isLoading = false; });
+        // Persist for next launch
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_cacheKey, jsonEncode(profile));
+      } else if (mounted) {
+        setState(() => _isLoading = false);
+      }
     } catch (e) {
-      setState(() { _error = e.toString(); _isLoading = false; });
+      if (mounted) setState(() { _error = e.toString(); _isLoading = false; });
     }
   }
 
@@ -65,6 +90,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _logout() async {
     await _fbService.signOut();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_cacheKey);
     setState(() { _profile = null; });
   }
 
@@ -84,6 +111,56 @@ class _ProfileScreenState extends State<ProfileScreen> {
           : _profile != null
               ? _buildProfileContent()
               : _buildLoginForm(),
+      bottomNavigationBar: widget.showAiCoachNav ? _buildAiCoachNav(context) : null,
+    );
+  }
+
+  Widget _buildAiCoachNav(BuildContext context) {
+    return Container(
+      height: 85,
+      decoration: const BoxDecoration(
+        color: Color(0xFF0F0F0F),
+        borderRadius: BorderRadius.only(topLeft: Radius.circular(24), topRight: Radius.circular(24)),
+        border: Border(top: BorderSide(color: Colors.white10)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          _buildAiNavIcon(context, Icons.auto_awesome, 'AI ASSISTANT', false, () {
+            if (widget.onAiAssistantTap != null) {
+              widget.onAiAssistantTap!();
+            } else {
+              Navigator.pop(context);
+            }
+          }),
+          _buildAiNavIcon(context, Icons.calendar_today_outlined, 'WEEKLY SCHEDULE', false, () {
+            if (widget.onWeeklyScheduleTap != null) {
+              widget.onWeeklyScheduleTap!();
+            } else {
+              Navigator.pop(context);
+            }
+          }),
+          _buildAiNavIcon(context, Icons.person_outline, 'PROFILE', true, () {}),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAiNavIcon(BuildContext context, IconData icon, String label, bool active, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: active ? const Color(0xFFE8FF3A) : Colors.white38, size: 22),
+            const SizedBox(height: 4),
+            Text(label, style: TextStyle(color: active ? const Color(0xFFE8FF3A) : Colors.white38, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
+          ],
+        ),
+      ),
     );
   }
 
@@ -168,6 +245,61 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  void _showFitnessDataSheet() {
+    final p = _profile!;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => Container(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+        decoration: const BoxDecoration(
+          color: Color(0xFF111111),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(2)))),
+            const SizedBox(height: 20),
+            _sectionHeader('FITNESS DATA'),
+            const SizedBox(height: 12),
+            _fitnessDataCards(p),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _fitnessDataCards(Map<String, dynamic> p) {
+    return Column(
+      children: [
+        Row(children: [
+          Expanded(child: _dataCard('⚖️', 'Weight', p['weight'] != null ? '${p['weight']} kg' : '—')),
+          const SizedBox(width: 12),
+          Expanded(child: _dataCard('🎯', 'Target', p['targetWeight'] != null ? '${p['targetWeight']} kg' : '—')),
+        ]),
+        const SizedBox(height: 12),
+        Row(children: [
+          Expanded(child: _dataCard('📏', 'Height', p['height'] != null ? '${p['height']} cm' : '—')),
+          const SizedBox(width: 12),
+          Expanded(child: _dataCard('🎂', 'Age', p['age'] != null ? '${p['age']} yrs' : '—')),
+        ]),
+        const SizedBox(height: 12),
+        Row(children: [
+          Expanded(child: _dataCard('🚻', 'Gender', (p['gender'] ?? '—').toString().toUpperCase())),
+          const SizedBox(width: 12),
+          Expanded(child: _dataCard('🏃', 'Activity', (p['activityLevel'] ?? '—').toString().toUpperCase())),
+        ]),
+        if (p['dietaryRestrictions'] != null && p['dietaryRestrictions'].toString().isNotEmpty) ...[
+          const SizedBox(height: 12),
+          _dataCard('🥗', 'Dietary', p['dietaryRestrictions'].toString()),
+        ],
+      ],
+    );
+  }
+
   Widget _buildProfileContent() {
     final p = _profile!;
     final firstName = p['firstName'] ?? '';
@@ -210,36 +342,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
         const SizedBox(height: 32),
 
-        // Fitness Data Section
-        _sectionHeader('FITNESS DATA'),
-        const SizedBox(height: 12),
-        Row(children: [
-          Expanded(child: _dataCard('⚖️', 'Weight', p['weight'] != null ? '${p['weight']} kg' : '—')),
-          const SizedBox(width: 12),
-          Expanded(child: _dataCard('🎯', 'Target', p['targetWeight'] != null ? '${p['targetWeight']} kg' : '—')),
-        ]),
-        const SizedBox(height: 12),
-        Row(children: [
-          Expanded(child: _dataCard('📏', 'Height', p['height'] != null ? '${p['height']} cm' : '—')),
-          const SizedBox(width: 12),
-          Expanded(child: _dataCard('🎂', 'Age', p['age'] != null ? '${p['age']} yrs' : '—')),
-        ]),
-        const SizedBox(height: 12),
-        Row(children: [
-          Expanded(child: _dataCard('🚻', 'Gender', (p['gender'] ?? '—').toString().toUpperCase())),
-          const SizedBox(width: 12),
-          Expanded(child: _dataCard('🏃', 'Activity', (p['activityLevel'] ?? '—').toString().toUpperCase())),
-        ]),
-
-        if (p['dietaryRestrictions'] != null && p['dietaryRestrictions'].toString().isNotEmpty) ...[
+        // FITNESS DATA: inline cards for AI Coach, menu tile for main nav
+        if (widget.showAiCoachNav) ...[
+          _sectionHeader('FITNESS DATA'),
           const SizedBox(height: 12),
-          _dataCard('🥗', 'Dietary', p['dietaryRestrictions'].toString()),
+          _fitnessDataCards(p),
+          const SizedBox(height: 32),
         ],
 
-        const SizedBox(height: 32),
         _sectionHeader('SETTINGS'),
         const SizedBox(height: 12),
+        if (!widget.showAiCoachNav)
+          _settingsTile(Icons.monitor_heart_outlined, 'Fitness Data', _showFitnessDataSheet),
         _settingsTile(Icons.shopping_bag_outlined, 'My Orders', () => Navigator.push(context, MaterialPageRoute(builder: (_) => const OrdersScreen()))),
+        _settingsTile(Icons.favorite_border, 'Wishlist', () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WishlistScreen()))),
         _settingsTile(Icons.location_on_outlined, 'Addresses', () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AddressScreen()))),
         _settingsTile(Icons.settings_outlined, 'Settings', () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()))),
         _settingsTile(Icons.info_outline, 'About', () => Navigator.push(context, MaterialPageRoute(builder: (_) => const HelpScreen()))),

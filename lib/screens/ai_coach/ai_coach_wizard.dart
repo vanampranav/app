@@ -21,6 +21,7 @@ class _AiCoachWizardState extends State<AiCoachWizard> {
   
   // Step 1
   final _goalCtrl = TextEditingController();
+  final _goalFocusNode = FocusNode();
   
   // Step 2
   final _nameCtrl = TextEditingController();
@@ -36,7 +37,8 @@ class _AiCoachWizardState extends State<AiCoachWizard> {
   String _helpType = 'both';
   String _activityLevel = 'moderate';
   double _workoutDays = 4;
-  final _dietaryCtrl = TextEditingController(text: 'nothing, nothing');
+  final _dietaryCtrl = TextEditingController();
+  final Set<String> _selectedDietaryChips = {};
   
   // Step 4 Targets
   AiCoachTarget? _targets;
@@ -48,6 +50,22 @@ class _AiCoachWizardState extends State<AiCoachWizard> {
   void initState() {
     super.initState();
     _fbService.init();
+    _goalFocusNode.addListener(() => setState(() {}));
+    _goalCtrl.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _goalFocusNode.dispose();
+    _goalCtrl.dispose();
+    _nameCtrl.dispose();
+    _ageCtrl.dispose();
+    _heightCtrl.dispose();
+    _weightCtrl.dispose();
+    _targetWeightCtrl.dispose();
+    _timelineCtrl.dispose();
+    _dietaryCtrl.dispose();
+    super.dispose();
   }
 
   /// Fetch profile from Firebase and pre-fill wizard fields
@@ -79,15 +97,25 @@ class _AiCoachWizardState extends State<AiCoachWizard> {
             'We found your profile data. Would you like to auto-fill your details?',
             style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 13),
           ),
+          actionsAlignment: MainAxisAlignment.center,
           actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: Text('Fill Manually', style: TextStyle(color: Colors.white.withOpacity(0.4), fontWeight: FontWeight.w700)),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accentColor, foregroundColor: Colors.black, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
-              child: const Text('Use My Profile', style: TextStyle(fontWeight: FontWeight.w900)),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(ctx, true),
+                    style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accentColor, foregroundColor: Colors.black, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), padding: const EdgeInsets.symmetric(vertical: 14)),
+                    child: const Text('Use My Profile', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15)),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: Text('Fill Manually', style: TextStyle(color: Colors.white.withOpacity(0.4), fontWeight: FontWeight.w700)),
+                ),
+              ],
             ),
           ],
         ),
@@ -105,6 +133,11 @@ class _AiCoachWizardState extends State<AiCoachWizard> {
           if (profile['gender'] != null) _gender = profile['gender'].toString().toLowerCase();
           if (profile['activityLevel'] != null) _activityLevel = profile['activityLevel'].toString().toLowerCase();
           if (profile['dietaryRestrictions'] != null && profile['dietaryRestrictions'].toString().isNotEmpty) {
+            final raw = profile['dietaryRestrictions'].toString().toLowerCase();
+            if (raw.contains('vegetarian')) _selectedDietaryChips.add('vegetarian');
+            if (raw.contains('vegan')) _selectedDietaryChips.add('vegan');
+            if (raw.contains('no dairy') || raw.contains('dairy')) _selectedDietaryChips.add('no dairy');
+            if (raw.contains('no eggs') || raw.contains('eggs')) _selectedDietaryChips.add('no eggs');
             _dietaryCtrl.text = profile['dietaryRestrictions'].toString();
           }
         });
@@ -126,17 +159,78 @@ class _AiCoachWizardState extends State<AiCoachWizard> {
     ));
   }
 
+  bool _validateStep2() {
+    final age = int.tryParse(_ageCtrl.text);
+    final height = double.tryParse(_heightCtrl.text);
+    final weight = double.tryParse(_weightCtrl.text);
+    final timeline = int.tryParse(_timelineCtrl.text);
+
+    if (age == null || age < 10 || age > 120) {
+      _showSnack('Please enter a valid age (10–120)');
+      return false;
+    }
+    if (height == null || height < 50 || height > 300) {
+      _showSnack('Please enter a valid height in cm (50–300)');
+      return false;
+    }
+    if (weight == null || weight < 20 || weight > 500) {
+      _showSnack('Please enter a valid current weight in kg (20–500)');
+      return false;
+    }
+    if (timeline == null || timeline <= 0 || timeline > 200) {
+      _showSnack('Please enter a valid timeline (1–200)');
+      return false;
+    }
+    return true;
+  }
+
   Future<void> _nextStep() async {
+    if (_currentStep == 2 && !_validateStep2()) return;
+
     if (_currentStep == 3) {
-      // Transition to Step 4: Calculate targets via backend /user API
       setState(() { _isLoading = true; _errorMsg = null; });
-      
       final profile = _buildProfile();
       final prefs = _buildPreferences();
-
       try {
         _targets = await _service.getUserTargets(profile, prefs);
-        setState(() { _isLoading = false; _currentStep = 4; });
+        setState(() => _isLoading = false);
+
+        // Ask to save profile right after calculating targets
+        if (_fbService.isLoggedIn && _checkProfileDiffers()) {
+          final shouldSave = await showDialog<bool>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              backgroundColor: const Color(0xFF1A1A1A),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              title: const Text('Save to profile?', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 18)),
+              content: Text("You've entered new details. Would you like to update your profile with this information?",
+                  style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 13)),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text('Skip', style: TextStyle(color: Colors.white.withOpacity(0.4), fontWeight: FontWeight.w700))),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accentColor, foregroundColor: Colors.black, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
+                  child: const Text('Update Profile', style: TextStyle(fontWeight: FontWeight.w900)),
+                ),
+              ],
+            ),
+          );
+          if (shouldSave == true) {
+            try {
+              await _fbService.updateUserProfile({
+                'age': int.tryParse(_ageCtrl.text),
+                'weight': int.tryParse(_weightCtrl.text),
+                'height': int.tryParse(_heightCtrl.text),
+                'targetWeight': int.tryParse(_targetWeightCtrl.text),
+                'gender': _gender,
+                'activityLevel': _activityLevel,
+                'dietaryRestrictions': _buildPreferences().dietaryPreferences.join(', '),
+              });
+            } catch (_) {}
+          }
+        }
+
+        if (mounted) setState(() => _currentStep = 4);
       } catch (e) {
         setState(() { _isLoading = false; _errorMsg = e.toString(); });
       }
@@ -166,11 +260,14 @@ class _AiCoachWizardState extends State<AiCoachWizard> {
   }
 
   AiCoachPreferences _buildPreferences() {
+    final parts = <String>[..._selectedDietaryChips];
+    final free = _dietaryCtrl.text.trim();
+    if (free.isNotEmpty) parts.add(free);
     return AiCoachPreferences(
       helpType: _helpType,
       activityLevel: _activityLevel,
       workoutDays: _workoutDays.toInt(),
-      dietaryPreferences: [_dietaryCtrl.text],
+      dietaryPreferences: parts.isEmpty ? ['no restrictions'] : parts,
     );
   }
 
@@ -193,54 +290,19 @@ class _AiCoachWizardState extends State<AiCoachWizard> {
       setState(() => _isLoading = false);
 
       if (_fbService.isLoggedIn) {
-        // Save the generated fitness plan for later retrieval
+        // Deduct 1 credit before saving the plan
         try {
-          await _fbService.saveFitnessPlan(finalPlan.toJson());
+          await _fbService.decrementCredits();
         } catch (e) {
-          print('Failed to save fitness plan: $e');
+          if (mounted) setState(() { _isLoading = false; _errorMsg = e.toString(); });
+          return;
         }
 
-        final needsSave = _checkProfileDiffers();
-        if (needsSave) {
-          final shouldSave = await showDialog<bool>(
-            context: context,
-            builder: (ctx) => AlertDialog(
-              backgroundColor: const Color(0xFF1A1A1A),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-              title: const Text('Save to profile?', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 18)),
-              content: Text(
-                "You've entered new details. Would you like to update your profile with this information?",
-                style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 13),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx, false),
-                  child: Text('Skip', style: TextStyle(color: Colors.white.withOpacity(0.4), fontWeight: FontWeight.w700)),
-                ),
-                ElevatedButton(
-                  onPressed: () => Navigator.pop(ctx, true),
-                  style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accentColor, foregroundColor: Colors.black, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
-                  child: const Text('Update Profile', style: TextStyle(fontWeight: FontWeight.w900)),
-                ),
-              ],
-            ),
-          );
-
-          if (shouldSave == true) {
-            try {
-              await _fbService.updateUserProfile({
-                'age': int.tryParse(_ageCtrl.text),
-                'weight': int.tryParse(_weightCtrl.text),
-                'height': int.tryParse(_heightCtrl.text),
-                'targetWeight': int.tryParse(_targetWeightCtrl.text),
-                'gender': _gender,
-                'activityLevel': _activityLevel,
-                'dietaryRestrictions': _dietaryCtrl.text,
-              });
-            } catch (e) {
-              print('Failed to save profile: $e');
-            }
-          }
+        // Save the generated fitness plan to the subcollection for multi-plan support
+        try {
+          await _fbService.saveUserPlan(finalPlan);
+        } catch (e) {
+          debugPrint('Failed to save fitness plan: $e');
         }
       }
 
@@ -367,23 +429,36 @@ class _AiCoachWizardState extends State<AiCoachWizard> {
         const SizedBox(height: 32),
         Container(
           height: 56,
-          decoration: BoxDecoration(color: const Color(0xFF111111), borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.white.withOpacity(0.05))),
+          decoration: BoxDecoration(
+            color: const Color(0xFF111111),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: _goalFocusNode.hasFocus
+                  ? const Color(0xFFEBEB5D).withOpacity(0.7)
+                  : Colors.white.withOpacity(0.05),
+              width: _goalFocusNode.hasFocus ? 1.5 : 1.0,
+            ),
+          ),
           child: Row(
             children: [
               Expanded(
                 child: TextField(
                   controller: _goalCtrl,
+                  focusNode: _goalFocusNode,
                   style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
                   decoration: InputDecoration(
                     filled: true, fillColor: Colors.transparent,
                     contentPadding: const EdgeInsets.symmetric(horizontal: 16),
                     border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
                     hintText: 'Lose 6 kg in 3 months',
                     hintStyle: TextStyle(color: Colors.white.withOpacity(0.2)),
                   ),
                 ),
               ),
-              const Padding(padding: EdgeInsets.only(right: 16), child: Text('🏋️', style: TextStyle(fontSize: 18))),
+              if (_goalCtrl.text.isEmpty)
+                const Padding(padding: EdgeInsets.only(right: 16), child: Text('🏋️', style: TextStyle(fontSize: 18))),
             ],
           ),
         ),
@@ -490,16 +565,22 @@ class _AiCoachWizardState extends State<AiCoachWizard> {
         Row(children: [
           Expanded(child: _buildActivityButton('sedentary', '🪑', 'Sedentary', 'Little to no exercise')),
           const SizedBox(width: 12),
-          Expanded(child: _buildActivityButton('light', '🚶', 'Light', 'Exercise 1-2 days/...')),
+          Expanded(child: _buildActivityButton('light', '🚶', 'Light', 'Exercise 1-2 days/wk')),
         ]),
         const SizedBox(height: 12),
         Row(children: [
-          Expanded(child: _buildActivityButton('moderate', '🏃‍♂️', 'Moderate', 'Exercise 3-5 days/...')),
+          Expanded(child: _buildActivityButton('moderate', '🏃‍♂️', 'Moderate', 'Exercise 3-5 days/wk')),
           const SizedBox(width: 12),
-          Expanded(child: _buildActivityButton('active', '💪', 'Active', 'Exercise 6-7 days/...')),
+          Expanded(child: _buildActivityButton('active', '💪', 'Active', 'Exercise 6-7 days/wk')),
+        ]),
+        const SizedBox(height: 12),
+        Row(children: [
+          Expanded(child: _buildActivityButton('very_active', '🔥', 'Very Active', 'Intense daily exercise')),
+          const SizedBox(width: 12),
+          const Expanded(child: SizedBox()),
         ]),
         const SizedBox(height: 32),
-        
+
         const Text('Workout days per week', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w900)),
         Padding(
           padding: const EdgeInsets.only(top: 4, bottom: 16),
@@ -514,9 +595,20 @@ class _AiCoachWizardState extends State<AiCoachWizard> {
           Text('7 Day', style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 10, fontWeight: FontWeight.w900)),
         ]),
         const SizedBox(height: 32),
-        
+
         _buildFieldLabel('DIETARY PREFERENCES'),
-        _buildInput(_dietaryCtrl),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _buildDietaryChip('vegetarian', 'VEGETARIAN'),
+            _buildDietaryChip('vegan', 'VEGAN'),
+            _buildDietaryChip('no dairy', 'NO DAIRY'),
+            _buildDietaryChip('no eggs', 'NO EGGS'),
+          ],
+        ),
+        const SizedBox(height: 12),
+        _buildInput(_dietaryCtrl, hint: 'Other restrictions (optional)'),
         const SizedBox(height: 32),
 
         if (_errorMsg != null)
@@ -624,7 +716,7 @@ class _AiCoachWizardState extends State<AiCoachWizard> {
     );
   }
 
-  Widget _buildInput(TextEditingController ctrl) {
+  Widget _buildInput(TextEditingController ctrl, {String? hint}) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       height: 48,
@@ -632,7 +724,33 @@ class _AiCoachWizardState extends State<AiCoachWizard> {
       child: TextField(
         controller: ctrl,
         style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
-        decoration: const InputDecoration(contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12), border: InputBorder.none, filled: true, fillColor: Colors.transparent),
+        decoration: InputDecoration(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          border: InputBorder.none,
+          filled: true,
+          fillColor: Colors.transparent,
+          hintText: hint,
+          hintStyle: TextStyle(color: Colors.white.withOpacity(0.2), fontSize: 13),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDietaryChip(String id, String label) {
+    final active = _selectedDietaryChips.contains(id);
+    return GestureDetector(
+      onTap: () => setState(() {
+        if (active) _selectedDietaryChips.remove(id);
+        else _selectedDietaryChips.add(id);
+      }),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: active ? const Color(0xFF4A4E2C) : Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: active ? const Color(0xFFEBEB5D) : Colors.white.withOpacity(0.15)),
+        ),
+        child: Text(label, style: TextStyle(color: active ? const Color(0xFFEBEB5D) : Colors.white.withOpacity(0.5), fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
       ),
     );
   }

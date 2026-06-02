@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../models/cart_model.dart';
 import '../models/wishlist_model.dart';
 import '../providers/location_provider.dart';
+import 'cart_screen.dart';
 
 class ShopScreen extends StatefulWidget {
   final String? categoryName;
@@ -39,25 +40,36 @@ class _ShopScreenState extends State<ShopScreen> {
   }
 
   Future<void> _loadProducts() async {
+    // Serve cached data immediately so the screen is never blank on return visits
+    final cached = _shopifyService.getCachedProducts(
+      collectionHandle: widget.collectionHandle,
+      tag: widget.tag,
+    );
+    if (cached != null) {
+      setState(() {
+        _productsData = cached;
+        _isLoading = false;
+        _error = null;
+      });
+      // Silently refresh in the background
+      _refreshInBackground();
+      return;
+    }
+
+    // First ever load — show spinner
     try {
       setState(() {
         _isLoading = true;
         _error = null;
       });
-
-      // Try collection first
       var products = await _shopifyService.getProducts(
         collectionHandle: widget.collectionHandle,
       );
-      
-      // If collection returns null or empty, try tag-based query
-      if (products == null && widget.tag != null) {
-        print('Collection not found, trying tag: ${widget.tag}');
-        products = await _shopifyService.getProducts(
-          tag: widget.tag,
-        );
+      final isEmpty = products == null ||
+          (products['products']?['edges'] as List?)?.isEmpty == true;
+      if (isEmpty && widget.tag != null) {
+        products = await _shopifyService.getProducts(tag: widget.tag);
       }
-      
       if (mounted) {
         setState(() {
           _productsData = products;
@@ -71,7 +83,20 @@ class _ShopScreenState extends State<ShopScreen> {
           _isLoading = false;
         });
       }
-      print('Error loading products: $e');
+    }
+  }
+
+  Future<void> _refreshInBackground() async {
+    var fresh = await _shopifyService.getProducts(
+      collectionHandle: widget.collectionHandle,
+    );
+    final isEmpty = fresh == null ||
+        (fresh['products']?['edges'] as List?)?.isEmpty == true;
+    if (isEmpty && widget.tag != null) {
+      fresh = await _shopifyService.getProducts(tag: widget.tag);
+    }
+    if (mounted && fresh != null) {
+      setState(() => _productsData = fresh);
     }
   }
 
@@ -102,6 +127,20 @@ class _ShopScreenState extends State<ShopScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.categoryName ?? 'Shop'),
+        actions: [
+          Consumer<CartModel>(
+            builder: (context, cart, _) => Badge(
+              isLabelVisible: cart.itemCount > 0,
+              label: Text('${cart.itemCount}', style: const TextStyle(fontSize: 10, color: Colors.black, fontWeight: FontWeight.bold)),
+              backgroundColor: AppTheme.accentColor,
+              child: IconButton(
+                icon: const Icon(Icons.shopping_cart_outlined),
+                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CartScreen())),
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+        ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(60),
           child: Container(
@@ -114,13 +153,22 @@ class _ShopScreenState extends State<ShopScreen> {
               },
               decoration: InputDecoration(
                 hintText: 'Search products...',
-                prefixIcon: const Icon(Icons.search),
+                hintStyle: const TextStyle(color: AppTheme.textTertiary, fontSize: 14),
+                prefixIcon: const Icon(Icons.search, color: AppTheme.textTertiary, size: 20),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                   borderSide: BorderSide.none,
                 ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                  borderSide: BorderSide(color: Colors.white.withOpacity(0.08)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                  borderSide: const BorderSide(color: AppTheme.lime, width: 1.5),
+                ),
                 filled: true,
-                fillColor: Colors.grey.shade100,
+                fillColor: AppTheme.surface2,
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16),
               ),
             ),
@@ -254,7 +302,7 @@ class _ShopScreenState extends State<ShopScreen> {
                                             });
                                           },
                                           style: IconButton.styleFrom(
-                                            backgroundColor: Colors.white,
+                                            backgroundColor: Colors.transparent,
                                             padding: const EdgeInsets.all(8),
                                           ),
                                         );
@@ -285,7 +333,8 @@ class _ShopScreenState extends State<ShopScreen> {
                                   children: [
                                     Text(
                                       context.read<LocationProvider>().formatPrice(
-                                        double.tryParse(product['priceRange']['minVariantPrice']['amount'].toString()) ?? 0.0
+                                        double.tryParse(product['priceRange']['minVariantPrice']['amount'].toString()) ?? 0.0,
+                                        fromCurrencyCode: (product['priceRange']['minVariantPrice']['currencyCode'] as String?) ?? 'USD',
                                       ),
                                       style: TextStyle(fontFamily: "Helvetica", 
                                         color: AppTheme.accentColor,

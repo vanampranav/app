@@ -111,6 +111,10 @@ class FitDaysDevice {
   int get hashCode => macAddress.hashCode;
 }
 
+/// Which physical device produced a WeightMeasurement.
+/// Set by FitDaysService when routing native SDK events.
+enum WeightSource { bodyFatScale, kitchenScale, unknown }
+
 class WeightMeasurement {
   final double weight;
   final String unit;
@@ -127,6 +131,10 @@ class WeightMeasurement {
   final int? physicalAge;
   final DateTime timestamp;
 
+  /// Identifies which device type sent this measurement so screens can
+  /// ignore readings from the wrong device even when both are connected.
+  final WeightSource source;
+
   WeightMeasurement({
     required this.weight,
     required this.unit,
@@ -142,9 +150,11 @@ class WeightMeasurement {
     this.skeletalMuscle,
     this.physicalAge,
     DateTime? timestamp,
+    this.source = WeightSource.unknown,
   }) : timestamp = timestamp ?? DateTime.now();
 
-  factory WeightMeasurement.fromMap(Map<String, dynamic> map) {
+  factory WeightMeasurement.fromMap(Map<String, dynamic> map,
+      {WeightSource source = WeightSource.unknown}) {
     return WeightMeasurement(
       weight: (map['weight'] as num).toDouble(),
       unit: map['unit'] as String? ?? 'kg',
@@ -155,10 +165,11 @@ class WeightMeasurement {
       water: map['water'] != null ? (map['water'] as num).toDouble() : null,
       boneMass: map['boneMass'] != null ? (map['boneMass'] as num).toDouble() : null,
       protein: map['protein'] != null ? (map['protein'] as num).toDouble() : null,
-      bmr: map['bmr'] as int?,
+      bmr: (map['bmr'] as num?)?.toInt(),
       visceralFat: map['visceralFat'] != null ? (map['visceralFat'] as num).toDouble() : null,
       skeletalMuscle: map['skeletalMuscle'] != null ? (map['skeletalMuscle'] as num).toDouble() : null,
-      physicalAge: map['physicalAge'] as int?,
+      physicalAge: (map['physicalAge'] as num?)?.toInt(),
+      source: source,
     );
   }
 

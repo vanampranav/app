@@ -1,15 +1,25 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:video_player/video_player.dart';
-import '../theme/app_theme.dart';
-import '../services/shopify_service.dart';
-import '../utils/constants.dart';
-import 'package:flutter_carousel_widget/flutter_carousel_widget.dart';
 import 'package:provider/provider.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../theme/app_theme.dart';
+import '../widgets/ef_components.dart';
+import '../services/shopify_service.dart';
+import '../services/onesignal_service.dart';
+import '../services/health_service.dart';
+import '../services/fitdays_service.dart';
+import '../models/device_model.dart';
 import '../models/cart_model.dart';
-import '../models/wishlist_model.dart';
-import '../providers/location_provider.dart';
-import '../screens/shop_screen.dart';
 import '../screens/ai_coach/ai_coach_screen.dart' as ai_coach;
+import '../screens/nutrition/nutrition_log_screen.dart';
+import '../screens/cart_screen.dart';
+import '../screens/shop_screen.dart';
+import '../screens/devices_screen.dart';
+import '../screens/measurement_screen.dart';
+import '../services/member_service.dart';
+import '../models/member_model.dart';
+import '../widgets/device_scan_sheet.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -18,958 +28,1046 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   late final ShopifyService _shopifyService;
-  bool _isLoading = true;
-  String? _error;
-  Map<String, dynamic>? _productsData;
+  List<dynamic> _featuredProducts = [];
+  bool _productsLoading = true;
 
-  final List<String> _promotions = [
-    'END YEAR SALE UP TO 50% OFF',
-    'SIGN UP AND GET 10% OFF YOUR FIRST ORDER',
-    'FREE DELIVERY FOR ORDER OVER \$120',
-  ];
+  // Daily fitness stats (from local storage)
+  int _caloriesConsumed = 0;
+  int _caloriesGoal    = 2000;
+  int _proteinG        = 0;
+  int _proteinGoal     = 150;
+  int _carbsG          = 0;
+  int _carbsGoal       = 200;
+  int _fatG            = 0;
+  int _fatGoal         = 65;
+  double? _latestWeight;
+  int _streak          = 0;
+  String _userName     = '';
+  int    _stepsToday   = 0;
+  int    _burnedToday  = 0;
 
-  // List of video paths
-  final List<String> _videoAssets = [
-   // 'assets/videos/video.mp4',
-    //'assets/videos/video2.mp4',
-    'assets/videos/video3.mp4',
-  ];
-
-  // List to hold video controllers
-  List<VideoPlayerController> _videoControllers = [];
-  List<bool> _videoInitialized = [];
+  late final AnimationController _headerAnim;
+  late final Animation<double> _headerFade;
+  late final Animation<Offset> _headerSlide;
 
   @override
   void initState() {
     super.initState();
     _shopifyService = Provider.of<ShopifyService>(context, listen: false);
-    _loadProducts();
-    _initializeVideoControllers();
-  }
 
-  Future<void> _initializeVideoControllers() async {
-    _videoControllers = _videoAssets.map((path) {
-      return VideoPlayerController.asset(path);
-    }).toList();
+    _headerAnim = AnimationController(vsync: this, duration: const Duration(milliseconds: 700));
+    _headerFade = CurvedAnimation(parent: _headerAnim, curve: Curves.easeOut);
+    _headerSlide = Tween<Offset>(begin: const Offset(0, -0.08), end: Offset.zero)
+        .animate(CurvedAnimation(parent: _headerAnim, curve: Curves.easeOutCubic));
 
-    _videoInitialized = List.generate(_videoAssets.length, (_) => false);
+    _loadAll();
 
-    for (int i = 0; i < _videoControllers.length; i++) {
-      await _videoControllers[i].initialize();
-      if (mounted) {
-        setState(() {
-          _videoInitialized[i] = true;
-        });
-        _videoControllers[i]
-          ..setLooping(true)
-          ..setVolume(0.0) // Mute the video
-          ..play();
-      }
-    }
-  }
-
-  Future<void> _loadProducts() async {
-    try {
-      setState(() {
-        _isLoading = true;
-        _error = null;
-      });
-
-      // Fetch available collections for debugging
-      await _shopifyService.getCollections();
-
-      final products = await _shopifyService.getProducts();
-
-      if (mounted) {
-        setState(() {
-          _productsData = products;
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _error = e.toString();
-          _isLoading = false;
-        });
-      }
-      print('Error loading products: $e');
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      OneSignalService.triggerAppOpened();
+      _headerAnim.forward();
+    });
   }
 
   @override
   void dispose() {
-    // Dispose of video controllers
-    for (var controller in _videoControllers) {
-      controller.dispose();
-    }
+    _headerAnim.dispose();
     super.dispose();
   }
+
+  Future<void> _loadAll() async {
+    await Future.wait([_loadFitnessStats(), _loadProducts(), _loadHealthData()]);
+  }
+
+  Future<void> _loadHealthData() async {
+    // Silently read from Apple Health / Health Connect if connected.
+    // Never blocks — returns 0 when permissions aren't granted.
+    final health = HealthService();
+    final connected = await health.isConnected;
+    if (!connected) return;
+    await health.checkPermissions();
+    final results = await Future.wait([
+      health.fetchTodaySteps(),
+      health.fetchTodayActiveCalories(),
+    ]);
+    if (mounted) {
+      setState(() {
+        _stepsToday  = results[0] as int;
+        _burnedToday = (results[1] as double).round();
+      });
+    }
+  }
+
+  Future<void> _loadFitnessStats() async {
+    final prefs = await SharedPreferences.getInstance();
+    final today = _todayKey();
+    if (mounted) {
+      setState(() {
+        _caloriesConsumed = prefs.getInt('cal_consumed_$today') ?? 0;
+        _caloriesGoal     = prefs.getInt('cal_goal')
+                         ?? prefs.getInt('user_daily_calories')
+                         ?? 2000;
+        _proteinG         = prefs.getInt('protein_$today') ?? 0;
+        _proteinGoal      = prefs.getInt('protein_goal') ?? 150;
+        _carbsG           = prefs.getInt('carbs_$today') ?? 0;
+        _carbsGoal        = prefs.getInt('carbs_goal') ?? 200;
+        _fatG             = prefs.getInt('fat_$today') ?? 0;
+        _fatGoal          = prefs.getInt('fat_goal') ?? 65;
+        _latestWeight     = prefs.getDouble('latest_weight');
+        _streak           = prefs.getInt('streak') ?? 0;
+        _userName         = prefs.getString('user_name') ?? '';
+      });
+    }
+  }
+
+  Future<void> _loadProducts() async {
+    // Serve cache instantly
+    final cached = _shopifyService.getCachedProducts();
+    if (cached != null) {
+      _setProducts(cached);
+      _shopifyService.getProducts().then((fresh) {
+        if (mounted && fresh != null) _setProducts(fresh);
+      });
+      return;
+    }
+    final data = await _shopifyService.getProducts();
+    if (mounted) {
+      if (data != null) _setProducts(data);
+      setState(() => _productsLoading = false);
+    }
+  }
+
+  void _setProducts(Map<String, dynamic> data) {
+    final edges = (data['products']?['edges'] as List?) ?? [];
+    setState(() {
+      _featuredProducts = edges.take(6).toList();
+      _productsLoading = false;
+    });
+  }
+
+  String _todayKey() {
+    final now = DateTime.now();
+    return '${now.year}_${now.month}_${now.day}';
+  }
+
+  // ── Track Weight flow ────────────────────────────────────────────────────
+  void _onTrackWeightTapped() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        decoration: const BoxDecoration(
+          color: AppTheme.surface1,
+          borderRadius: BorderRadius.vertical(
+              top: Radius.circular(AppTheme.radiusXxl)),
+        ),
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 36),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Center(
+            child: Container(
+              width: 40, height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Text('Record your weight', style: AppTheme.headingMD),
+          const SizedBox(height: 6),
+          Text('How would you like to record today\'s weight?',
+              style: AppTheme.bodyMD, textAlign: TextAlign.center),
+          const SizedBox(height: 28),
+          // Use scale
+          GestureDetector(
+            onTap: () {
+              Navigator.pop(ctx);
+              _useScaleForWeight();
+            },
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              decoration: BoxDecoration(
+                color: AppTheme.lime,
+                borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+                boxShadow: [
+                  BoxShadow(color: AppTheme.lime.withOpacity(0.3),
+                      blurRadius: 16, offset: const Offset(0, 6)),
+                ],
+              ),
+              child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                const Icon(Icons.monitor_weight_outlined,
+                    color: Colors.black, size: 20),
+                const SizedBox(width: 10),
+                const Text('Use scale',
+                    style: TextStyle(fontSize: 16,
+                        fontWeight: FontWeight.w900, color: Colors.black)),
+              ]),
+            ),
+          ),
+          const SizedBox(height: 12),
+          // Enter manually
+          GestureDetector(
+            onTap: () {
+              Navigator.pop(ctx);
+              _enterWeightManually();
+            },
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              decoration: BoxDecoration(
+                color: AppTheme.surface2,
+                borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+                border: Border.all(color: Colors.white.withOpacity(0.1)),
+              ),
+              child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                const Icon(Icons.edit_outlined,
+                    color: AppTheme.textSecondary, size: 20),
+                const SizedBox(width: 10),
+                Text('Enter manually',
+                    style: AppTheme.labelLG.copyWith(
+                        color: AppTheme.textSecondary)),
+              ]),
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  // If scale already connected → open MeasurementScreen directly.
+  // If not → show scanner to find a body fat scale.
+  Future<void> _useScaleForWeight() async {
+    final fitDays = FitDaysService();
+
+    if (fitDays.connectedDeviceMac != null) {
+      // Already connected — load the device info from prefs
+      await _openMeasurementScreen(fitDays);
+      return;
+    }
+
+    if (!mounted) return;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => DeviceScanSheet(
+        filterType: DeviceType.bodyFatScale,
+        title: 'Connect body fat scale',
+        subtitle: 'For full body composition measurements',
+        onConnected: (device) async {
+          if (!mounted) return;
+          Navigator.pop(context); // close scanner
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => MeasurementScreen(
+                connectedDevice: device,
+                fitDaysService: fitDays,
+              ),
+            ),
+          );
+          // Refresh weight stat after returning
+          _loadFitnessStats();
+        },
+      ),
+    );
+  }
+
+  Future<void> _openMeasurementScreen(FitDaysService fitDays) async {
+    // Load bound devices to get the FitDaysDevice object
+    final prefs = await SharedPreferences.getInstance();
+    final raw   = prefs.getString('bound_devices');
+    FitDaysDevice? device;
+    if (raw != null) {
+      try {
+        final list = (jsonDecode(raw) as List)
+            .map((e) => FitDaysDevice.fromMap(e as Map<String, dynamic>))
+            .toList();
+        device = list.firstWhere(
+          (d) => d.macAddress == fitDays.connectedDeviceMac,
+          orElse: () => list.first,
+        );
+      } catch (_) {}
+    }
+    if (!mounted) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => MeasurementScreen(
+          connectedDevice: device ??
+              FitDaysDevice(
+                macAddress: fitDays.connectedDeviceMac!,
+                name: 'Scale',
+                rssi: 0,
+                deviceType: DeviceType.bodyFatScale,
+              ),
+          fitDaysService: fitDays,
+        ),
+      ),
+    );
+    _loadFitnessStats();
+  }
+
+  void _enterWeightManually() {
+    final ctrl = TextEditingController(
+      text: _latestWeight != null ? _latestWeight!.toStringAsFixed(1) : '',
+    );
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surface1,
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppTheme.radiusXxl)),
+        title: Row(children: [
+          const Text('⚖️', style: TextStyle(fontSize: 20)),
+          const SizedBox(width: 10),
+          Text('Enter weight', style: AppTheme.headingSM),
+        ]),
+        content: TextField(
+          controller: ctrl,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          autofocus: true,
+          style: AppTheme.numericLG.copyWith(fontSize: 32),
+          cursorColor: AppTheme.lime,
+          textAlign: TextAlign.center,
+          decoration: InputDecoration(
+            suffix: Text(' kg', style: AppTheme.headingSM.copyWith(
+                color: AppTheme.textSecondary)),
+            hintText: '70.0',
+            hintStyle: AppTheme.numericLG.copyWith(
+                fontSize: 32, color: AppTheme.textTertiary),
+            filled: true,
+            fillColor: AppTheme.surface2,
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+              borderSide: BorderSide(color: Colors.white.withOpacity(0.08)),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+              borderSide: const BorderSide(color: AppTheme.lime, width: 2),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancel',
+                style: AppTheme.labelLG.copyWith(color: AppTheme.textSecondary)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.lime, foregroundColor: Colors.black),
+            onPressed: () async {
+              final w = double.tryParse(ctrl.text);
+              if (w == null || w < 20 || w > 300) return;
+              Navigator.pop(ctx);
+              await _saveManualWeight(w);
+            },
+            child: const Text('Save',
+                style: TextStyle(fontWeight: FontWeight.w900)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _saveManualWeight(double weightKg) async {
+    final fitDays = FitDaysService();
+    final memberService = MemberService();
+    final member = await memberService.ensureMemberExists();
+
+    await memberService.addMeasurement(BodyMeasurement(
+      id: MemberService.generateId(),
+      memberId: member.id,
+      timestamp: DateTime.now(),
+      weightKg: weightKg,
+    ));
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble('latest_weight', weightKg);
+    setState(() => _latestWeight = weightKg);
+
+    if (!mounted) return;
+
+    // Open MeasurementScreen so the user can see their full history and body index.
+    // Load a bound body fat scale as the "device" — the screen works in offline mode.
+    FitDaysDevice device;
+    try {
+      final raw = prefs.getString('bound_devices');
+      if (raw != null) {
+        final list = (jsonDecode(raw) as List)
+            .map((e) => FitDaysDevice.fromMap(e as Map<String, dynamic>))
+            .where((d) => d.deviceType == DeviceType.bodyFatScale)
+            .toList();
+        device = list.isNotEmpty
+            ? list.first
+            : FitDaysDevice(
+                macAddress: 'manual',
+                name: 'Manual Entry',
+                rssi: 0,
+                deviceType: DeviceType.bodyFatScale,
+              );
+      } else {
+        device = FitDaysDevice(
+          macAddress: 'manual',
+          name: 'Manual Entry',
+          rssi: 0,
+          deviceType: DeviceType.bodyFatScale,
+        );
+      }
+    } catch (_) {
+      device = FitDaysDevice(
+        macAddress: 'manual',
+        name: 'Manual Entry',
+        rssi: 0,
+        deviceType: DeviceType.bodyFatScale,
+      );
+    }
+
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => MeasurementScreen(
+          connectedDevice: device,
+          fitDaysService: fitDays,
+        ),
+      ),
+    );
+    _loadFitnessStats();
+  }
+
+  String get _greeting {
+    final h = DateTime.now().hour;
+    if (h < 12) return 'Good morning';
+    if (h < 17) return 'Good afternoon';
+    return 'Good evening';
+  }
+
+  String get _greetingName {
+    if (_userName.isNotEmpty) return ', ${_userName.split(' ').first}';
+    return '';
+  }
+
+  double get _calProgress => _caloriesGoal > 0
+      ? (_caloriesConsumed / _caloriesGoal).clamp(0.0, 1.0)
+      : 0.0;
+
+  int get _caloriesRemaining => (_caloriesGoal - _caloriesConsumed).clamp(0, _caloriesGoal);
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppTheme.bg,
       body: RefreshIndicator(
-        onRefresh: _loadProducts,
+        onRefresh: _loadAll,
+        color: AppTheme.lime,
+        backgroundColor: AppTheme.surface1,
         child: CustomScrollView(
+          physics: const BouncingScrollPhysics(),
           slivers: [
-            _buildAppBar(),
+            _buildSliverAppBar(),
             SliverToBoxAdapter(
-              child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildHeroCarousel(),
-                    _buildPromotionBanner(),
-                    _buildCategories(),
-                    if (_isLoading)
-                      const Center(
-                        child: Padding(
-                          padding: EdgeInsets.all(24.0),
-                          child: CircularProgressIndicator(),
-                        ),
-                      )
-                    else if (_error != null)
-                      Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(24.0),
-                          child: Column(
-                            children: [
-                              Text(
-                                'Error loading products: $_error',
-                                style: const TextStyle(color: Colors.red),
-                                textAlign: TextAlign.center,
-                              ),
-                              const SizedBox(height: 16),
-                              ElevatedButton(
-                                onPressed: _loadProducts,
-                                child: const Text('Retry'),
-                              ),
-                            ],
-                          ),
-                        ),
-                      )
-                    else if (_productsData == null ||
-                            _productsData!['products'] == null ||
-                            (_productsData!['products']['edges'] as List).isEmpty)
-                      const Center(
-                        child: Padding(
-                          padding: EdgeInsets.all(24.0),
-                          child: Text('No products found'),
-                        ),
-                      )
-                    else ...[
-                      _buildFeaturedProducts(),
-                      _buildBestSellers(),
-                    ],
-                    const SizedBox(height: 24),
-                  ],
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildGreetingHeader(),
+                  const SizedBox(height: AppTheme.lg),
+                  _buildCalorieHero(),
+                  const SizedBox(height: AppTheme.md),
+                  _buildMacrosCard(),
+                  const SizedBox(height: AppTheme.md),
+                  _buildQuickActions(),
+                  const SizedBox(height: AppTheme.lg),
+                  _buildAiCoachBanner(),
+                  const SizedBox(height: AppTheme.lg),
+                  _buildStatsRow(),
+                  const SizedBox(height: AppTheme.lg),
+                  _buildFeaturedProducts(),
+                  const SizedBox(height: 100),
+                ],
               ),
             ),
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const ai_coach.AiCoachScreen(),
-            ),
-          );
-        },
-        backgroundColor: AppTheme.accentColor,
-        icon: const Icon(Icons.auto_awesome, color: Colors.black),
-        label: const Text('AI Coach', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-      ),
     );
   }
 
-  Widget _buildAppBar() {
+  // ─── App bar ─────────────────────────────────────────────────────────────────
+
+  Widget _buildSliverAppBar() {
     return SliverAppBar(
       floating: true,
-      pinned: true,
-      backgroundColor: const Color.fromARGB(255, 247, 244, 244),
+      snap: true,
+      backgroundColor: AppTheme.bg,
+      surfaceTintColor: Colors.transparent,
       elevation: 0,
-      centerTitle: true,
-      toolbarHeight: 60,
-      title: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8),
-        child: Image.asset(
-          'assets/images/elefit_logo.png',
-          height: 52,
-          fit: BoxFit.fitHeight,
-        ),
-      ),
-     // actions: [
-       // IconButton(
-         // icon: const Icon(Icons.search, color: AppTheme.primaryColor),
-          //onPressed: () {},
-        //),
-        //IconButton(
-          //icon: const Icon(Icons.notifications_outlined, color: AppTheme.primaryColor),
-          //onPressed: () {},
-        //),
-      //],
-    );
-  }
-
-  Widget _buildHeroCarousel() {
-    final double width = MediaQuery.of(context).size.width;
-    final double height = (width * 9) / 16; // Dynamic height for 16:9 aspect ratio
-
-    return SizedBox(
-      height: height,
-      child: FlutterCarousel(
-        options: CarouselOptions(
-          height: height,
-          showIndicator: true,
-          slideIndicator: CircularSlideIndicator(),
-          autoPlay: true,
-          autoPlayInterval: const Duration(seconds: 5),
-        ),
-        items: _videoAssets.asMap().entries.map((entry) {
-          int index = entry.key;
-          return Builder(
-            builder: (BuildContext context) {
-              return Container(
-                width: width,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    // Video background with proper fitting
-                    _videoInitialized[index]
-                        ? FittedBox(
-                            fit: BoxFit.cover,
-                            child: SizedBox(
-                              width: width,
-                              height: height,
-                              child: VideoPlayer(_videoControllers[index]),
-                            ),
-                          )
-                        : Container(
-                            color: Colors.black,
-                            child: const Center(
-                              child: CircularProgressIndicator(),
-                            ),
-                          ),
-                    // Overlay to make text readable
-                    Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            Colors.black.withOpacity(0.1),
-                            Colors.black.withOpacity(0.1),
-                          ],
-                        ),
-                      ),
-                    ),
-                    // Content
-                    Padding(
-                      padding: EdgeInsets.all(height * 0.05),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            'Stay active together!',
-                            style: TextStyle(fontFamily: "Helvetica", 
-                              color: Colors.white,
-                              fontSize: height * 0.05,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          SizedBox(height: height * 0.03),
-                          Text(
-                            'SERVE YOUR\nBEST GAME!',
-                            style: TextStyle(fontFamily: "Helvetica", 
-                              color: Colors.white,
-                              fontSize: height * 0.1,
-                              fontWeight: FontWeight.bold,
-                              height: 1.2,
-                            ),
-                          ),
-                          SizedBox(height: height * 0.03),
-                          ElevatedButton(
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => const ShopScreen(),
-                                ),
-                              );
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.white,
-                              foregroundColor: AppTheme.primaryColor,
-                            ),
-                            child: Text(
-                              'Shop and stay fit',
-                              style: TextStyle(fontFamily: "Helvetica", 
-                                fontWeight: FontWeight.bold,
-                                fontSize: height * 0.04,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
-          );
-        }).toList(),
-      ),
-    );
-  }
-
-  Widget _buildPromotionBanner() {
-    return Container(
-      height: 50,
-      color: AppTheme.primaryColor,
-      child: FlutterCarousel(
-        options: CarouselOptions(
-          height: 50,
-          showIndicator: false,
-          autoPlay: true,
-          autoPlayInterval: const Duration(seconds: 50),
-        ),
-        items: _promotions.map((promo) {
-          return Builder(
-            builder: (BuildContext context) {
-              return Center(
-                child: Text(
-                  promo,
-                  style: TextStyle(fontFamily: "Helvetica", 
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              );
-            },
-          );
-        }).toList(),
-      ),
-    );
-  }
-
-  Widget _buildCategories() {
-  final categories = [
-    {
-      'name': 'Gear Up',
-      'count': '4 Products',
-      'icon': Icons.fitness_center,
-      'collectionHandle': 'active-essentials',
-      'tag': 'Gear Up'
-    },
-    {
-      'name': 'Inspire',
-      'count': '2 Products',
-      'icon': Icons.card_giftcard,
-      'collectionHandle': 'tech-wear-1',
-      'tag': 'Inspire'
-    },
-    {
-      'name': 'Sale',
-      'count': '6 Products',
-      'icon': Icons.local_offer,
-      'collectionHandle': 'sale-products',
-      'tag': 'Sale'
-    },
-  ];
-
-  return Padding(
-    padding: const EdgeInsets.all(24),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'SHOP BY CATEGORY',
-          style: TextStyle(fontFamily: "Helvetica", 
+      toolbarHeight: 56,
+      title: Image.asset(
+        'assets/images/elefit_logo.png',
+        height: 36,
+        fit: BoxFit.fitHeight,
+        errorBuilder: (_, __, ___) => const Text(
+          'ELEFIT.',
+          style: TextStyle(
+            color: AppTheme.lime,
             fontSize: 20,
-            fontWeight: FontWeight.bold,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 2,
+            fontStyle: FontStyle.italic,
           ),
         ),
-        const SizedBox(height: 16),
-        GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 3,
-            childAspectRatio: 0.9,
-            crossAxisSpacing: 16,
-            mainAxisSpacing: 16,
-          ),
-          itemCount: categories.length,
-          itemBuilder: (context, index) {
-            final category = categories[index];
-            return Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+      ),
+      actions: [
+        Consumer<CartModel>(
+          builder: (_, cart, __) => GestureDetector(
+            onTap: () => Navigator.push(context,
+                EFPageRoute(page: const CartScreen())),
+            child: Container(
+              margin: const EdgeInsets.only(right: AppTheme.md),
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppTheme.surface1,
+                borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
               ),
-              child: InkWell(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => ShopScreen(
-                        categoryName: category['name'] as String,
-                        collectionHandle: category['collectionHandle'] as String,
-                        tag: category['tag'] as String,
-                      ),
-                    ),
-                  );
-                },
-                borderRadius: BorderRadius.circular(12),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      category['icon'] as IconData,
-                      size: 32,
-                      // Use a dynamic color based on theme brightness
-                      color: Theme.of(context).brightness == Brightness.dark
-                          ? Colors.white
-                          : AppTheme.primaryColor,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      category['name'] as String,
-                      style: TextStyle(fontFamily: "Helvetica", 
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    Text(
-                      category['count'] as String,
-                      style: TextStyle(fontFamily: "Helvetica", 
-                        color: AppTheme.secondaryTextColor,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
+              child: Badge(
+                isLabelVisible: cart.itemCount > 0,
+                label: Text(
+                  '${cart.itemCount}',
+                  style: const TextStyle(
+                      fontSize: 9, color: Colors.black, fontWeight: FontWeight.w900),
                 ),
+                backgroundColor: AppTheme.lime,
+                child: const Icon(Icons.shopping_bag_outlined,
+                    color: AppTheme.textPrimary, size: 20),
               ),
-            );
-          },
+            ),
+          ),
         ),
       ],
-    ),
-  );
-}
+    );
+  }
 
+  // ─── Greeting header ─────────────────────────────────────────────────────────
 
+  Widget _buildGreetingHeader() {
+    return FadeTransition(
+      opacity: _headerFade,
+      child: SlideTransition(
+        position: _headerSlide,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppTheme.md),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '$_greeting$_greetingName 👋',
+                    style: AppTheme.headingMD,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    _formatDate(),
+                    style: AppTheme.bodyMD,
+                  ),
+                ],
+              ),
+              if (_streak > 0) EFStreakBadge(streak: _streak),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
-  Widget _buildFeaturedProducts() {
+  String _formatDate() {
+    final now = DateTime.now();
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+    return '${days[now.weekday - 1]}, ${months[now.month - 1]} ${now.day}';
+  }
+
+  // ─── Calorie hero ─────────────────────────────────────────────────────────────
+
+  Widget _buildCalorieHero() {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Row(
+      padding: const EdgeInsets.symmetric(horizontal: AppTheme.md),
+      child: EFCard(
+        padding: const EdgeInsets.all(AppTheme.lg),
+        child: Row(children: [
+          // Animated progress ring
+          EFProgressRing(
+            size: 140,
+            strokeWidth: 11,
+            progress: _calProgress,
+            center: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                TweenAnimationBuilder<int>(
+                  key: ValueKey(_caloriesRemaining),
+                  tween: IntTween(begin: _caloriesGoal, end: _caloriesRemaining),
+                  duration: const Duration(milliseconds: 1000),
+                  curve: Curves.easeOutCubic,
+                  builder: (_, val, __) => Text(
+                    '$val',
+                    style: AppTheme.numericLG.copyWith(fontSize: 28),
+                  ),
+                ),
+                Text('left', style: AppTheme.labelSM),
+              ],
+            ),
+          ),
+          const SizedBox(width: AppTheme.lg),
+          // Right-side stats
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('TODAY\'S CALORIES', style: AppTheme.labelSM),
+              const SizedBox(height: 6),
+              // Count-up consumed number — larger and more dramatic
+              TweenAnimationBuilder<int>(
+                key: ValueKey(_caloriesConsumed),
+                tween: IntTween(begin: 0, end: _caloriesConsumed),
+                duration: const Duration(milliseconds: 1000),
+                curve: Curves.easeOutCubic,
+                builder: (_, val, __) => Text(
+                  '$val',
+                  style: AppTheme.numericXL.copyWith(
+                      color: AppTheme.lime, fontSize: 36, height: 1),
+                ),
+              ),
+              Text('of $_caloriesGoal kcal', style: AppTheme.bodyMD),
+              const SizedBox(height: AppTheme.md),
+              _buildCalStatRow(Icons.local_fire_department_outlined, 'Burned',
+                  _burnedToday > 0 ? '$_burnedToday' : '--'),
+              const SizedBox(height: 6),
+              _buildCalStatRow(Icons.flag_outlined, 'Goal', '$_caloriesGoal'),
+            ]),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  Widget _buildCalStatRow(IconData icon, String label, String val) {
+    return Row(children: [
+      Icon(icon, size: 13, color: AppTheme.textTertiary),
+      const SizedBox(width: 5),
+      Expanded(
+        child: Text(label,
+            style: AppTheme.bodySM.copyWith(color: AppTheme.textSecondary),
+            overflow: TextOverflow.ellipsis),
+      ),
+      Text('$val kcal',
+          style: AppTheme.bodySM.copyWith(
+              color: AppTheme.textPrimary, fontWeight: FontWeight.w700)),
+    ]);
+  }
+
+  // ─── Macros card ──────────────────────────────────────────────────────────────
+
+  Widget _buildMacrosCard() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppTheme.md),
+      child: EFCard(
+        padding: const EdgeInsets.all(AppTheme.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  'FEATURED',
-                  style: TextStyle(fontFamily: "Helvetica", 
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                TextButton.icon(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const ShopScreen(),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.shopping_bag_outlined),
-                  label: Text(
-                    'Shop all',
-                    style: TextStyle(fontFamily: "Helvetica", ),
-                  ),
-                ),
+                Text('MACROS', style: AppTheme.labelMD.copyWith(letterSpacing: 2)),
+                EFTag(label: 'Today', color: AppTheme.lime),
               ],
             ),
-          ),
-          const SizedBox(height: 16),
-          SizedBox(
-            height: 300,
-            child: _productsData == null
-                ? const Center(child: Text('No products found'))
-                : _buildProductList(_productsData!),
-          ),
-        ],
+            const SizedBox(height: AppTheme.md),
+            EFMacroBar(
+              label: 'Protein',
+              current: _proteinG,
+              target: _proteinGoal,
+              color: const Color(0xFFFF6B6B),
+            ),
+            const SizedBox(height: AppTheme.md),
+            EFMacroBar(
+              label: 'Carbs',
+              current: _carbsG,
+              target: _carbsGoal,
+              color: const Color(0xFF4ECDC4),
+            ),
+            const SizedBox(height: AppTheme.md),
+            EFMacroBar(
+              label: 'Fat',
+              current: _fatG,
+              target: _fatGoal,
+              color: const Color(0xFFFFD93D),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildProductList(Map<String, dynamic> data) {
-    final locationProvider = Provider.of<LocationProvider>(context, listen: false);
-    
-    final products = (data['products']['edges'] as List)
-        .map((edge) => edge['node'] as Map<String, dynamic>)
-        .where((product) => locationProvider.shouldShowProduct(product['title'] ?? ''))
-        .take(5)
-        .toList();
+  // ─── Quick actions ────────────────────────────────────────────────────────────
 
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      scrollDirection: Axis.horizontal,
-      itemCount: products.length,
-      itemBuilder: (context, index) {
-        final product = products[index];
-        return Container(
-          width: 150,
-          margin: const EdgeInsets.symmetric(horizontal: 6),
-          child: Card(
-            child: InkWell(
-              onTap: () {
-                Navigator.pushNamed(
-                  context,
-                  '/product-details',
-                  arguments: {
-                    'product': {
-                      'id': product['id'],
-                      'name': product['title'],
-                      'price': double.tryParse(product['priceRange']['minVariantPrice']['amount'].toString()) ?? 0.0,
-                      'image': product['images']['edges'].isNotEmpty 
-                          ? product['images']['edges'][0]['node']['url'] 
-                          : AppConstants.productPlaceholder,
-                      'images': (product['images']['edges'] as List)
-                          .map((edge) => edge['node']['url'] as String)
-                          .toList(),
-                      'description': product['descriptionHtml'] ?? product['description'] ?? '',
-                      'variants': product['variants'],  // Add this line to include variants
-                    },
-                  },
-                );
-              },
-              child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    AspectRatio(
-                      aspectRatio: 1,
-                      child: ClipRRect(
-                        borderRadius: const BorderRadius.vertical(
-                          top: Radius.circular(12),
-                        ),
-                        child: Stack(
-                          children: [
-                            Image.network(
-                              product['images']['edges'].isNotEmpty 
-                                  ? product['images']['edges'][0]['node']['url'] 
-                                  : AppConstants.productPlaceholder,
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) {
-                                return Container(
-                                  color: Colors.grey.shade200,
-                                  child: const Icon(
-                                    Icons.image_not_supported,
-                                    size: 50,
-                                    color: Colors.grey,
-                                  ),
-                                );
-                              },
-                            ),
-                            Positioned(
-                              top: 8,
-                              right: 8,
-                              child: Consumer<WishlistModel>(
-                                builder: (context, wishlist, child) {
-                                  final isInWishlist = wishlist.isInWishlist(product['id']);
-                                  return IconButton(
-                                    icon: Icon(
-                                      isInWishlist ? Icons.favorite : Icons.favorite_border,
-                                      color: isInWishlist ? Colors.red : null,
-                                    ),
-                                    onPressed: () {
-                                      // Extract variant information for proper cart integration
-                                      String? variantId;
-                                      List<Map<String, dynamic>>? variants;
-                                      
-                                      if (product['variants'] != null && 
-                                          product['variants']['edges'] != null &&
-                                          product['variants']['edges'].isNotEmpty) {
-                                        variants = (product['variants']['edges'] as List)
-                                            .map((edge) => edge['node'] as Map<String, dynamic>)
-                                            .toList();
-                                        variantId = variants.first['id'];
-                                      }
-                                      
-                                      wishlist.toggleWishlist({
-                                        'id': product['id'],
-                                        'title': product['title'],
-                                        'price': double.tryParse(product['priceRange']['minVariantPrice']['amount'].toString()) ?? 0.0,
-                                        'imageUrl': product['images']['edges'].isNotEmpty 
-                                            ? product['images']['edges'][0]['node']['url'] 
-                                            : AppConstants.productPlaceholder,
-                                        'description': product['descriptionHtml'] ?? product['description'] ?? '',
-                                        'variantId': variantId,
-                                        'variants': variants,
-                                      });
-                                    },
-                                    style: IconButton.styleFrom(
-                                      backgroundColor: Colors.white,
-                                      padding: const EdgeInsets.all(8),
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            product['title'] ?? '',
-                            style: TextStyle(fontFamily: "Helvetica", 
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 8),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                context.read<LocationProvider>().formatPrice(
-                                  double.tryParse(product['priceRange']['minVariantPrice']['amount'].toString()) ?? 0.0
-                                ),
-                                style: TextStyle(fontFamily: "Helvetica", 
-                                  color: AppTheme.accentColor,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                ),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.add_shopping_cart),
-                                onPressed: () {
-                                  final variants = product['variants']['edges'];
-                                  if (variants != null && variants.isNotEmpty) {
-                                    // Use the full Shopify variant ID
-                                    final variantId = variants[0]['node']['id'].toString();
-                                    context.read<CartModel>().addToCart(
-                                      {
-                                        'id': product['id'],
-                                        'title': product['title'],
-                                        'price': double.tryParse(product['priceRange']['minVariantPrice']['amount'].toString()) ?? 0.0,
-                                        'imageUrl': product['images']['edges'].isNotEmpty 
-                                            ? product['images']['edges'][0]['node']['url'] 
-                                            : AppConstants.productPlaceholder,
-                                        'description': product['descriptionHtml'] ?? product['description'] ?? '',
-                                      },
-                                      variantId,
-                                      1,
-                                    );
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                          'Added to cart',
-                                          style: TextStyle(fontFamily: "Helvetica", ),
-                                        ),
-                                        duration: const Duration(seconds: 2),
-                                      ),
-                                    );
-                                  } else {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text('Product variant not available'),
-                                        backgroundColor: Colors.red,
-                                      ),
-                                    );
-                                  }
-                                },
-                                style: IconButton.styleFrom(
-                                  backgroundColor: AppTheme.primaryColor,
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.all(8),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildBestSellers() {
-    if (_productsData == null) {
-      return const SizedBox.shrink();
-    }
-
-    final locationProvider = Provider.of<LocationProvider>(context, listen: false);
-    
-    final products = (_productsData!['products']['edges'] as List)
-        .map((edge) => edge['node'] as Map<String, dynamic>)
-        .where((product) => locationProvider.shouldShowProduct(product['title'] ?? ''))
-        .take(4)
-        .toList();
-
+  Widget _buildQuickActions() {
     return Padding(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.symmetric(horizontal: AppTheme.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          const EFSectionHeader(title: 'Quick Actions'),
+          const SizedBox(height: AppTheme.md),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'BEST-SELLING PRODUCTS',
-                style: TextStyle(fontFamily: "Helvetica", 
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
+              Expanded(
+                child: EFQuickAction(
+                  icon: Icons.restaurant_menu_rounded,
+                  label: 'Log\nFood',
+                  accentColor: const Color(0xFF4ECDC4),
+                  onTap: () => Navigator.push(
+                      context, EFPageRoute(page: const NutritionLogScreen())),
                 ),
               ),
-                              TextButton.icon(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const ShopScreen(),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.shopping_bag_outlined),
-                  label: Text(
-                    'Shop all',
-                    style: TextStyle(fontFamily: "Helvetica", ),
-                  ),
+              const SizedBox(width: AppTheme.sm),
+              Expanded(
+                child: EFQuickAction(
+                  icon: Icons.auto_awesome_rounded,
+                  label: 'AI\nCoach',
+                  accentColor: AppTheme.purple,
+                  onTap: () => Navigator.push(
+                      context, EFPageRoute(page: const ai_coach.AiCoachScreen())),
                 ),
-              ],
-            ),
-              //TextButton(
-                //onPressed: () {},
-                //child: Text(
-                  //'Shop all',
-                  //style: TextStyle(fontFamily: "Helvetica", ),
-                //),
-              //),
-           // ],
-          //),
-          const SizedBox(height: 16),
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              childAspectRatio: 0.7,
-              crossAxisSpacing: 16,
-              mainAxisSpacing: 16,
-            ),
-            itemCount: products.length,
-            itemBuilder: (context, index) {
-              final product = products[index];
-              return Card(
-                child: InkWell(
-                  onTap: () {
-                    Navigator.pushNamed(
-                      context,
-                      '/product-details',
-                      arguments: {
-                        'product': {
-                          'id': product['id'],
-                          'name': product['title'],
-                          'price': double.tryParse(product['priceRange']['minVariantPrice']['amount'].toString()) ?? 0.0,
-                          'image': product['images']['edges'].isNotEmpty 
-                              ? product['images']['edges'][0]['node']['url'] 
-                              : AppConstants.productPlaceholder,
-                          'images': (product['images']['edges'] as List)
-                              .map((edge) => edge['node']['url'] as String)
-                              .toList(),
-                          'description': product['descriptionHtml'] ?? product['description'] ?? '',
-                        },
-                      },
-                    );
-                  },
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: ClipRRect(
-                          borderRadius: const BorderRadius.vertical(
-                            top: Radius.circular(12),
-                          ),
-                          child: Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              Image.network(
-                                product['images']['edges'].isNotEmpty 
-                                    ? product['images']['edges'][0]['node']['url'] 
-                                    : AppConstants.productPlaceholder,
-                                fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) {
-                                  return Container(
-                                    color: Colors.grey.shade200,
-                                    child: const Icon(
-                                      Icons.image_not_supported,
-                                      size: 50,
-                                      color: Colors.grey,
-                                    ),
-                                  );
-                                },
-                              ),
-                              Positioned(
-                                top: 8,
-                                right: 8,
-                                child: Consumer<WishlistModel>(
-                                  builder: (context, wishlist, child) {
-                                    final isInWishlist = wishlist.isInWishlist(product['id']);
-                                    return IconButton(
-                                      icon: Icon(
-                                        isInWishlist ? Icons.favorite : Icons.favorite_border,
-                                        color: isInWishlist ? Colors.red : null,
-                                      ),
-                                      onPressed: () {
-                                        // Extract variant information for proper cart integration
-                                        String? variantId;
-                                        List<Map<String, dynamic>>? variants;
-                                        
-                                        if (product['variants'] != null && 
-                                            product['variants']['edges'] != null &&
-                                            product['variants']['edges'].isNotEmpty) {
-                                          variants = (product['variants']['edges'] as List)
-                                              .map((edge) => edge['node'] as Map<String, dynamic>)
-                                              .toList();
-                                          variantId = variants.first['id'];
-                                        }
-                                        
-                                        wishlist.toggleWishlist({
-                                          'id': product['id'],
-                                          'title': product['title'],
-                                          'price': double.tryParse(product['priceRange']['minVariantPrice']['amount'].toString()) ?? 0.0,
-                                          'imageUrl': product['images']['edges'].isNotEmpty 
-                                              ? product['images']['edges'][0]['node']['url'] 
-                                              : AppConstants.productPlaceholder,
-                                          'description': product['descriptionHtml'] ?? product['description'] ?? '',
-                                          'variantId': variantId,
-                                          'variants': variants,
-                                        });
-                                      },
-                                      style: IconButton.styleFrom(
-                                        backgroundColor: const Color.fromARGB(255, 238, 237, 237),
-                                        padding: const EdgeInsets.all(8),
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              product['title'] ?? '',
-                              style: TextStyle(fontFamily: "Helvetica", 
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                              ),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 8),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Expanded(
-                                  flex: 2,
-                                  child: Text(
-                                    context.read<LocationProvider>().formatPrice(
-                                      double.tryParse(product['priceRange']['minVariantPrice']['amount'].toString()) ?? 0.0
-                                    ),
-                                    style: TextStyle(fontFamily: "Helvetica", 
-                                      color: AppTheme.accentColor,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 14,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                SizedBox(
-                                  width: 40,
-                                  height: 40,
-                                  child: IconButton(
-                                    icon: const Icon(Icons.add_shopping_cart, size: 20),
-                                    padding: EdgeInsets.zero,
-                                    constraints: const BoxConstraints(),
-                                    onPressed: () {
-                                      context.read<CartModel>().addToCart(
-                                        {
-                                          'id': product['id'],
-                                          'title': product['title'],
-                                          'price': double.tryParse(product['priceRange']['minVariantPrice']['amount'].toString()) ?? 0.0,
-                                          'imageUrl': product['images']['edges'].isNotEmpty 
-                                              ? product['images']['edges'][0]['node']['url'] 
-                                              : AppConstants.productPlaceholder,
-                                          'description': product['descriptionHtml'] ?? product['description'] ?? '',
-                                          'variantId': product['variants']['edges'][0]['node']['id'], // Add the variant ID
-                                        },
-                                        product['variants']['edges'][0]['node']['id'], // Use the variant ID as the cart item ID
-                                        1,
-                                      );
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(
-                                          content: Text(
-                                            'Added to cart',
-                                            style: TextStyle(fontFamily: "Helvetica", ),
-                                          ),
-                                          duration: const Duration(seconds: 2),
-                                        ),
-                                      );
-                                    },
-                                    style: IconButton.styleFrom(
-                                      backgroundColor: AppTheme.primaryColor,
-                                      foregroundColor: Colors.white,
-                                      padding: const EdgeInsets.all(8),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
+              ),
+              const SizedBox(width: AppTheme.sm),
+              Expanded(
+                child: EFQuickAction(
+                  icon: Icons.monitor_weight_outlined,
+                  label: 'Track\nWeight',
+                  accentColor: AppTheme.lime,
+                  onTap: _onTrackWeightTapped,
                 ),
-              );
-            },
+              ),
+              const SizedBox(width: AppTheme.sm),
+              Expanded(
+                child: EFQuickAction(
+                  icon: Icons.shopping_bag_outlined,
+                  label: 'Shop\nGear',
+                  accentColor: const Color(0xFFFF6B35),
+                  onTap: () => Navigator.push(
+                      context, EFPageRoute(page: const ShopScreen())),
+                ),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
-} 
+
+  // ─── AI Coach banner ─────────────────────────────────────────────────────────
+
+  Widget _buildAiCoachBanner() {
+    return GestureDetector(
+      onTap: () => Navigator.push(
+          context, EFPageRoute(page: const ai_coach.AiCoachScreen())),
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: AppTheme.md),
+        padding: const EdgeInsets.all(AppTheme.lg),
+        decoration: BoxDecoration(
+          gradient: AppTheme.purpleGradient,
+          borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+          border: Border.all(color: AppTheme.purple.withValues(alpha: 0.5)),
+          boxShadow: AppTheme.shadowPurple,
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  EFTag(label: 'AI Powered', color: AppTheme.lime),
+                  const SizedBox(height: AppTheme.sm),
+                  Text('GEAR UP YOUR\nFITNESS JOURNEY', style: AppTheme.headingMD),
+                  const SizedBox(height: AppTheme.sm),
+                  Text(
+                    'Get a personalized meal & workout plan tailored to your goals.',
+                    style: AppTheme.bodyMD,
+                  ),
+                  const SizedBox(height: AppTheme.md),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: AppTheme.md, vertical: AppTheme.sm),
+                    decoration: BoxDecoration(
+                      color: AppTheme.lime,
+                      borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.auto_awesome, color: Colors.black, size: 14),
+                        const SizedBox(width: 6),
+                        Text('Build My Plan',
+                            style: AppTheme.labelMD.copyWith(color: Colors.black)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: AppTheme.md),
+            Container(
+              width: 64, height: 64,
+              decoration: BoxDecoration(
+                color: AppTheme.lime.withOpacity(0.12),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.auto_awesome_rounded,
+                  color: AppTheme.lime, size: 32),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ─── Stats row ────────────────────────────────────────────────────────────────
+
+  Widget _buildStatsRow() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppTheme.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const EFSectionHeader(title: 'Today\'s Stats'),
+          const SizedBox(height: AppTheme.md),
+          Row(
+            children: [
+              Expanded(
+                child: EFStatTile(
+                  label: 'Weight',
+                  value: _latestWeight != null
+                      ? _latestWeight!.toStringAsFixed(1)
+                      : '--',
+                  unit: 'kg',
+                  icon: const Icon(Icons.monitor_weight_outlined),
+                  valueColor: AppTheme.lime,
+                  onTap: () => Navigator.push(
+                      context, EFPageRoute(page: const DevicesScreen())),
+                ),
+              ),
+              const SizedBox(width: AppTheme.sm),
+              Expanded(
+                child: EFStatTile(
+                  label: 'Steps',
+                  value: _stepsToday > 0
+                      ? _stepsToday >= 1000
+                          ? '${(_stepsToday / 1000).toStringAsFixed(1)}k'
+                          : '$_stepsToday'
+                      : '--',
+                  unit: _stepsToday > 0 ? 'steps' : '',
+                  icon: const Icon(Icons.directions_walk_outlined),
+                  valueColor: const Color(0xFF3B9EFF),
+                ),
+              ),
+              const SizedBox(width: AppTheme.sm),
+              Expanded(
+                child: EFStatTile(
+                  label: 'Streak',
+                  value: '$_streak',
+                  unit: 'days',
+                  icon: const Text('🔥', style: TextStyle(fontSize: 14)),
+                  valueColor: const Color(0xFFFF6B35),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─── Featured products ────────────────────────────────────────────────────────
+
+  Widget _buildFeaturedProducts() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppTheme.md),
+          child: EFSectionHeader(
+            title: 'Featured Gear',
+            action: 'See All',
+            onAction: () => Navigator.push(context, EFPageRoute(page: const ShopScreen())),
+          ),
+        ),
+        const SizedBox(height: AppTheme.md),
+        if (_productsLoading)
+          SizedBox(
+            height: 220,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: AppTheme.md),
+              itemCount: 3,
+              separatorBuilder: (_, __) => const SizedBox(width: AppTheme.sm),
+              itemBuilder: (_, __) => _buildProductSkeleton(),
+            ),
+          )
+        else if (_featuredProducts.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppTheme.md),
+            child: EFCard(
+              child: Row(
+                children: [
+                  const Text('🛍️', style: TextStyle(fontSize: 24)),
+                  const SizedBox(width: AppTheme.md),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Explore EleFit Gear', style: AppTheme.headingSM),
+                        const SizedBox(height: 4),
+                        Text('Premium fitness equipment for every level.',
+                            style: AppTheme.bodyMD),
+                      ],
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () => Navigator.push(
+                        context, EFPageRoute(page: const ShopScreen())),
+                    child: const Icon(Icons.chevron_right,
+                        color: AppTheme.lime, size: 24),
+                  ),
+                ],
+              ),
+            ),
+          )
+        else
+          SizedBox(
+            height: 220,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              padding: const EdgeInsets.symmetric(horizontal: AppTheme.md),
+              itemCount: _featuredProducts.length,
+              separatorBuilder: (_, __) => const SizedBox(width: AppTheme.sm),
+              itemBuilder: (_, i) => _buildProductCard(_featuredProducts[i]),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildProductCard(dynamic edge) {
+    final product = edge['node'] as Map<String, dynamic>? ?? {};
+    final images = (product['images']?['edges'] as List?) ?? [];
+    final imageUrl = images.isNotEmpty ? images[0]['node']['url'] as String? : null;
+    final title = product['title'] as String? ?? '';
+    final variants = (product['variants']?['edges'] as List?) ?? [];
+    final priceData = variants.isNotEmpty
+        ? variants[0]['node']['price'] as Map?
+        : null;
+    final price = priceData?['amount'] as String? ?? '0';
+    final currency = priceData?['currencyCode'] as String? ?? '';
+
+    return GestureDetector(
+      onTap: () => Navigator.push(context, EFPageRoute(page: const ShopScreen())),
+      child: Container(
+        width: 160,
+        decoration: BoxDecoration(
+          color: AppTheme.surface1,
+          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Product image
+            ClipRRect(
+              borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(AppTheme.radiusLg)),
+              child: imageUrl != null
+                  ? CachedNetworkImage(
+                      imageUrl: imageUrl,
+                      height: 130, width: double.infinity,
+                      fit: BoxFit.cover,
+                      placeholder: (_, __) => Container(
+                        height: 130,
+                        color: AppTheme.surface2,
+                        child: const Center(
+                          child: CircularProgressIndicator(
+                              color: AppTheme.lime, strokeWidth: 2),
+                        ),
+                      ),
+                      errorWidget: (_, __, ___) => Container(
+                        height: 130, color: AppTheme.surface2,
+                        child: const Icon(Icons.fitness_center,
+                            color: AppTheme.textTertiary, size: 40),
+                      ),
+                    )
+                  : Container(
+                      height: 130, color: AppTheme.surface2,
+                      child: const Icon(Icons.fitness_center,
+                          color: AppTheme.textTertiary, size: 40),
+                    ),
+            ),
+            // Product info
+            Padding(
+              padding: const EdgeInsets.all(AppTheme.sm),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: AppTheme.bodySM.copyWith(color: AppTheme.textPrimary),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '$currency ${double.tryParse(price)?.toStringAsFixed(0) ?? price}',
+                    style: AppTheme.labelMD.copyWith(color: AppTheme.lime),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProductSkeleton() {
+    return Container(
+      width: 160,
+      decoration: BoxDecoration(
+        color: AppTheme.surface1,
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          EFShimmer(width: 160, height: 130, radius: AppTheme.radiusLg),
+          Padding(
+            padding: const EdgeInsets.all(AppTheme.sm),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                EFShimmer(width: 120, height: 10),
+                const SizedBox(height: 6),
+                EFShimmer(width: 80, height: 10),
+                const SizedBox(height: 6),
+                EFShimmer(width: 50, height: 10),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

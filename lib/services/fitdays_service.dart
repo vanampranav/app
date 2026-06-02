@@ -1,10 +1,22 @@
 import 'dart:async';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import '../models/device_model.dart';
 
 /// Service for communicating with FitDays SDK via platform channels
-/// Handles device scanning, connection, and data reception
+/// Handles device scanning, connection, and data reception.
+///
+/// Singleton — every screen that calls `FitDaysService()` gets the same
+/// instance, so a connection made in DevicesScreen is immediately visible
+/// in NutritionLogScreen, KitchenScaleScreen, etc.
 class FitDaysService {
+  // ── Singleton ──────────────────────────────────────────────────────────────
+  static final FitDaysService _instance = FitDaysService._internal();
+  factory FitDaysService() => _instance;
+  FitDaysService._internal() {
+    _setupEventListener();
+  }
+
   static const MethodChannel _methodChannel =
       MethodChannel('com.theelefit.app/fitdays');
   static const EventChannel _eventChannel =
@@ -19,6 +31,7 @@ class FitDaysService {
   final _weightDataController = StreamController<WeightMeasurement>.broadcast();
   final _scanningController = StreamController<bool>.broadcast();
   final _errorController = StreamController<String>.broadcast();
+  final _bluetoothStateController = StreamController<bool>.broadcast();
 
   // Public streams
   Stream<FitDaysDevice> get deviceFoundStream => _deviceFoundController.stream;
@@ -28,14 +41,17 @@ class FitDaysService {
       _weightDataController.stream;
   Stream<bool> get scanningStream => _scanningController.stream;
   Stream<String> get errorStream => _errorController.stream;
+  // Emits true when BT is powered on, false when off/unavailable
+  Stream<bool> get bluetoothStateStream => _bluetoothStateController.stream;
 
-  bool _isInitialized = false;
-  bool _isScanning = false;
+  bool    _isInitialized    = false;
+  bool    _isScanning       = false;
+  bool?   _isBluetoothOn;
+  bool?   get isBluetoothOn => _isBluetoothOn;
+  String? _connectedDeviceMac;
+  /// MAC address of the currently connected device, or null if disconnected.
+  String? get connectedDeviceMac => _connectedDeviceMac;
   StreamSubscription? _eventSubscription;
-
-  FitDaysService() {
-    _setupEventListener();
-  }
 
   /// Set up event channel listener for SDK events
   void _setupEventListener() {
@@ -46,7 +62,7 @@ class FitDaysService {
         }
       },
       onError: (error) {
-        print('FitDays Event Channel Error: $error');
+        debugPrint('FitDays Event Channel Error: $error');
         _errorController.add(error.toString());
       },
     );
@@ -60,7 +76,7 @@ class FitDaysService {
         ? Map<String, dynamic>.from(event['data'] as Map)
         : null;
 
-    print('FitDays Event: $type, Data: $data');
+    debugPrint('FitDays Event: $type, Data: $data');
 
     switch (type) {
       case 'deviceFound':
@@ -72,17 +88,55 @@ class FitDaysService {
 
       case 'connectionStateChanged':
         if (data != null) {
+          // Track which device is currently connected so other screens
+          // (e.g. FoodDetailModal) can send tare/unit commands without
+          // needing to know the MAC address themselves.
+          final state = data['state'] as String?;
+          final mac   = data['macAddress'] as String?;
+          if (state == 'connected')    _connectedDeviceMac = mac;
+          if (state == 'disconnected') _connectedDeviceMac = null;
           _connectionStateController.add(data);
         }
         break;
 
-      case 'weightData':
-      // Safety fallback: iOS used to send kitchen scale readings as 'kitchenScaleData'
-      // (now fixed in Swift to send 'weightData'). Keep this case to stay resilient.
       case 'kitchenScaleData':
+        // Android: FitDaysSDKManager.onReceiveKitchenScaleData sends this.
+        // iOS fallback: older iOS SDK also used this event type for kitchen scales.
+        // Either way: definitively a kitchen scale.
         if (data != null) {
-          final measurement = WeightMeasurement.fromMap(data);
-          _weightDataController.add(measurement);
+          _weightDataController.add(
+              WeightMeasurement.fromMap(data, source: WeightSource.kitchenScale));
+        }
+        break;
+
+      case 'weightData':
+        // Android: FitDaysSDKManager.onReceiveWeightData sends this.
+        //          Definitively a body fat scale — no kitchen scale can reach here
+        //          now that FitDaysSDKManager sends kitchenScaleData for kitchen.
+        // iOS:     Both device types share this event type (unified by the Swift SDK).
+        //          Use unit + weight as a fallback discriminator for iOS:
+        //            g / oz / ml unit  → kitchen scale
+        //            hasBodyComposition → body fat scale (definitive)
+        //            weight < 10 kg    → kitchen scale  (food portion)
+        //            weight ≥ 10 kg    → body fat scale (human body weight)
+        if (data != null) {
+          final raw = WeightMeasurement.fromMap(data);
+          final WeightSource src;
+
+          if (raw.hasBodyComposition) {
+            src = WeightSource.bodyFatScale;
+          } else if (raw.unit == 'g'  || raw.unit == 'oz'   ||
+                     raw.unit == 'ml' || raw.unit == 'fl_oz' ||
+                     raw.unit == 'mg') {
+            src = WeightSource.kitchenScale;
+          } else if (raw.weight < 10.0) {
+            src = WeightSource.kitchenScale;
+          } else {
+            src = WeightSource.bodyFatScale;
+          }
+
+          _weightDataController.add(
+              WeightMeasurement.fromMap(data, source: src));
         }
         break;
 
@@ -98,11 +152,23 @@ class FitDaysService {
 
       case 'sdkInitialized':
         _isInitialized = data?['success'] == true;
-        print('SDK Initialized: $_isInitialized');
+        debugPrint('SDK Initialized: $_isInitialized');
         break;
 
       case 'bluetoothStateChanged':
-        print('Bluetooth State: ${data?['state']}');
+        final stateVal = data?['state'];
+        // iOS sends int raw value (ICBleStatePoweredOn = 4).
+        // Android sends enum.toString() — exact string is SDK-internal, but "PoweredOn" appears
+        // in the constant name on both platforms. Treat anything not clearly "on" as off.
+        bool isOn = false;
+        if (stateVal is int) {
+          isOn = stateVal == 4;
+        } else if (stateVal is String) {
+          isOn = stateVal.toLowerCase().contains('poweredon');
+        }
+        _isBluetoothOn = isOn;
+        _bluetoothStateController.add(isOn);
+        debugPrint('Bluetooth State: $stateVal -> ${isOn ? "ON" : "OFF"}');
         break;
 
       case 'error':
@@ -111,7 +177,7 @@ class FitDaysService {
         break;
 
       default:
-        print('Unknown event type: $type');
+        debugPrint('Unknown event type: $type');
     }
   }
 
@@ -130,7 +196,7 @@ class FitDaysService {
       _isInitialized = result == true;
       return _isInitialized;
     } catch (e) {
-      print('Error initializing SDK: $e');
+      debugPrint('Error initializing SDK: $e');
       _errorController.add('Failed to initialize SDK: $e');
       return false;
     }
@@ -142,7 +208,7 @@ class FitDaysService {
       final result = await _methodChannel.invokeMethod('checkPermissions');
       return result == true;
     } catch (e) {
-      print('Error checking permissions: $e');
+      debugPrint('Error checking permissions: $e');
       return false;
     }
   }
@@ -153,18 +219,19 @@ class FitDaysService {
       final result = await _methodChannel.invokeMethod('requestPermissions');
       return result == true;
     } catch (e) {
-      print('Error requesting permissions: $e');
+      debugPrint('Error requesting permissions: $e');
       _errorController.add('Failed to request permissions: $e');
       return false;
     }
   }
+
 
   /// Start scanning for nearby FitDays devices
   Future<void> startScan() async {
     try {
       await _methodChannel.invokeMethod('startScan');
     } on PlatformException catch (e) {
-      print('Error starting scan: ${e.message}');
+      debugPrint('Error starting scan: ${e.message}');
       _errorController.add(e.message ?? 'Failed to start scan');
       _isScanning = false;
       _scanningController.add(false);
@@ -176,7 +243,7 @@ class FitDaysService {
     try {
       await _methodChannel.invokeMethod('stopScan');
     } catch (e) {
-      print('Error stopping scan: $e');
+      debugPrint('Error stopping scan: $e');
     }
   }
 
@@ -187,7 +254,7 @@ class FitDaysService {
         'macAddress': macAddress,
       });
     } catch (e) {
-      print('Error connecting to device: $e');
+      debugPrint('Error connecting to device: $e');
       _errorController.add('Failed to connect: $e');
     }
   }
@@ -199,7 +266,7 @@ class FitDaysService {
         'macAddress': macAddress,
       });
     } catch (e) {
-      print('Error disconnecting device: $e');
+      debugPrint('Error disconnecting device: $e');
       _errorController.add('Failed to disconnect: $e');
     }
   }
@@ -210,7 +277,7 @@ class FitDaysService {
       final version = await _methodChannel.invokeMethod('getSDKVersion');
       return version as String? ?? 'Unknown';
     } catch (e) {
-      print('Error getting SDK version: $e');
+      debugPrint('Error getting SDK version: $e');
       return 'Unknown';
     }
   }
@@ -218,14 +285,14 @@ class FitDaysService {
   /// Send Tare command to kitchen scale
   Future<bool> sendTareCommand(String deviceId) async {
     try {
-      print('Sending tare command to device: $deviceId');
+      debugPrint('Sending tare command to device: $deviceId');
       final result = await _methodChannel.invokeMethod('sendTareCommand', {
         'deviceId': deviceId,
       });
-      print('Tare command result: $result');
+      debugPrint('Tare command result: $result');
       return result == true;
     } catch (e) {
-      print('Error sending tare command: $e');
+      debugPrint('Error sending tare command: $e');
       _errorController.add(e.toString());
       return false;
     }
@@ -234,15 +301,15 @@ class FitDaysService {
   /// Send Unit change command to kitchen scale
   Future<bool> sendUnitChangeCommand(String deviceId, String unit) async {
     try {
-      print('Sending unit change command to device: $deviceId, unit: $unit');
+      debugPrint('Sending unit change command to device: $deviceId, unit: $unit');
       final result = await _methodChannel.invokeMethod('sendUnitChangeCommand', {
         'deviceId': deviceId,
         'unit': unit,
       });
-      print('Unit change command result: $result');
+      debugPrint('Unit change command result: $result');
       return result == true;
     } catch (e) {
-      print('Error sending unit change command: $e');
+      debugPrint('Error sending unit change command: $e');
       _errorController.add(e.toString());
       return false;
     }
@@ -254,13 +321,11 @@ class FitDaysService {
   /// Check if SDK is initialized
   bool get isInitialized => _isInitialized;
 
-  /// Dispose of resources
+  /// No-op on the singleton — streams must stay open for the app's lifetime
+  /// so that any screen can subscribe at any time after a device connects.
+  /// The native SDK cleans up when the process exits.
   void dispose() {
-    _eventSubscription?.cancel();
-    _deviceFoundController.close();
-    _connectionStateController.close();
-    _weightDataController.close();
-    _scanningController.close();
-    _errorController.close();
+    // intentionally empty — do not close stream controllers or cancel the
+    // EventChannel subscription; doing so would break all other screens.
   }
 }

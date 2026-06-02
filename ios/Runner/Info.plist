@@ -28,6 +28,10 @@
 	<true/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSHealthShareUsageDescription</key>
+	<string>EleFit reads your health data to sync weight, steps, and activity with your fitness goals.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>EleFit writes your scale measurements and nutrition logs to Apple Health so other apps can use them.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>We need Bluetooth access to connect to your smart scale and receive weight data.</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>

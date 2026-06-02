@@ -36,6 +36,20 @@ dependencies:
   # Firebase (core only — auth + firestore done via REST to avoid version conflicts)
   firebase_core: ^2.24.2
 
+  # PDF generation and sharing
+  pdf: ^3.10.8
+  printing: ^5.12.0
+  path_provider: ^2.1.4
+
+  # Encrypted local storage for auth tokens
+  flutter_secure_storage: ^9.0.0
+
+  # Apple Health (iOS) + Google Health Connect (Android)
+  health: ^11.0.0
+
+  # Charts for weight trend graph
+  fl_chart: ^0.69.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

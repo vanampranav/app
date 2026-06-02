@@ -43,10 +43,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 
   void _initializeProductData() {
     try {
-      print('🔧 Initializing product data...');
-      print('📦 Product keys: ${widget.product.keys.toList()}');
-      
-      // Initialize variants with comprehensive null checking
       _variants = [];
       if (widget.product['variants'] != null) {
         var variantsData = widget.product['variants'];
@@ -60,10 +56,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
           }
         }
       }
-      
-      print('🏷️ Variants found: ${_variants?.length ?? 0}');
 
-      // Set initial variant ID with extra safety
       _selectedVariantId = '';
       if (_variants?.isNotEmpty == true) {
         var firstVariant = _variants![0];
@@ -71,13 +64,8 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
           _selectedVariantId = firstVariant['id'].toString();
         }
       }
-      
-      print('🆔 Selected variant ID: $_selectedVariantId');
 
-      // Initialize images with comprehensive null checking
       _productImages = [];
-      
-      // Try to get images from the images array
       if (widget.product['images'] != null) {
         var imagesData = widget.product['images'];
         if (imagesData is List) {
@@ -87,30 +75,17 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
               .toList();
         }
       }
-      
-      // Fallback to single image field
       if (_productImages.isEmpty && widget.product['image'] != null) {
         String singleImage = widget.product['image'].toString();
-        if (singleImage.isNotEmpty) {
-          _productImages = [singleImage];
-        }
+        if (singleImage.isNotEmpty) _productImages = [singleImage];
       }
-      
-      // Final fallback to placeholder
       if (_productImages.isEmpty) {
         _productImages = ['https://via.placeholder.com/400x400?text=No+Image'];
       }
-      
-      print('📸 Images found: ${_productImages.length}');
-      print('✅ Product data initialization complete');
-      
     } catch (e) {
-      print('❌ Error initializing product data: $e');
-      
-      // Emergency fallback
       _variants = [];
       _selectedVariantId = '';
-      _productImages = ['https://via.placeholder.com/400x400?text=Error+Loading+Image'];
+      _productImages = ['https://via.placeholder.com/400x400?text=Error'];
     }
   }
 
@@ -127,7 +102,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
         builder: (context) => MainLayout(
-          currentIndex: 3, // Cart tab
+          currentIndex: 2,
           child: const CartScreen(),
         ),
       ),
@@ -137,13 +112,18 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppTheme.bg,
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
             expandedHeight: 0,
             pinned: true,
+            backgroundColor: AppTheme.bg,
+            surfaceTintColor: Colors.transparent,
+            elevation: 0,
             leading: IconButton(
-              icon: const Icon(Icons.arrow_back),
+              icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                  color: AppTheme.textPrimary, size: 18),
               onPressed: () => Navigator.of(context).pop(),
             ),
             actions: [
@@ -153,7 +133,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                   return IconButton(
                     icon: Icon(
                       isInWishlist ? Icons.favorite : Icons.favorite_border,
-                      color: isInWishlist ? Colors.red : null,
+                      color: isInWishlist ? Colors.red : AppTheme.textSecondary,
                     ),
                     onPressed: () {
                       wishlist.toggleWishlist({
@@ -170,7 +150,8 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                 },
               ),
               IconButton(
-                icon: const Icon(Icons.share),
+                icon: const Icon(Icons.share_outlined,
+                    color: AppTheme.textSecondary),
                 onPressed: () {},
               ),
             ],
@@ -184,54 +165,48 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                 _buildSizeSelector(),
                 _buildQuantitySelector(),
                 _buildDescription(),
-                const SizedBox(height: 100), // Space for bottom bar
+                const SizedBox(height: 100),
               ],
             ),
           ),
         ],
       ),
+      // ── Bottom bar ──────────────────────────────────────────────────────
       bottomNavigationBar: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
         decoration: BoxDecoration(
-          color: Colors.white,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              offset: const Offset(0, -4),
-              blurRadius: 8,
-            ),
-          ],
+          color: AppTheme.surface1,
+          border: Border(
+            top: BorderSide(color: Colors.white.withOpacity(0.07)),
+          ),
         ),
         child: SafeArea(
           child: Row(
             children: [
+              // Price column
               Expanded(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Price',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
+                    Text('Price', style: AppTheme.bodyMD),
                     Consumer<LocationProvider>(
-                      builder: (context, locationProvider, child) {
-                        return Text(
-                          locationProvider.formatPrice(widget.product['price'] ?? 0.0),
-                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            color: AppTheme.accentColor,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        );
-                      },
+                      builder: (context, lp, _) => Text(
+                        lp.formatPrice(
+                          widget.product['price'] ?? 0.0,
+                          fromCurrencyCode: lp.isInIndia ? 'INR' : 'USD',
+                        ),
+                        style: AppTheme.numericMD.copyWith(
+                            color: AppTheme.lime, fontSize: 22),
+                      ),
                     ),
                   ],
                 ),
               ),
-              ElevatedButton(
-                onPressed: () {
-                  final cartModel = context.read<CartModel>();
-                  cartModel.addToCart(
+              // Add to Cart button
+              GestureDetector(
+                onTap: () {
+                  context.read<CartModel>().addToCart(
                     {
                       'id': widget.product['id'],
                       'title': widget.product['name'] ?? '',
@@ -242,22 +217,46 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                     _selectedVariantId,
                     _quantity,
                   );
-
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: const Text('Added to cart'),
                       duration: const Duration(seconds: 2),
+                      backgroundColor: AppTheme.surface2,
+                      behavior: SnackBarBehavior.floating,
+                      shape: RoundedRectangleBorder(
+                          borderRadius:
+                              BorderRadius.circular(AppTheme.radiusMd)),
                       action: SnackBarAction(
                         label: 'VIEW CART',
+                        textColor: AppTheme.lime,
                         onPressed: _navigateToCart,
                       ),
                     ),
                   );
                 },
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 32),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 32, vertical: 16),
+                  decoration: BoxDecoration(
+                    color: AppTheme.lime,
+                    borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppTheme.lime.withOpacity(0.3),
+                        blurRadius: 16,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: const Text(
+                    'Add to Cart',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.black,
+                    ),
+                  ),
                 ),
-                child: const Text('Add to Cart'),
               ),
             ],
           ),
@@ -266,15 +265,14 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
     );
   }
 
+  // ── Product image carousel ────────────────────────────────────────────────
   Widget _buildProductImage() {
     return Hero(
       tag: 'product_${widget.product['id']}',
       child: Container(
         height: 300,
         width: double.infinity,
-        decoration: BoxDecoration(
-          color: Colors.grey.shade100,
-        ),
+        color: AppTheme.surface1,
         child: Stack(
           children: [
             FlutterCarousel(
@@ -287,61 +285,43 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                 slideIndicator: CircularSlideIndicator(),
                 initialPage: _currentImageIndex,
                 onPageChanged: (index, reason) {
-                  setState(() {
-                    _currentImageIndex = index;
-                  });
+                  setState(() => _currentImageIndex = index);
                 },
               ),
-              items: _productImages.map((imageUrl) {
+              items: _productImages.map((url) {
                 return Builder(
-                  builder: (BuildContext context) {
-                    return Image.network(
-                      imageUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Container(
-                          color: Colors.grey.shade200,
-                          child: const Icon(
-                            Icons.image_not_supported,
-                            size: 50,
-                            color: Colors.grey,
-                          ),
-                        );
-                      },
-                    );
-                  },
+                  builder: (_) => Image.network(
+                    url,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => Container(
+                      color: AppTheme.surface2,
+                      child: const Icon(Icons.image_not_supported,
+                          size: 50, color: AppTheme.textTertiary),
+                    ),
+                  ),
                 );
               }).toList(),
             ),
+            // Image counter pill
             Positioned(
               bottom: 16,
               right: 16,
               child: Container(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
+                    horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.7),
-                  borderRadius: BorderRadius.circular(16),
+                  color: Colors.black.withOpacity(0.6),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusPill),
                 ),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.photo_library,
-                      color: Colors.white,
-                      size: 16,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      '${_currentImageIndex + 1}/${_productImages.length}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
+                child: Row(children: [
+                  const Icon(Icons.photo_library_outlined,
+                      color: Colors.white, size: 14),
+                  const SizedBox(width: 4),
+                  Text(
+                    '${_currentImageIndex + 1}/${_productImages.length}',
+                    style: const TextStyle(color: Colors.white, fontSize: 12),
+                  ),
+                ]),
               ),
             ),
           ],
@@ -350,201 +330,167 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
     );
   }
 
+  // ── Product info ──────────────────────────────────────────────────────────
   Widget _buildProductInfo() {
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            widget.product['name'],
-            style: Theme.of(context).textTheme.headlineMedium,
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Consumer<LocationProvider>(
-                builder: (context, locationProvider, child) {
-                  return Text(
-                    locationProvider.formatPrice(widget.product['price'] ?? 0.0),
-                    style: TextStyle(
-                      color: AppTheme.accentColor,
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  );
-                },
-              ),
-              const SizedBox(width: 12),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: AppTheme.accentColor.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  '20% OFF',
-                  style: TextStyle(
-                    color: AppTheme.accentColor,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              const Icon(
-                Icons.star,
-                color: Colors.amber,
-                size: 20,
-              ),
-              const SizedBox(width: 4),
-              const Text(
-                '4.8',
-                style: TextStyle(
+          Text(widget.product['name'] ?? '',
+              style: AppTheme.headingLG),
+          const SizedBox(height: 10),
+          Row(children: [
+            Consumer<LocationProvider>(
+              builder: (context, lp, _) => Text(
+                lp.formatPrice(widget.product['price'] ?? 0.0,
+                    fromCurrencyCode: lp.isInIndia ? 'INR' : 'USD'),
+                style: const TextStyle(
+                  color: AppTheme.lime,
+                  fontSize: 24,
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              const SizedBox(width: 8),
-              Text(
-                '(256 Reviews)',
-                style: TextStyle(
-                  color: Colors.grey.shade600,
-                ),
+            ),
+            const SizedBox(width: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppTheme.lime.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(AppTheme.radiusPill),
               ),
-            ],
-          ),
+              child: Text(
+                '20% OFF',
+                style: AppTheme.labelMD.copyWith(color: AppTheme.lime),
+              ),
+            ),
+          ]),
+          const SizedBox(height: 14),
+          Row(children: [
+            const Icon(Icons.star_rounded, color: Colors.amber, size: 18),
+            const SizedBox(width: 4),
+            const Text('4.8',
+                style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.textPrimary)),
+            const SizedBox(width: 8),
+            Text('(256 Reviews)', style: AppTheme.bodyMD),
+          ]),
         ],
       ),
     );
   }
 
+  // ── Variant selector ──────────────────────────────────────────────────────
   Widget _buildSizeSelector() {
-    if (_variants == null || _variants!.isEmpty) {
-      return const SizedBox.shrink();
-    }
+    if (_variants == null || _variants!.isEmpty) return const SizedBox.shrink();
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Select Variant',
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
+          Text('Select Variant', style: AppTheme.headingSM),
           const SizedBox(height: 12),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
-              children: List.generate(
-                _variants!.length,
-                (index) => Padding(
-                  padding: const EdgeInsets.only(right: 12),
-                  child: ChoiceChip(
-                    label: Text(_variants![index]['title'] ?? 'Variant ${index + 1}'),
-                    selected: _selectedSize == index,
-                    onSelected: (selected) {
-                      if (selected) {
-                        _updateSelectedVariant(index);
-                      }
-                    },
-                    backgroundColor: Theme.of(context).brightness == Brightness.dark
-                        ? AppTheme.darkGrey
-                        : Colors.grey.shade100,
-                    selectedColor: AppTheme.accentColor.withOpacity(0.2),
-                    labelStyle: TextStyle(
-                      color: _selectedSize == index
-                          ? AppTheme.accentColor
-                          : Theme.of(context).brightness == Brightness.dark
-                              ? AppTheme.textColor
-                              : AppTheme.lightTextColor,
-                      fontWeight: _selectedSize == index ? FontWeight.bold : FontWeight.normal,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      side: BorderSide(
-                        color: _selectedSize == index
-                            ? AppTheme.accentColor
-                            : Colors.transparent,
+              children: List.generate(_variants!.length, (i) {
+                final selected = _selectedSize == i;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 10),
+                  child: GestureDetector(
+                    onTap: () => _updateSelectedVariant(i),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 18, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: selected
+                            ? AppTheme.lime.withOpacity(0.1)
+                            : AppTheme.surface2,
+                        borderRadius:
+                            BorderRadius.circular(AppTheme.radiusMd),
+                        border: Border.all(
+                          color: selected
+                              ? AppTheme.lime
+                              : Colors.white.withOpacity(0.1),
+                          width: selected ? 1.5 : 1,
+                        ),
+                      ),
+                      child: Text(
+                        _variants![i]['title'] ?? 'Variant ${i + 1}',
+                        style: TextStyle(
+                          color: selected
+                              ? AppTheme.lime
+                              : AppTheme.textSecondary,
+                          fontWeight: selected
+                              ? FontWeight.w800
+                              : FontWeight.w500,
+                          fontSize: 13,
+                        ),
                       ),
                     ),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   ),
-                ),
-              ),
+                );
+              }),
             ),
           ),
+          const SizedBox(height: 8),
         ],
       ),
     );
   }
 
+  // ── Quantity selector ─────────────────────────────────────────────────────
   Widget _buildQuantitySelector() {
     return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        children: [
-          Text(
-            'Quantity',
-            style: Theme.of(context).textTheme.titleLarge,
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      child: Row(children: [
+        Text('Quantity', style: AppTheme.headingSM),
+        const Spacer(),
+        Container(
+          decoration: BoxDecoration(
+            color: AppTheme.surface2,
+            borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+            border: Border.all(color: Colors.white.withOpacity(0.08)),
           ),
-          const Spacer(),
-          Container(
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.grey.shade300),
-              borderRadius: BorderRadius.circular(8),
+          child: Row(children: [
+            IconButton(
+              icon: const Icon(Icons.remove_rounded,
+                  color: AppTheme.textSecondary, size: 18),
+              onPressed: () {
+                if (_quantity > 1) setState(() => _quantity--);
+              },
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              constraints: const BoxConstraints(),
             ),
-            child: Row(
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.remove),
-                  onPressed: () {
-                    if (_quantity > 1) {
-                      setState(() {
-                        _quantity--;
-                      });
-                    }
-                  },
-                ),
-                Text(
-                  _quantity.toString(),
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.add),
-                  onPressed: () {
-                    setState(() {
-                      _quantity++;
-                    });
-                  },
-                ),
-              ],
+            Text('$_quantity',
+                style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                    color: AppTheme.textPrimary)),
+            IconButton(
+              icon: const Icon(Icons.add_rounded,
+                  color: AppTheme.textSecondary, size: 18),
+              onPressed: () => setState(() => _quantity++),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              constraints: const BoxConstraints(),
             ),
-          ),
-        ],
-      ),
+          ]),
+        ),
+      ]),
     );
   }
 
+  // ── Description ───────────────────────────────────────────────────────────
   Widget _buildDescription() {
     return Padding(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Description',
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
+          Text('Description', style: AppTheme.headingSM),
           const SizedBox(height: 12),
           Html(
             data: widget.product['description'] ?? '',
@@ -552,79 +498,41 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
               'body': Style(
                 margin: Margins.zero,
                 padding: HtmlPaddings.zero,
-                fontSize: FontSize(16),
+                fontSize: FontSize(15),
                 lineHeight: const LineHeight(1.6),
-                color: Colors.grey.shade700,
+                color: AppTheme.textSecondary,
               ),
               'p': Style(
                 margin: Margins.only(bottom: 12),
-                fontSize: FontSize(16),
+                fontSize: FontSize(15),
                 lineHeight: const LineHeight(1.6),
+                color: AppTheme.textSecondary,
               ),
               'strong': Style(
                 fontWeight: FontWeight.bold,
-                color: Colors.black87,
+                color: AppTheme.textPrimary,
               ),
               'b': Style(
                 fontWeight: FontWeight.bold,
-                color: Colors.black87,
+                color: AppTheme.textPrimary,
               ),
-              'h1': Style(
-                fontSize: FontSize(24),
-                fontWeight: FontWeight.bold,
-                margin: Margins.only(top: 16, bottom: 12),
-                color: Colors.black87,
-              ),
-              'h2': Style(
-                fontSize: FontSize(22),
-                fontWeight: FontWeight.bold,
-                margin: Margins.only(top: 16, bottom: 12),
-                color: Colors.black87,
-              ),
-              'h3': Style(
-                fontSize: FontSize(20),
-                fontWeight: FontWeight.bold,
-                margin: Margins.only(top: 14, bottom: 10),
-                color: Colors.black87,
-              ),
-              'h4': Style(
-                fontSize: FontSize(18),
-                fontWeight: FontWeight.bold,
-                margin: Margins.only(top: 12, bottom: 8),
-                color: Colors.black87,
-              ),
-              'ul': Style(
-                margin: Margins.only(bottom: 12, left: 16),
-              ),
-              'ol': Style(
-                margin: Margins.only(bottom: 12, left: 16),
-              ),
-              'li': Style(
-                margin: Margins.only(bottom: 6),
-                fontSize: FontSize(16),
-                lineHeight: const LineHeight(1.6),
-              ),
+              'h1': Style(fontSize: FontSize(22), fontWeight: FontWeight.bold,
+                  margin: Margins.only(top: 14, bottom: 10), color: AppTheme.textPrimary),
+              'h2': Style(fontSize: FontSize(20), fontWeight: FontWeight.bold,
+                  margin: Margins.only(top: 14, bottom: 10), color: AppTheme.textPrimary),
+              'h3': Style(fontSize: FontSize(18), fontWeight: FontWeight.bold,
+                  margin: Margins.only(top: 12, bottom: 8), color: AppTheme.textPrimary),
+              'h4': Style(fontSize: FontSize(16), fontWeight: FontWeight.bold,
+                  margin: Margins.only(top: 10, bottom: 6), color: AppTheme.textPrimary),
+              'ul': Style(margin: Margins.only(bottom: 10, left: 14)),
+              'ol': Style(margin: Margins.only(bottom: 10, left: 14)),
+              'li': Style(margin: Margins.only(bottom: 5),
+                  fontSize: FontSize(15), lineHeight: const LineHeight(1.6),
+                  color: AppTheme.textSecondary),
             },
           ),
         ],
       ),
     );
-  }
-
-  Widget _getPageForIndex(int index) {
-    switch (index) {
-      case 0:
-        return const HomeScreen();
-      case 1:
-        return const ShopScreen();
-      case 2:
-        return const WishlistScreen();
-      case 3:
-        return const CartScreen();
-      case 4:
-        return const ProfileScreen();
-      default:
-        return const HomeScreen();
-    }
   }
 }

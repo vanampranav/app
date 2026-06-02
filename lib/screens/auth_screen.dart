@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
 import '../services/shopify_service.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../utils/constants.dart';
 
 class AuthScreen extends StatefulWidget {
@@ -12,6 +13,7 @@ class AuthScreen extends StatefulWidget {
 }
 
 class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateMixin {
+  static const _secureStorage = FlutterSecureStorage();
   bool _isLogin = true;
   bool _isLoading = false;
   final _formKey = GlobalKey<FormState>();
@@ -19,7 +21,6 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
   final _passwordController = TextEditingController();
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
-  final _shopifyService = ShopifyService();
 
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
@@ -74,18 +75,19 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
       _isLoading = true;
     });
 
+    final shopifyService = context.read<ShopifyService>();
+
     try {
       if (_isLogin) {
-        final result = await _shopifyService.customerAccessTokenCreate(
+        final result = await shopifyService.customerAccessTokenCreate(
           email: _emailController.text,
           password: _passwordController.text,
         );
 
         if (result != null && result['customerAccessTokenCreate']['customerAccessToken'] != null) {
           final token = result['customerAccessTokenCreate']['customerAccessToken']['accessToken'];
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setString('auth_token', token);
-          await prefs.setString('user_email', _emailController.text);
+          await _secureStorage.write(key: 'auth_token', value: token);
+          await _secureStorage.write(key: 'user_email', value: _emailController.text);
           if (mounted) {
             Navigator.of(context).pop(true);
           }
@@ -93,7 +95,7 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
           _showError('Invalid email or password');
         }
       } else {
-        final result = await _shopifyService.createCustomer(
+        final result = await shopifyService.createCustomer(
           email: _emailController.text,
           password: _passwordController.text,
           firstName: _firstNameController.text,
@@ -101,16 +103,15 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
         );
 
         if (result != null && result['customerCreate']['customer'] != null) {
-          final loginResult = await _shopifyService.customerAccessTokenCreate(
+          final loginResult = await shopifyService.customerAccessTokenCreate(
             email: _emailController.text,
             password: _passwordController.text,
           );
-          
+
           if (loginResult != null && loginResult['customerAccessTokenCreate']['customerAccessToken'] != null) {
             final token = loginResult['customerAccessTokenCreate']['customerAccessToken']['accessToken'];
-            final prefs = await SharedPreferences.getInstance();
-            await prefs.setString('auth_token', token);
-            await prefs.setString('user_email', _emailController.text);
+            await _secureStorage.write(key: 'auth_token', value: token);
+            await _secureStorage.write(key: 'user_email', value: _emailController.text);
             if (mounted) {
               Navigator.of(context).pop(true);
             }
@@ -210,7 +211,7 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
     );
 
     try {
-      final result = await _shopifyService.customerRecover(email: email);
+      final result = await context.read<ShopifyService>().customerRecover(email: email);
 
       if (!mounted) return;
       

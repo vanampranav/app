@@ -255,6 +255,11 @@ public class FitDaysSDKManager implements ICDeviceManagerDelegate, ICScanDeviceD
     public void onInitFinish(boolean success) {
         android.util.Log.d("FitDaysSDK", "onInitFinish called, success=" + success);
         isSdkInitialized = success;
+        // Re-apply user info after SDK init — initMgrWithConfig may reset internal state
+        if (success && currentUserInfo != null) {
+            ICDeviceManager.shared().updateUserInfo(currentUserInfo);
+            android.util.Log.d("FitDaysSDK", "User info re-applied after SDK init");
+        }
         Map<String, Object> data = new HashMap<>();
         data.put("success", success);
         sendEvent("sdkInitialized", data);
@@ -288,6 +293,11 @@ public class FitDaysSDKManager implements ICDeviceManagerDelegate, ICScanDeviceD
             android.util.Log.d("FitDaysSDK", "Device CONNECTED - sending event");
             connectedDevice = device; // CRITICAL FIX: Ensure reference is kept
             data.put("state", "connected");
+            // Re-apply user info on every connection so BIA calculation uses fresh profile
+            if (currentUserInfo != null) {
+                ICDeviceManager.shared().updateUserInfo(currentUserInfo);
+                android.util.Log.d("FitDaysSDK", "User info re-applied on device connect");
+            }
         } else {
             android.util.Log.d("FitDaysSDK", "Device CONNECTING - sending event");
             // Other states (connecting, etc.)
@@ -444,7 +454,9 @@ public class FitDaysSDKManager implements ICDeviceManagerDelegate, ICScanDeviceD
         weightData.put("hasBodyComposition", false);
         
         android.util.Log.d("FitDaysSDK", "Emitting weight (Kitchen): " + weight + " " + unit + (isNegative ? " (Negative)" : ""));
-        sendEvent("weightData", weightData);
+        // Use "kitchenScaleData" so Flutter can route this to KitchenScaleScreen only.
+        // The body fat scale uses "weightData" — both now have distinct event types.
+        sendEvent("kitchenScaleData", weightData);
     }
 
     @Override

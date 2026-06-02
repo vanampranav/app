@@ -11,7 +11,6 @@ import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'dart:async';
 import 'dart:io' show Platform;
-import 'package:http/http.dart' as http;
 import 'package:device_info_plus/device_info_plus.dart';
 
 class WebViewCheckoutScreen extends StatefulWidget {
@@ -41,13 +40,18 @@ class _WebViewCheckoutScreenState extends State<WebViewCheckoutScreen> {
   @override
   void initState() {
     super.initState();
-    _initializeDeviceInfo();
     _checkNetworkConnectivity();
     if (kIsWeb) {
       _openInNewTab();
     } else {
-      _initializeWebView();
+      _initializeWithDeviceInfo();
     }
+  }
+
+  // Await device info so the correct Chrome UA is set before the WebView loads.
+  Future<void> _initializeWithDeviceInfo() async {
+    await _initializeDeviceInfo();
+    if (mounted) _initializeWebView();
   }
 
   Future<void> _initializeDeviceInfo() async {
@@ -62,10 +66,10 @@ class _WebViewCheckoutScreenState extends State<WebViewCheckoutScreen> {
         _deviceInfo = 'iOS ${iosInfo.systemVersion} - ${iosInfo.model}';
         _selectedUserAgent = _getIOSUserAgent(iosInfo);
       }
-      print('Device Info: $_deviceInfo');
-      print('Selected User Agent: $_selectedUserAgent');
+      debugPrint('Device Info: $_deviceInfo');
+      debugPrint('Selected User Agent: $_selectedUserAgent');
     } catch (e) {
-      print('Error getting device info: $e');
+      debugPrint('Error getting device info: $e');
       _selectedUserAgent = _getDefaultUserAgent();
     }
   }
@@ -104,40 +108,18 @@ class _WebViewCheckoutScreenState extends State<WebViewCheckoutScreen> {
   Future<void> _checkNetworkConnectivity() async {
     try {
       var connectivityResult = await Connectivity().checkConnectivity();
-      setState(() {
-        _isNetworkAvailable = connectivityResult != ConnectivityResult.none;
-      });
-      if (!_isNetworkAvailable) {
+      final hasNetwork = connectivityResult != ConnectivityResult.none;
+      setState(() { _isNetworkAvailable = hasNetwork; });
+      if (!hasNetwork) {
         setState(() {
           _hasError = true;
-          _errorMessage = 'No internet connection. Please check your network or try a VPN.';
-        });
-      } else {
-        // Verify URL accessibility
-        await _checkUrlAccessibility();
-      }
-    } catch (e) {
-      setState(() {
-        _hasError = true;
-        _errorMessage = 'Network check failed: ${e.toString()}. Try using a VPN.';
-      });
-    }
-  }
-
-  Future<void> _checkUrlAccessibility() async {
-    try {
-      final response = await http.head(Uri.parse(widget.checkoutUrl)).timeout(const Duration(seconds: 5));
-      if (response.statusCode >= 400) {
-        setState(() {
-          _hasError = true;
-          _errorMessage = 'Checkout URL inaccessible (Status: ${response.statusCode}). Try using a VPN or different network.';
+          _errorMessage = 'No internet connection. Please check your network and try again.';
         });
       }
+      // Don't pre-check URL — Shopify cart links return 404 to HEAD requests
+      // because they require a real browser session to initialise the checkout.
     } catch (e) {
-      setState(() {
-        _hasError = true;
-        _errorMessage = 'Failed to verify checkout URL: ${e.toString()}. Try using a VPN.';
-      });
+      // Connectivity check failure is non-fatal; let the WebView try anyway.
     }
   }
 
@@ -184,7 +166,7 @@ class _WebViewCheckoutScreenState extends State<WebViewCheckoutScreen> {
       ..addJavaScriptChannel(
         'FlutterBridge',
         onMessageReceived: (JavaScriptMessage message) {
-          print('JavaScript message: ${message.message}');
+          debugPrint('JavaScript message: ${message.message}');
           if (message.message.contains('shop_pay_callback')) {
             if (message.message.contains('success')) {
               context.read<CartModel>().clearCart();
@@ -202,10 +184,10 @@ class _WebViewCheckoutScreenState extends State<WebViewCheckoutScreen> {
       ..setNavigationDelegate(
         NavigationDelegate(
           onProgress: (int progress) {
-            print('WebView is loading (progress : $progress%) - Device: $_deviceInfo');
+            debugPrint('WebView is loading (progress : $progress%) - Device: $_deviceInfo');
           },
           onPageStarted: (String url) {
-            print('Page started loading: $url - Device: $_deviceInfo');
+            debugPrint('Page started loading: $url - Device: $_deviceInfo');
             setState(() {
               _isLoading = true;
               _hasError = false;
@@ -226,20 +208,70 @@ class _WebViewCheckoutScreenState extends State<WebViewCheckoutScreen> {
             });
           },
           onPageFinished: (String url) {
-            print('Page finished loading: $url - Device: $_deviceInfo');
+            debugPrint('Page finished loading: $url - Device: $_deviceInfo');
             _timeoutTimer?.cancel();
             setState(() {
               _isLoading = false;
             });
+
+            // Detect Razorpay payment success from the URL itself
+            if (url.contains('razorpay_payment_id') || url.contains('rzp_payment_id')) {
+              context.read<CartModel>().clearCart();
+              Navigator.of(context).pop(true);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Payment successful! Order placed.'),
+                  backgroundColor: Colors.green,
+                ),
+              );
+              return;
+            }
             
-            // Enhanced JavaScript injection with better error handling and address autofill
+            // Only inject Shopify-specific scripts on Shopify / theelefit.com pages.
+            // Razorpay's hosted checkout (api.razorpay.com / checkout.razorpay.com)
+            // is cross-origin; running our DOM scripts there causes DOMExceptions
+            // and breaks Razorpay's own JS.
+            final isShopifyPage = url.contains('theelefit.com') ||
+                url.contains('shopify.com') ||
+                url.contains('myshopify.com');
+
+            if (!isShopifyPage) return;
+
             final addressModel = context.read<AddressModel>();
             final autofillScript = addressModel.generateAutofillScript();
-            
+
             controller.runJavaScript('''
               try {
                 console.log('Checkout page loaded on: $_deviceInfo');
-                
+
+                // Strip X-Requested-With from JS-level XHR/fetch so Razorpay
+                // does not identify this session as an unregistered Android app.
+                // The native WebView adds this header automatically; overriding
+                // setRequestHeader removes it from Razorpay's payment API calls.
+                (function() {
+                  var _origSetHeader = XMLHttpRequest.prototype.setRequestHeader;
+                  XMLHttpRequest.prototype.setRequestHeader = function(n, v) {
+                    if (n.toLowerCase() === 'x-requested-with') return;
+                    _origSetHeader.call(this, n, v);
+                  };
+                  if (window.fetch) {
+                    var _origFetch = window.fetch;
+                    window.fetch = function(url, opts) {
+                      if (opts && opts.headers) {
+                        var h = opts.headers;
+                        if (h instanceof Headers) {
+                          h.delete('X-Requested-With');
+                        } else if (typeof h === 'object') {
+                          Object.keys(h).forEach(function(k) {
+                            if (k.toLowerCase() === 'x-requested-with') delete h[k];
+                          });
+                        }
+                      }
+                      return _origFetch.call(this, url, opts);
+                    };
+                  }
+                })();
+
                 // Auto-fill saved address if available
                 $autofillScript
                 
@@ -361,9 +393,58 @@ class _WebViewCheckoutScreenState extends State<WebViewCheckoutScreen> {
                     }
                   });
                 }
+
+                // Razorpay payment event listeners
+                (function() {
+                  // Listen for Razorpay success/failure postMessage events
+                  window.addEventListener('message', function(event) {
+                    if (!event.data) return;
+                    var data = (typeof event.data === 'string') ? event.data : JSON.stringify(event.data);
+                    console.log('PostMessage received:', data);
+                    if (data.indexOf('razorpay') !== -1 || data.indexOf('payment_id') !== -1) {
+                      if (data.indexOf('success') !== -1 || data.indexOf('payment_id') !== -1) {
+                        console.log('Razorpay payment success detected via postMessage');
+                        window.FlutterBridge.postMessage('shop_pay_callback:success');
+                      }
+                    }
+                  });
+
+                  // Patch Razorpay handler if SDK is present on page
+                  function patchRazorpay() {
+                    if (window.Razorpay) {
+                      var _orig = window.Razorpay;
+                      window.Razorpay = function(options) {
+                        var origSuccess = options.handler;
+                        options.handler = function(response) {
+                          console.log('Razorpay payment success:', response.razorpay_payment_id);
+                          if (origSuccess) origSuccess(response);
+                          // Notify Flutter after a short delay to let Shopify process
+                          setTimeout(function() {
+                            window.FlutterBridge.postMessage('shop_pay_callback:success');
+                          }, 2000);
+                        };
+                        return new _orig(options);
+                      };
+                      window.Razorpay.prototype = _orig.prototype;
+                      console.log('Razorpay SDK patched for Flutter bridge');
+                    }
+                  }
+                  patchRazorpay();
+                  // Also retry after DOM settles in case Razorpay loads later
+                  setTimeout(patchRazorpay, 2000);
+                  setTimeout(patchRazorpay, 5000);
+                })();
                 
                 // Enhanced completion detection
                 function checkForCompletion() {
+                  // Razorpay payment ID in URL = payment captured
+                  if (window.location.href.indexOf('razorpay_payment_id') !== -1 ||
+                      window.location.href.indexOf('rzp_payment_id') !== -1) {
+                    console.log('Razorpay payment ID detected in URL');
+                    window.FlutterBridge.postMessage('shop_pay_callback:success');
+                    return true;
+                  }
+
                   // Enhanced detection for various checkout completion indicators
                   var thankYouElements = document.querySelectorAll([
                     '[data-testid="thank-you"]',
@@ -412,90 +493,87 @@ class _WebViewCheckoutScreenState extends State<WebViewCheckoutScreen> {
                     attributeFilter: ['class', 'data-step', 'data-testid']
                   });
                   
-                  // Also monitor URL changes
-                  var originalPushState = history.pushState;
-                  var originalReplaceState = history.replaceState;
-                  
-                  history.pushState = function() {
-                    originalPushState.apply(history, arguments);
-                    setTimeout(checkForCompletion, 1000);
-                  };
-                  
-                  history.replaceState = function() {
-                    originalReplaceState.apply(history, arguments);
-                    setTimeout(checkForCompletion, 1000);
-                  };
-                  
-                  window.addEventListener('popstate', function() {
-                    setTimeout(checkForCompletion, 1000);
-                  });
+                  // Monitor URL changes (wrapped in try-catch: some pages
+                  // block history patching and throw DOMException)
+                  try {
+                    var originalPushState = history.pushState;
+                    var originalReplaceState = history.replaceState;
+                    history.pushState = function() {
+                      originalPushState.apply(history, arguments);
+                      setTimeout(checkForCompletion, 1000);
+                    };
+                    history.replaceState = function() {
+                      originalReplaceState.apply(history, arguments);
+                      setTimeout(checkForCompletion, 1000);
+                    };
+                    window.addEventListener('popstate', function() {
+                      setTimeout(checkForCompletion, 1000);
+                    });
+                  } catch(histErr) {
+                    console.log('history patching skipped:', histErr.message);
+                  }
                 }
                 
               } catch (e) {
                 console.error('Error in checkout detection script:', e);
               }
             ''').catchError((error) {
-              print('JavaScript injection error: $error');
+              debugPrint('JavaScript injection error: $error');
             });
           },
           onWebResourceError: (WebResourceError error) {
-            print('Page resource error on $_deviceInfo: ${error.description}');
-            setState(() {
-              _hasError = true;
-              _errorMessage = _getFriendlyErrorMessage(error);
-              _isLoading = false;
-            });
+            debugPrint('Resource error [${error.errorType}]: ${error.description}');
+
+            // Only show the error screen for DNS failures (server not found)
+            // or genuine timeouts.
+            //
+            // ERR_CONNECTION_REFUSED (type: connect) is intentionally excluded:
+            // Razorpay's checkout JS tries to open WebSocket / telemetry
+            // connections that are refused on emulators and restricted networks.
+            // Those are sub-resource failures that do NOT prevent payment.
+            const fatalTypes = {
+              WebResourceErrorType.hostLookup,
+              WebResourceErrorType.timeout,
+            };
+            if (fatalTypes.contains(error.errorType)) {
+              setState(() {
+                _hasError = true;
+                _errorMessage = _getFriendlyErrorMessage(error);
+                _isLoading = false;
+              });
+            }
+            // connect / unknown / authentication / unsupportedScheme → log only.
           },
           onNavigationRequest: (NavigationRequest request) {
-            print('Navigation request on $_deviceInfo: ${request.url}');
-            
-            final url = request.url.toLowerCase();
-            
-            // Check for external payment app schemes that should be launched externally
-            final paymentSchemes = [
-              'tez://', 'paytm://', 'phonepe://', 
-              'upi://', 'bhim://', 'amazonpay://', 'paypal://',
-              'venmo://', 'cashapp://', 'zelle://', 'applepay://',
-              'samsungpay://', 'intent://', 'market://', 'play.google.com'
+            final url = request.url;
+            final urlLower = url.toLowerCase();
+            debugPrint('Navigation: $url');
+
+            // ── App deep-link schemes → open the native app ──────────────
+            // These must be intercepted BEFORE the http/https check.
+            const appSchemes = [
+              'upi://', 'intent://',
+              'tez://', 'googlepay://',
+              'paytm://', 'phonepe://', 'bhim://',
+              'amazonpay://', 'razorpay://', 'rzp://',
+              'market://',
             ];
-            
-            // Check for payment app URLs that should be launched externally
-            final paymentAppUrls = [
-              'paypal.me', 'paypal.com/checkoutnow',
-              'venmo.com/pay', 'cash.app/pay'
-            ];
-            
-            // Launch external payment apps
-            if (paymentSchemes.any((scheme) => url.startsWith(scheme)) ||
-                paymentAppUrls.any((appUrl) => url.contains(appUrl))) {
-              print('Launching external payment app: ${request.url}');
-              _launchExternalUrl(request.url);
+            if (appSchemes.any((s) => urlLower.startsWith(s))) {
+              _launchExternalUrl(url);
               return NavigationDecision.prevent;
             }
-            
-            // Enhanced domain allowlist for web-based payments and checkout
-            final allowedDomains = [
-              'shopify.com', 'shopifycs.com', 'shopifysvc.com', 'myshopify.com',
-              'shop.app', 'shopify-pay.com', 'shopifycdn.com',
-              'paypal.com', 'paypalobjects.com', 'stripe.com', 'js.stripe.com',
-              'apple.com', 'google.com', 'googlepay.com', 'googleapis.com',
-              'theelefit.com', 'cdn.shopify.com',
-              // Add common payment processor domains
-              'razorpay.com', 'payu.in', 'ccavenue.com', 'instamojo.com',
-              'checkout.com', 'adyen.com', 'worldpay.com', 'square.com',
-              // Add UPI and Indian payment gateways
-              'npci.org.in', 'upi.org.in', 'bharatpe.com', 'freecharge.in'
-            ];
-            
-            final isAllowed = allowedDomains.any((domain) => 
-                url.contains(domain));
-            
-            if (isAllowed) {
+
+            // ── Allow ALL http / https navigation ────────────────────────
+            // Razorpay, Shopify, CDNs, analytics — we cannot predict every
+            // domain the payment SDK will touch, so we let the WebView load
+            // anything over http/https and rely on the Android network
+            // security config for cleartext policy.
+            if (urlLower.startsWith('http://') || urlLower.startsWith('https://')) {
               return NavigationDecision.navigate;
             }
-            
-            // For security, block other external URLs but log them
-            print('Blocked navigation to: ${request.url}');
+
+            // ── Everything else (unknown schemes) → block ─────────────────
+            debugPrint('Blocked unknown scheme: $url');
             return NavigationDecision.prevent;
           },
         ),
@@ -549,7 +627,7 @@ class _WebViewCheckoutScreenState extends State<WebViewCheckoutScreen> {
   }
 
   Future<void> _launchExternalUrl(String url) async {
-    print('Attempting to launch external URL: $url');
+    debugPrint('Attempting to launch external URL: $url');
     
     try {
       // Handle different types of payment URLs
@@ -569,13 +647,13 @@ class _WebViewCheckoutScreenState extends State<WebViewCheckoutScreen> {
         await _launchGenericUrl(url);
       }
     } catch (e) {
-      print('Error launching external URL: $e');
+      debugPrint('Error launching external URL: $e');
       await _showPaymentError(url, e.toString());
     }
   }
   
   Future<void> _handleAndroidIntent(String intentUrl) async {
-    print('Handling Android intent: $intentUrl');
+    debugPrint('Handling Android intent: $intentUrl');
     
     try {
       // Try to parse and launch the intent URL directly
@@ -583,7 +661,7 @@ class _WebViewCheckoutScreenState extends State<WebViewCheckoutScreen> {
       
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
-        print('Successfully launched intent URL');
+        debugPrint('Successfully launched intent URL');
         return;
       }
       
@@ -591,7 +669,7 @@ class _WebViewCheckoutScreenState extends State<WebViewCheckoutScreen> {
       final packageMatch = RegExp(r'package=([^;]+)').firstMatch(intentUrl);
       if (packageMatch != null) {
         final packageName = packageMatch.group(1);
-        print('Extracted package name: $packageName');
+        debugPrint('Extracted package name: $packageName');
         
         // Try to launch the app directly
         final appUri = Uri.parse('market://details?id=$packageName');
@@ -603,13 +681,13 @@ class _WebViewCheckoutScreenState extends State<WebViewCheckoutScreen> {
       
       throw Exception('Could not handle intent URL');
     } catch (e) {
-      print('Intent handling failed: $e');
+      debugPrint('Intent handling failed: $e');
       rethrow;
     }
   }
   
   Future<void> _handleGooglePay(String url) async {
-    print('Handling Google Pay URL: $url');
+    debugPrint('Handling Google Pay URL: $url');
     
     final List<String> googlePayUrls = [
       url, // Original URL
@@ -623,11 +701,11 @@ class _WebViewCheckoutScreenState extends State<WebViewCheckoutScreen> {
         final Uri uri = Uri.parse(payUrl);
         if (await canLaunchUrl(uri)) {
           await launchUrl(uri, mode: LaunchMode.externalApplication);
-          print('Successfully launched Google Pay with URL: $payUrl');
+          debugPrint('Successfully launched Google Pay with URL: $payUrl');
           return;
         }
       } catch (e) {
-        print('Failed to launch Google Pay URL $payUrl: $e');
+        debugPrint('Failed to launch Google Pay URL $payUrl: $e');
         continue;
       }
     }
@@ -637,17 +715,17 @@ class _WebViewCheckoutScreenState extends State<WebViewCheckoutScreen> {
   }
   
   Future<void> _handleUPIPayment(String url) async {
-    print('Handling UPI payment URL: $url');
+    debugPrint('Handling UPI payment URL: $url');
     
     try {
       final Uri uri = Uri.parse(url);
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
-        print('Successfully launched UPI payment');
+        debugPrint('Successfully launched UPI payment');
         return;
       }
     } catch (e) {
-      print('UPI payment launch failed: $e');
+      debugPrint('UPI payment launch failed: $e');
     }
     
     // Fallback: Show available UPI apps
@@ -668,11 +746,11 @@ class _WebViewCheckoutScreenState extends State<WebViewCheckoutScreen> {
       try {
         if (await canLaunchUrl(uri)) {
           await launchUrl(uri, mode: mode);
-          print('Successfully launched URL with mode: $mode');
+          debugPrint('Successfully launched URL with mode: $mode');
           return;
         }
       } catch (e) {
-        print('Failed to launch with mode $mode: $e');
+        debugPrint('Failed to launch with mode $mode: $e');
         continue;
       }
     }
@@ -694,7 +772,7 @@ class _WebViewCheckoutScreenState extends State<WebViewCheckoutScreen> {
         await launchUrl(webPlayStoreUri, mode: LaunchMode.externalApplication);
       }
     } catch (e) {
-      print('Failed to open Play Store: $e');
+      debugPrint('Failed to open Play Store: $e');
     }
   }
   
@@ -726,7 +804,7 @@ class _WebViewCheckoutScreenState extends State<WebViewCheckoutScreen> {
   Future<void> _showPaymentError(String url, String error) async {
     if (!mounted) return;
     
-    print('Payment error for URL $url: $error');
+    debugPrint('Payment error for URL $url: $error');
     
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(

@@ -36,20 +36,20 @@ class LocationService extends ChangeNotifier {
         _countryCode = 'IN';
         _currencyCode = 'INR';
         _exchangeRateINR = 83.0;
-        print('Detected Indian timezone, starting with INR');
+        debugPrint('Detected Indian timezone, starting with INR');
       } else {
         // Default to USD for other timezones
         _countryCode = 'US';
         _currencyCode = 'USD';
         _exchangeRateINR = 83.0;
-        print('Non-Indian timezone detected, starting with USD');
+        debugPrint('Non-Indian timezone detected, starting with USD');
       }
     } catch (e) {
       // Fallback to USD if timezone detection fails
       _countryCode = 'US';
       _currencyCode = 'USD';
       _exchangeRateINR = 83.0;
-      print('Timezone detection failed, using USD default');
+      debugPrint('Timezone detection failed, using USD default');
     }
   }
 
@@ -88,13 +88,13 @@ class LocationService extends ChangeNotifier {
             }
             // Save detected country
             await prefs.setString('user_country', _countryCode!);
-            print('Detected country: $_countryCode, Currency: $_currencyCode');
+            debugPrint('Detected country: $_countryCode, Currency: $_currencyCode');
           } else {
             // If location detection fails, keep USD default
-            print('Location detection failed, using USD default');
+            debugPrint('Location detection failed, using USD default');
           }
         } catch (e) {
-          print('Location detection error: $e, using USD default');
+          debugPrint('Location detection error: $e, using USD default');
           // Keep USD default if location detection fails
         }
       }
@@ -104,7 +104,7 @@ class LocationService extends ChangeNotifier {
         await _fetchAndCacheExchangeRate();
       }
     } catch (e) {
-      print('Error initializing location service: $e');
+      debugPrint('Error initializing location service: $e');
       // Keep current values or use defaults
       if (_countryCode == null) {
         _countryCode = 'IN';
@@ -143,7 +143,7 @@ class LocationService extends ChangeNotifier {
         _exchangeRateINR = 83.0; // Fallback rate
       }
     } catch (e) {
-      print('Error fetching exchange rate: $e');
+      debugPrint('Error fetching exchange rate: $e');
       _exchangeRateINR = 83.0; // Fallback rate
     }
     notifyListeners();
@@ -158,7 +158,7 @@ class LocationService extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('user_country', countryCode);
     } catch (e) {
-      print('Error saving country preference: $e');
+      debugPrint('Error saving country preference: $e');
     }
     
     if (_currencyCode == 'INR') {
@@ -169,21 +169,21 @@ class LocationService extends ChangeNotifier {
     notifyListeners();
   }
 
-  String formatPrice(double priceInUSD) {
+  String formatPrice(double amount, {String fromCurrencyCode = 'USD'}) {
     if (_currencyCode == 'INR') {
-      final priceInINR = priceInUSD * _exchangeRateINR;
+      // If price is already in INR (India store), skip conversion
+      final priceInINR = fromCurrencyCode == 'INR' ? amount : amount * _exchangeRateINR;
       return NumberFormat.currency(
         symbol: '₹',
-        decimalDigits: 2,
+        decimalDigits: 0,
         locale: 'hi_IN',
       ).format(priceInINR);
     } else {
-      // USD price
       return NumberFormat.currency(
         symbol: '\$',
         decimalDigits: 2,
         locale: 'en_US',
-      ).format(priceInUSD);
+      ).format(amount);
     }
   }
 

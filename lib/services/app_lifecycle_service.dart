@@ -1,5 +1,4 @@
 import 'package:flutter/widgets.dart';
-import 'firebase_in_app_messaging_service.dart';
 
 class AppLifecycleService extends WidgetsBindingObserver {
   static final AppLifecycleService _instance = AppLifecycleService._internal();
@@ -8,7 +7,7 @@ class AppLifecycleService extends WidgetsBindingObserver {
 
   static void initialize() {
     WidgetsBinding.instance.addObserver(_instance);
-    print('✅ App Lifecycle Service initialized');
+    debugPrint('✅ App Lifecycle Service initialized');
   }
 
   @override
@@ -17,21 +16,19 @@ class AppLifecycleService extends WidgetsBindingObserver {
     
     switch (state) {
       case AppLifecycleState.resumed:
-        print('📱 App resumed (foreground)');
-        // Trigger events when app comes to foreground
-        FirebaseInAppMessagingService.triggerAppForeground();
+        debugPrint('📱 App resumed (foreground)');
         break;
       case AppLifecycleState.paused:
-        print('⏸️ App paused (background)');
+        debugPrint('⏸️ App paused (background)');
         break;
       case AppLifecycleState.inactive:
-        print('😴 App inactive');
+        debugPrint('😴 App inactive');
         break;
       case AppLifecycleState.detached:
-        print('🔌 App detached');
+        debugPrint('🔌 App detached');
         break;
       case AppLifecycleState.hidden:
-        print('👻 App hidden');
+        debugPrint('👻 App hidden');
         break;
     }
   }

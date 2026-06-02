@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -38,7 +39,15 @@ class _DevicesScreenState extends State<DevicesScreen> {
   WeightMeasurement? _latestMeasurement;
   bool _isScanning = false;
   bool _hasPermissions = false;
+  bool? _isBluetoothOn;
+  bool _bluetoothDialogShown = false;
   String? _errorMessage;
+  StreamSubscription? _deviceFoundSub;
+  StreamSubscription? _connectionSub;
+  StreamSubscription? _weightDataSub;
+  StreamSubscription? _scanningSub;
+  StreamSubscription? _errorSub;
+  StreamSubscription? _bluetoothSub;
 
   @override
   void initState() {
@@ -49,10 +58,9 @@ class _DevicesScreenState extends State<DevicesScreen> {
   }
 
   void _setupListeners() {
-    // Listen for discovered devices
-    _fitDaysService.deviceFoundStream.listen((device) {
+    _deviceFoundSub = _fitDaysService.deviceFoundStream.listen((device) {
       _addLog('Device: ${device.macAddress}');
-      print('Device found: ${device.macAddress}');
+      debugPrint('Device found: ${device.macAddress}');
       setState(() {
         if (!_discoveredDevices.any((d) => d.macAddress == device.macAddress)) {
           _discoveredDevices.add(device);
@@ -60,50 +68,26 @@ class _DevicesScreenState extends State<DevicesScreen> {
       });
     });
 
-    // Listen for connection state changes
-    _fitDaysService.connectionStateStream.listen((data) {
+    _connectionSub = _fitDaysService.connectionStateStream.listen((data) {
       final macAddress = data['macAddress'] as String;
       final state = data['state'] as String;
       _addLog('Conn: $macAddress -> $state');
-      print('Connection state changed: $macAddress -> $state');
+      debugPrint('Connection state changed: $macAddress -> $state');
+
+      // Capture the device to navigate to outside of setState
+      FitDaysDevice? deviceToNavigate;
 
       setState(() {
-        // Update discovered devices list
         final deviceIndex = _discoveredDevices
             .indexWhere((d) => d.macAddress == macAddress);
-        
+
         if (deviceIndex != -1) {
           DeviceConnectionState connectionState;
           switch (state) {
             case 'connected':
               connectionState = DeviceConnectionState.connected;
               _connectedDevice = _discoveredDevices[deviceIndex];
-              // NAVIGATE TO APPROPRIATE SCREEN BASED ON DEVICE TYPE
-              if (mounted) {
-                 if (_connectedDevice!.deviceType == DeviceType.kitchenScale) {
-                   // Kitchen scale -> Food tracking screen
-                   Navigator.push(
-                     context,
-                     MaterialPageRoute(
-                       builder: (_) => KitchenScaleScreen(
-                         connectedDevice: _connectedDevice!,
-                         fitDaysService: _fitDaysService,
-                       ),
-                     ),
-                   );
-                 } else {
-                   // Body fat scale -> Measurement screen
-                   Navigator.push(
-                     context,
-                     MaterialPageRoute(
-                       builder: (_) => MeasurementScreen(
-                         connectedDevice: _connectedDevice!,
-                         fitDaysService: _fitDaysService,
-                       ),
-                     ),
-                   );
-                 }
-              }
+              deviceToNavigate = _connectedDevice;
               break;
             case 'connecting':
               connectionState = DeviceConnectionState.connecting;
@@ -114,47 +98,24 @@ class _DevicesScreenState extends State<DevicesScreen> {
                 _connectedDevice = null;
               }
           }
-          
           _discoveredDevices[deviceIndex] = _discoveredDevices[deviceIndex]
               .copyWith(connectionState: connectionState);
         }
-        
-        // CRITICAL: Also update bound device state
-        final boundDeviceIndex = _boundDevices.indexWhere((d) => d.macAddress == macAddress);
+
+        final boundDeviceIndex =
+            _boundDevices.indexWhere((d) => d.macAddress == macAddress);
         if (boundDeviceIndex != -1) {
           switch (state) {
             case 'connected':
               _connectedDevice = _boundDevices[boundDeviceIndex];
-              // Navigate to appropriate screen based on device type
-              if (mounted) {
-                 if (_connectedDevice!.deviceType == DeviceType.kitchenScale) {
-                   Navigator.push(
-                     context,
-                     MaterialPageRoute(
-                       builder: (_) => KitchenScaleScreen(
-                         connectedDevice: _connectedDevice!,
-                         fitDaysService: _fitDaysService,
-                       ),
-                     ),
-                   );
-                 } else {
-                   Navigator.push(
-                     context,
-                     MaterialPageRoute(
-                       builder: (_) => MeasurementScreen(
-                         connectedDevice: _connectedDevice!,
-                         fitDaysService: _fitDaysService,
-                       ),
-                     ),
-                   );
-                 }
-              }
+              deviceToNavigate = _connectedDevice;
               break;
             case 'disconnected':
               _connectedDevice = null;
-              // Try to reconnect after a delay
               Future.delayed(const Duration(seconds: 3), () {
-                if (mounted && _boundDevices.isNotEmpty && _connectedDevice == null) {
+                if (mounted &&
+                    _boundDevices.isNotEmpty &&
+                    _connectedDevice == null) {
                   _connectDevice(_boundDevices[boundDeviceIndex]);
                 }
               });
@@ -162,38 +123,57 @@ class _DevicesScreenState extends State<DevicesScreen> {
           }
         }
       });
+
+      // Navigate after setState so we're not calling Navigator inside a build
+      if (deviceToNavigate != null && mounted) {
+        if (deviceToNavigate!.deviceType == DeviceType.kitchenScale) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => KitchenScaleScreen(
+                connectedDevice: deviceToNavigate!,
+                fitDaysService: _fitDaysService,
+              ),
+            ),
+          );
+        } else {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => MeasurementScreen(
+                connectedDevice: deviceToNavigate!,
+                fitDaysService: _fitDaysService,
+              ),
+            ),
+          );
+        }
+      }
     });
 
-    // Listen for weight data
-    _fitDaysService.weightDataStream.listen((measurement) async {
+    _weightDataSub = _fitDaysService.weightDataStream.listen((measurement) async {
       _addLog('Weight: ${measurement.weight} ${measurement.unit}');
-      print('Weight data received: ${measurement.weight} ${measurement.unit}, Stabilized: ${measurement.isStabilized}');
-      
+      debugPrint('Weight data received: ${measurement.weight} ${measurement.unit}, Stabilized: ${measurement.isStabilized}');
+
       setState(() {
         _latestMeasurement = measurement;
       });
-      
-      // Persist stabilized data or any data if user wants "previous reading"
-      // Usually we only save stabilized data for history, but for "current state" per user request
-      // we might want the last valid reading.
-      // Let's save it if it has body composition (means it's a complete reading) OR if it is stabilized.
+
       if (measurement.isStabilized) {
         final prefs = await SharedPreferences.getInstance();
         prefs.setString('last_measurement', jsonEncode(measurement.toMap()));
       }
     });
 
-    // Listen for scanning state
-    _fitDaysService.scanningStream.listen((isScanning) {
+    _scanningSub = _fitDaysService.scanningStream.listen((isScanning) {
       _addLog('Scanning: $isScanning');
-      print('Scanning state: $isScanning');
+      debugPrint('Scanning state: $isScanning');
       setState(() {
         _isScanning = isScanning;
       });
     });
 
-    // Listen for errors
-    _fitDaysService.errorStream.listen((error) {
+    _errorSub = _fitDaysService.errorStream.listen((error) {
+      if (!mounted) return;
       setState(() {
         _errorMessage = error;
       });
@@ -205,12 +185,24 @@ class _DevicesScreenState extends State<DevicesScreen> {
       );
     });
 
-    // Listen for debug logs from native
+    _bluetoothSub = _fitDaysService.bluetoothStateStream.listen((isOn) {
+      if (!mounted) return;
+      setState(() => _isBluetoothOn = isOn);
+      if (!isOn && !_bluetoothDialogShown) {
+        _bluetoothDialogShown = true;
+        _showBluetoothOffSheet();
+      } else if (isOn) {
+        _bluetoothDialogShown = false;
+        // Re-initialize the SDK now that BT is on — this is what makes scanning/connecting work
+        _initializeSdkWithProfile();
+      }
+    });
+
     _fitDaysService.methodChannel.setMethodCallHandler((call) async {
-       if (call.method == 'log') {
-         final args = call.arguments as Map<dynamic, dynamic>;
-         _addLog(args['message'] as String);
-       }
+      if (call.method == 'log') {
+        final args = call.arguments as Map<dynamic, dynamic>;
+        _addLog(args['message'] as String);
+      }
     });
   }
 
@@ -250,7 +242,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
             _boundDevices.add(FitDaysDevice.fromMap(deviceMap));
           }
         });
-        print('Loaded ${_boundDevices.length} bound devices');
+        debugPrint('Loaded ${_boundDevices.length} bound devices');
         
         // Auto-connect to first device if available
         if (_boundDevices.isNotEmpty) {
@@ -261,7 +253,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
           });
         }
       } catch (e) {
-        print('Error loading bound devices, clearing data: $e');
+        debugPrint('Error loading bound devices, clearing data: $e');
         await prefs.remove('bound_devices');
       }
     }
@@ -302,7 +294,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
     final devicesList = _boundDevices.map((d) => d.toMap()).toList();
     final jsonStr = jsonEncode(devicesList);
     await prefs.setString('bound_devices', jsonStr);
-    print('Saved ${_boundDevices.length} bound devices');
+    debugPrint('Saved ${_boundDevices.length} bound devices');
     
     // Connect to the newly bound device
     _connectDevice(device);
@@ -361,6 +353,12 @@ class _DevicesScreenState extends State<DevicesScreen> {
 
   @override
   void dispose() {
+    _deviceFoundSub?.cancel();
+    _connectionSub?.cancel();
+    _weightDataSub?.cancel();
+    _scanningSub?.cancel();
+    _errorSub?.cancel();
+    _bluetoothSub?.cancel();
     _fitDaysService.dispose();
     super.dispose();
   }
@@ -368,48 +366,68 @@ class _DevicesScreenState extends State<DevicesScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppTheme.bg,
       appBar: AppBar(
-        title: const Text('My Health', style: TextStyle(color: Colors.black)),
-        backgroundColor: Colors.white,
+        title: const Text('My Devices'),
+        backgroundColor: AppTheme.bg,
+        surfaceTintColor: Colors.transparent,
         elevation: 0,
         actions: [
           if (_boundDevices.isNotEmpty)
             IconButton(
-              icon: const Icon(Icons.settings, color: Colors.grey),
+              icon: const Icon(Icons.tune_rounded, color: AppTheme.textSecondary),
               onPressed: () {
-                 // Option to manage devices
-                 showModalBottomSheet(context: context, builder: (ctx) {
-                   return Container(
-                     padding: const EdgeInsets.all(16),
-                     child: Column(
-                       mainAxisSize: MainAxisSize.min,
-                       crossAxisAlignment: CrossAxisAlignment.start,
-                       children: [
-                         const Text('Manage Devices', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                         const SizedBox(height: 16),
-                         ..._boundDevices.map((device) => ListTile(
-                           leading: Icon(_getDeviceIcon(device.deviceType)),
-                           title: Text(_getDeviceTypeName(device.deviceType)),
-                           subtitle: Text(device.name),
-                           trailing: IconButton(
-                             icon: const Icon(Icons.delete, color: Colors.red),
-                             onPressed: () {
-                               Navigator.pop(ctx);
-                               _unbindDevice(device);
-                             },
-                           ),
-                         )).toList(),
-                         const SizedBox(height: 8),
-                         ListTile(
-                           leading: const Icon(Icons.close),
-                           title: const Text('Cancel'),
-                           onTap: () => Navigator.pop(ctx),
-                         ),
-                       ],
-                     ),
-                   );
-                 });
+                showModalBottomSheet(
+                  context: context,
+                  backgroundColor: AppTheme.surface1,
+                  shape: const RoundedRectangleBorder(
+                    borderRadius: BorderRadius.vertical(
+                        top: Radius.circular(AppTheme.radiusXxl)),
+                  ),
+                  builder: (ctx) => Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Center(
+                        child: Container(
+                          margin: const EdgeInsets.only(top: 12),
+                          width: 40, height: 4,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+                        child: Text('Manage Devices', style: AppTheme.headingSM),
+                      ),
+                      ..._boundDevices.map((device) => ListTile(
+                        leading: Container(
+                          width: 36, height: 36,
+                          decoration: BoxDecoration(
+                            color: AppTheme.purple.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(_getDeviceIcon(device.deviceType),
+                              color: AppTheme.purple, size: 20),
+                        ),
+                        title: Text(_getDeviceTypeName(device.deviceType),
+                            style: AppTheme.headingSM.copyWith(fontSize: 14)),
+                        subtitle: Text(device.name, style: AppTheme.bodySM),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.delete_outline_rounded,
+                              color: AppTheme.error),
+                          onPressed: () {
+                            Navigator.pop(ctx);
+                            _unbindDevice(device);
+                          },
+                        ),
+                      )),
+                      const SizedBox(height: 16),
+                    ],
+                  ),
+                );
               },
             ),
         ],
@@ -422,42 +440,79 @@ class _DevicesScreenState extends State<DevicesScreen> {
     );
   }
 
+  void _showBluetoothOffSheet() {
+    showModalBottomSheet(
+      context: context,
+      isDismissible: true,
+      enableDrag: true,
+      backgroundColor: Colors.transparent,
+      routeSettings: const RouteSettings(name: 'bluetooth_off_sheet'),
+      builder: (_) => _BluetoothOffSheet(
+        onDismiss: () {
+          _bluetoothDialogShown = false;
+          Navigator.pop(context);
+        },
+        bluetoothStateStream: _fitDaysService.bluetoothStateStream,
+      ),
+    ).then((_) {
+      _bluetoothDialogShown = false;
+    });
+  }
+
   Widget _buildEmptyState() {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-             padding: const EdgeInsets.all(24),
-             decoration: BoxDecoration(
-               color: AppTheme.primaryColor.withOpacity(0.1),
-               shape: BoxShape.circle,
-             ),
-             child: const Icon(Icons.add_circle_outline, size: 64, color: AppTheme.primaryColor),
-          ),
-          const SizedBox(height: 24),
-          const Text(
-            'No Device Added',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Add a smart scale to track your health.',
-            style: TextStyle(color: Colors.grey),
-          ),
-          const SizedBox(height: 32),
-          ElevatedButton(
-            onPressed: _showDeviceScanner,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.primaryColor,
-              padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 16),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 100, height: 100,
+              decoration: BoxDecoration(
+                color: AppTheme.lime.withOpacity(0.1),
+                shape: BoxShape.circle,
+                border: Border.all(
+                    color: AppTheme.lime.withOpacity(0.25), width: 1.5),
+              ),
+              child: const Icon(Icons.monitor_weight_outlined,
+                  size: 48, color: AppTheme.lime),
             ),
-            child: const Text('Add Device', style: TextStyle(fontSize: 16)),
-          ),
-          const SizedBox(height: 48),
-          _buildDebugLog(), // Keep debug log accessible
-        ],
+            const SizedBox(height: 24),
+            Text('No device added', style: AppTheme.headingMD),
+            const SizedBox(height: 8),
+            Text(
+              'Connect your FitDays smart scale to track\nbody composition and weight.',
+              style: AppTheme.bodyMD,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 36),
+            GestureDetector(
+              onTap: _showDeviceScanner,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 40, vertical: 16),
+                decoration: BoxDecoration(
+                  color: AppTheme.lime,
+                  borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppTheme.lime.withOpacity(0.3),
+                      blurRadius: 20,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: const Text('Add Device',
+                    style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.black)),
+              ),
+            ),
+            const SizedBox(height: 48),
+            _buildDebugLog(),
+          ],
+        ),
       ),
     );
   }
@@ -467,9 +522,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+      backgroundColor: Colors.transparent,
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModalState) {
@@ -479,87 +532,133 @@ class _DevicesScreenState extends State<DevicesScreen> {
               maxChildSize: 0.9,
               expand: false,
               builder: (context, scrollController) {
-                return Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Row(
-                        children: [
-                          const Text(
-                            'Select Device',
-                            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                return Container(
+                  decoration: const BoxDecoration(
+                    color: AppTheme.surface1,
+                    borderRadius: BorderRadius.vertical(
+                        top: Radius.circular(AppTheme.radiusXxl)),
+                  ),
+                  child: Column(
+                    children: [
+                      Center(
+                        child: Container(
+                          margin: const EdgeInsets.only(top: 12),
+                          width: 40, height: 4,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(2),
                           ),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+                        child: Row(children: [
+                          Text('Nearby Devices', style: AppTheme.headingSM),
                           const Spacer(),
                           if (_isScanning)
                             const SizedBox(
-                              width: 20, 
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
+                              width: 18, height: 18,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: AppTheme.lime),
                             ),
-                        ],
+                        ]),
                       ),
-                    ),
-                    const Divider(),
-                    Expanded(
-                      child: StreamBuilder<FitDaysDevice>(
-                        stream: _fitDaysService.deviceFoundStream,
-                        builder: (context, snapshot) {
-                          // Note: The main screen state handles the list, 
-                          // but since we are in a modal, we might need to rely on 
-                          // the parent state's _discoveredDevices which is updated by the stream listener 
-                          // in the parent widget.
-                          // However, StatefulBuilder doesn't auto-rebuild when parent state changes 
-                          // unless we pass data down. 
-                          // Actually, simply using the parent's `_discoveredDevices` directly works 
-                          // IF we call `setModalState` when new devices arrive.
-                          // But our stream listener calls `setState` on the parent. 
-                          // Let's use a ValueListenable or just listen to the list length if we could.
-                          // Simplest approach: Use the list we have. 
-                          // Since parent setState usually rebuilds the tree, 
-                          // it might NOT rebuild the modal contents if they are an overlay.
-                          // Ideally we should move scanning logic here or use a Provider.
-                          // For now, let's rely on standard ListView building from _discoveredDevices
-                          // If it doesn't update, we'll need to wrap this in a listenable.
-                          
-                          return ListView.builder(
-                            controller: scrollController,
-                            itemCount: _discoveredDevices.length,
-                            itemBuilder: (context, index) {
-                              final device = _discoveredDevices[index];
-                              final deviceIcon = _getDeviceIcon(device.deviceType);
-                              final deviceTypeName = _getDeviceTypeName(device.deviceType);
-                              
-                              return ListTile(
-                                leading: Icon(deviceIcon, color: AppTheme.primaryColor),
-                                title: Text(deviceTypeName),
-                                subtitle: Text('${device.name}\n${device.macAddress}'),
-                                isThreeLine: true,
-                                trailing: ElevatedButton(
-                                  onPressed: () {
-                                    _bindDevice(device);
-                                    Navigator.pop(context);
-                                  },
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: AppTheme.primaryColor,
-                                  ),
-                                  child: const Text('Add'),
+                      Divider(height: 1,
+                          color: Colors.white.withOpacity(0.06)),
+                      Expanded(
+                        child: StreamBuilder<FitDaysDevice>(
+                          stream: _fitDaysService.deviceFoundStream,
+                          builder: (context, snapshot) {
+                            if (_discoveredDevices.isEmpty) {
+                              return Center(
+                                child: Column(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.center,
+                                  children: [
+                                    const SizedBox(
+                                      width: 32, height: 32,
+                                      child: CircularProgressIndicator(
+                                          color: AppTheme.lime,
+                                          strokeWidth: 2),
+                                    ),
+                                    const SizedBox(height: 16),
+                                    Text('Scanning for devices…',
+                                        style: AppTheme.bodyMD),
+                                  ],
                                 ),
                               );
-                            },
-                          );
-                        }
+                            }
+                            return ListView.separated(
+                              controller: scrollController,
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 8),
+                              itemCount: _discoveredDevices.length,
+                              separatorBuilder: (_, __) => Divider(
+                                  height: 1,
+                                  color: Colors.white.withOpacity(0.04),
+                                  indent: 72),
+                              itemBuilder: (context, index) {
+                                final device = _discoveredDevices[index];
+                                return ListTile(
+                                  contentPadding:
+                                      const EdgeInsets.symmetric(
+                                          horizontal: 20, vertical: 6),
+                                  leading: Container(
+                                    width: 44, height: 44,
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.lime.withOpacity(0.12),
+                                      borderRadius:
+                                          BorderRadius.circular(12),
+                                    ),
+                                    child: Icon(
+                                        _getDeviceIcon(device.deviceType),
+                                        color: AppTheme.lime, size: 22),
+                                  ),
+                                  title: Text(
+                                    _getDeviceTypeName(device.deviceType),
+                                    style: AppTheme.headingSM
+                                        .copyWith(fontSize: 14),
+                                  ),
+                                  subtitle: Text(
+                                    '${device.name} · ${device.macAddress}',
+                                    style: AppTheme.bodySM,
+                                  ),
+                                  trailing: GestureDetector(
+                                    onTap: () {
+                                      _bindDevice(device);
+                                      Navigator.pop(context);
+                                    },
+                                    child: Container(
+                                      padding:
+                                          const EdgeInsets.symmetric(
+                                              horizontal: 16, vertical: 8),
+                                      decoration: BoxDecoration(
+                                        color: AppTheme.lime,
+                                        borderRadius: BorderRadius.circular(
+                                            AppTheme.radiusPill),
+                                      ),
+                                      child: const Text('Add',
+                                          style: TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w900,
+                                              color: Colors.black)),
+                                    ),
+                                  ),
+                                );
+                              },
+                            );
+                          },
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 );
               },
             );
           },
         );
       },
-    ).whenComplete(() {
-      _stopScan();
-    });
+    ).whenComplete(_stopScan);
   }
 
   Widget _buildBoundDeviceCard() {
@@ -569,23 +668,30 @@ class _DevicesScreenState extends State<DevicesScreen> {
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              // Show ALL bound devices
-              ..._boundDevices.map((device) => _buildDeviceCard(device)).toList(),
+              ..._boundDevices.map(_buildDeviceCard),
             ],
           ),
         ),
         Padding(
-          padding: const EdgeInsets.all(16),
-          child: SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: _showDeviceScanner,
-              icon: const Icon(Icons.add),
-              label: const Text('Add Device'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primaryColor,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+          child: GestureDetector(
+            onTap: _showDeviceScanner,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              decoration: BoxDecoration(
+                color: AppTheme.surface2,
+                borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                border: Border.all(color: Colors.white.withOpacity(0.08)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.add_rounded,
+                      color: AppTheme.textSecondary, size: 20),
+                  const SizedBox(width: 8),
+                  Text('Add another device', style: AppTheme.labelLG),
+                ],
               ),
             ),
           ),
@@ -596,105 +702,98 @@ class _DevicesScreenState extends State<DevicesScreen> {
 
   Widget _buildDeviceCard(FitDaysDevice device) {
     final isConnected = _connectedDevice?.macAddress == device.macAddress;
-    final deviceIcon = _getDeviceIcon(device.deviceType);
-    final deviceTypeName = _getDeviceTypeName(device.deviceType);
-    
-    return Card(
-      elevation: 2,
-      margin: const EdgeInsets.only(bottom: 16),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: InkWell(
-        onTap: () {
-          // Special handling for Kitchen Scale: Always open screen
-          if (device.deviceType == DeviceType.kitchenScale) {
-            if (!isConnected) {
-              _connectDevice(device);
-            }
-            
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => KitchenScaleScreen(
-                  connectedDevice: device,
-                  fitDaysService: _fitDaysService,
-                ),
-              ),
-            );
-          } else {
-            // Other devices: Connect if needed, but ALWAYS navigate to support offline mode
-            if (!isConnected) {
-              _connectDevice(device);
-            }
-            // Navigate immediately to allow offline access
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => MeasurementScreen(
-                  connectedDevice: device,
-                  fitDaysService: _fitDaysService,
-                ),
-              ),
-            );
-          }
-        },
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppTheme.primaryColor.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(deviceIcon, size: 32, color: AppTheme.primaryColor),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      deviceTypeName,
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      device.name,
-                      style: const TextStyle(color: Colors.grey, fontSize: 14),
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            color: isConnected ? Colors.green : Colors.grey,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          isConnected ? 'Connected' : 'Disconnected',
-                          style: TextStyle(
-                            color: isConnected ? Colors.green : Colors.grey,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              Icon(
-                Icons.chevron_right,
-                color: Colors.grey[400],
-              ),
-            ],
+
+    void onTap() {
+      if (device.deviceType == DeviceType.kitchenScale) {
+        if (!isConnected) _connectDevice(device);
+        Navigator.push(context, MaterialPageRoute(
+          builder: (_) => KitchenScaleScreen(
+            connectedDevice: device, fitDaysService: _fitDaysService),
+        ));
+      } else {
+        if (!isConnected) _connectDevice(device);
+        Navigator.push(context, MaterialPageRoute(
+          builder: (_) => MeasurementScreen(
+            connectedDevice: device, fitDaysService: _fitDaysService),
+        ));
+      }
+    }
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppTheme.surface1,
+          borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+          border: Border.all(
+            color: isConnected
+                ? AppTheme.lime.withOpacity(0.3)
+                : Colors.white.withOpacity(0.07),
           ),
         ),
+        child: Row(children: [
+          // Device icon
+          Container(
+            width: 52, height: 52,
+            decoration: BoxDecoration(
+              color: isConnected
+                  ? AppTheme.lime.withOpacity(0.12)
+                  : AppTheme.purple.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(
+              _getDeviceIcon(device.deviceType),
+              size: 26,
+              color: isConnected ? AppTheme.lime : AppTheme.purple,
+            ),
+          ),
+          const SizedBox(width: 14),
+          // Info
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(_getDeviceTypeName(device.deviceType),
+                    style: AppTheme.headingSM),
+                const SizedBox(height: 3),
+                Text(device.name,
+                    style: AppTheme.bodyMD),
+                const SizedBox(height: 6),
+                Row(children: [
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 300),
+                    width: 7, height: 7,
+                    decoration: BoxDecoration(
+                      color: isConnected ? AppTheme.lime : AppTheme.textTertiary,
+                      shape: BoxShape.circle,
+                      boxShadow: isConnected
+                          ? [BoxShadow(
+                                color: AppTheme.lime.withOpacity(0.6),
+                                blurRadius: 6)]
+                          : [],
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    isConnected ? 'Connected' : 'Tap to connect',
+                    style: AppTheme.bodySM.copyWith(
+                      color: isConnected
+                          ? AppTheme.lime
+                          : AppTheme.textTertiary,
+                      fontWeight: isConnected
+                          ? FontWeight.w700
+                          : FontWeight.w400,
+                    ),
+                  ),
+                ]),
+              ],
+            ),
+          ),
+          Icon(Icons.chevron_right_rounded,
+              color: AppTheme.textTertiary, size: 20),
+        ]),
       ),
     );
   }
@@ -779,43 +878,52 @@ class _DevicesScreenState extends State<DevicesScreen> {
   Widget _buildPermissionRequest() {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(24.0),
+        padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
-              Icons.bluetooth_disabled,
-              size: 80,
-              color: AppTheme.primaryColor,
+            Container(
+              width: 96, height: 96,
+              decoration: BoxDecoration(
+                color: Colors.blue.withOpacity(0.1),
+                shape: BoxShape.circle,
+                border: Border.all(
+                    color: Colors.blue.withOpacity(0.25), width: 1.5),
+              ),
+              child: const Icon(Icons.bluetooth_disabled_rounded,
+                  size: 44, color: Colors.blueAccent),
             ),
             const SizedBox(height: 24),
-            const Text(
-              'Bluetooth Permissions Required',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
+            Text('Bluetooth access needed',
+                style: AppTheme.headingMD, textAlign: TextAlign.center),
+            const SizedBox(height: 12),
+            Text(
+              'EleFit needs Bluetooth permission to scan and connect to your smart scale.',
               textAlign: TextAlign.center,
+              style: AppTheme.bodyMD.copyWith(height: 1.6),
             ),
-            const SizedBox(height: 16),
-            const Text(
-              'This app needs Bluetooth permissions to scan and connect to weight devices.',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 16),
-            ),
-            const SizedBox(height: 32),
-            ElevatedButton(
-              onPressed: _requestPermissions,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primaryColor,
+            const SizedBox(height: 36),
+            GestureDetector(
+              onTap: _requestPermissions,
+              child: Container(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 32,
-                  vertical: 16,
+                    horizontal: 40, vertical: 16),
+                decoration: BoxDecoration(
+                  color: AppTheme.lime,
+                  borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppTheme.lime.withOpacity(0.3),
+                      blurRadius: 20,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
                 ),
-              ),
-              child: const Text(
-                'Grant Permissions',
-                style: TextStyle(fontSize: 16),
+                child: const Text('Grant Permission',
+                    style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.black)),
               ),
             ),
           ],
@@ -835,9 +943,8 @@ class _DevicesScreenState extends State<DevicesScreen> {
       ),
       child: ListView.builder(
         itemCount: _debugLogs.length,
-        reverse: true, // Show new logs at bottom/start
+        reverse: true,
         itemBuilder: (context, index) {
-          // Reverse index for display
           final log = _debugLogs[_debugLogs.length - 1 - index];
           return Text(
             log,
@@ -845,7 +952,128 @@ class _DevicesScreenState extends State<DevicesScreen> {
           );
         },
       ),
+    );
+  }
+}
 
+class _BluetoothOffSheet extends StatefulWidget {
+  final VoidCallback onDismiss;
+  final Stream<bool> bluetoothStateStream;
+
+  const _BluetoothOffSheet({
+    required this.onDismiss,
+    required this.bluetoothStateStream,
+  });
+
+  @override
+  State<_BluetoothOffSheet> createState() => _BluetoothOffSheetState();
+}
+
+class _BluetoothOffSheetState extends State<_BluetoothOffSheet> {
+  StreamSubscription? _sub;
+
+  @override
+  void initState() {
+    super.initState();
+    // Auto-dismiss when BT turns on
+    _sub = widget.bluetoothStateStream.listen((isOn) {
+      if (isOn && mounted) Navigator.pop(context);
+    });
+  }
+
+  @override
+  void dispose() {
+    _sub?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Container(
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
+      decoration: const BoxDecoration(
+        color: Color(0xFF111111),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Center(
+            child: Container(
+              width: 40, height: 4,
+              decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(2)),
+            ),
+          ),
+          const SizedBox(height: 28),
+          Container(
+            width: 88, height: 88,
+            decoration: BoxDecoration(
+              color: Colors.blue.withOpacity(0.12),
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.blue.withOpacity(0.25), width: 1.5),
+            ),
+            child: const Icon(Icons.bluetooth_disabled, size: 44, color: Colors.blueAccent),
+          ),
+          const SizedBox(height: 24),
+          const Text(
+            'Bluetooth is Off',
+            style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Please enable Bluetooth to scan and\nconnect to your smart devices.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 14, height: 1.5),
+          ),
+          const SizedBox(height: 28),
+          // Instruction card
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1A1A1A),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.white10),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 48, height: 48,
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Icon(Icons.bluetooth, color: Colors.blueAccent, size: 26),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(
+                    'Go to Settings → Bluetooth\nand toggle it on, then return here.',
+                    style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 13, height: 1.5),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          // Waiting indicator
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 1.5, color: Colors.blueAccent)),
+              const SizedBox(width: 10),
+              Text('Waiting for Bluetooth...', style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 12)),
+            ],
+          ),
+          const SizedBox(height: 16),
+          TextButton(
+            onPressed: widget.onDismiss,
+            child: Text('Dismiss', style: TextStyle(color: Colors.white.withOpacity(0.35), fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    ),
     );
   }
 }

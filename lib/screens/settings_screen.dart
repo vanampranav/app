@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../services/shopify_service.dart';
+import '../services/health_service.dart';
+import 'add_member_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({Key? key}) : super(key: key);
@@ -14,6 +17,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _notificationsEnabled = true;
   bool _emailMarketing = false;
   String? _userEmail;
+  bool _healthConnected = false;
+  bool _healthLoading   = false;
 
   @override
   void initState() {
@@ -22,12 +27,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _loadSettings() async {
+    const secureStorage = FlutterSecureStorage();
     final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _userEmail = prefs.getString('user_email');
-      _notificationsEnabled = prefs.getBool('notifications_enabled') ?? true;
-      _emailMarketing = prefs.getBool('email_marketing') ?? false;
-    });
+    final email = await secureStorage.read(key: 'user_email');
+    final healthConnected = await HealthService().isConnected;
+    if (mounted) {
+      setState(() {
+        _userEmail = email;
+        _notificationsEnabled = prefs.getBool('notifications_enabled') ?? true;
+        _emailMarketing = prefs.getBool('email_marketing') ?? false;
+        _healthConnected = healthConnected;
+      });
+    }
+  }
+
+  Future<void> _toggleHealthConnection() async {
+    setState(() => _healthLoading = true);
+    if (_healthConnected) {
+      await HealthService().disconnect();
+      setState(() { _healthConnected = false; _healthLoading = false; });
+    } else {
+      final granted = await HealthService().requestPermissions();
+      setState(() { _healthConnected = granted; _healthLoading = false; });
+      if (!granted && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: const Text(
+            'Health Connect requires the app to be published on Google Play. '
+            'You can test it on the emulator (Android 14+).',
+          ),
+        ));
+      }
+    }
   }
 
   Future<void> _saveSettings() async {
@@ -183,12 +213,128 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Settings'),
-        backgroundColor: AppTheme.primaryColor,
-        foregroundColor: Colors.white,
+        backgroundColor: AppTheme.bg,
+        foregroundColor: AppTheme.textPrimary,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          // ── Members ──────────────────────────────────────────────────────
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Members',
+                      style: TextStyle(
+                          fontFamily: 'Helvetica',
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Manage profiles for body composition tracking.',
+                    style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                  ),
+                  const SizedBox(height: 12),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Container(
+                      width: 44, height: 44,
+                      decoration: BoxDecoration(
+                        color: AppTheme.purple.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(Icons.people_outline_rounded,
+                          color: AppTheme.purple, size: 22),
+                    ),
+                    title: const Text('Manage Members'),
+                    subtitle: const Text('Add or edit scale profiles'),
+                    trailing: const Icon(Icons.chevron_right_rounded,
+                        color: AppTheme.textTertiary),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const AddMemberScreen()),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // ── Connected Apps ────────────────────────────────────────────────
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Connected Apps',
+                      style: TextStyle(
+                          fontFamily: 'Helvetica',
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Sync your data with your device\'s health platform.',
+                    style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                  ),
+                  const SizedBox(height: 16),
+                  // Apple Health / Health Connect tile
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Container(
+                      width: 44, height: 44,
+                      decoration: BoxDecoration(
+                        color: _healthConnected
+                            ? AppTheme.lime.withOpacity(0.12)
+                            : AppTheme.surface3,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(Icons.favorite_outlined,
+                          color: _healthConnected
+                              ? AppTheme.lime
+                              : AppTheme.textTertiary,
+                          size: 22),
+                    ),
+                    title: const Text('Apple Health / Health Connect'),
+                    subtitle: Text(
+                      _healthConnected
+                          ? 'Connected · syncing weight & nutrition'
+                          : 'Not connected',
+                      style: TextStyle(
+                          color: _healthConnected
+                              ? AppTheme.lime
+                              : Colors.grey[500],
+                          fontSize: 12),
+                    ),
+                    trailing: _healthLoading
+                        ? const SizedBox(
+                            width: 24, height: 24,
+                            child: CircularProgressIndicator(
+                                color: AppTheme.lime, strokeWidth: 2))
+                        : TextButton(
+                            onPressed: _toggleHealthConnection,
+                            style: TextButton.styleFrom(
+                              foregroundColor: _healthConnected
+                                  ? Colors.red
+                                  : AppTheme.lime,
+                            ),
+                            child: Text(_healthConnected
+                                ? 'Disconnect'
+                                : 'Connect'),
+                          ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
           // Notifications Section
           Card(
             child: Padding(

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../services/shopify_service.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:intl/intl.dart';
 import '../theme/app_theme.dart';
 
@@ -12,7 +13,6 @@ class OrdersScreen extends StatefulWidget {
 }
 
 class _OrdersScreenState extends State<OrdersScreen> {
-  final ShopifyService _shopifyService = ShopifyService();
   List<dynamic> _orders = [];
   bool _isLoading = true;
   String? _errorMessage;
@@ -25,8 +25,8 @@ class _OrdersScreenState extends State<OrdersScreen> {
 
   Future<void> _fetchOrders() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final accessToken = prefs.getString('auth_token');
+      const _secureStorage = FlutterSecureStorage();
+      final accessToken = await _secureStorage.read(key: 'auth_token');
       if (accessToken == null) {
         setState(() {
           _isLoading = false;
@@ -35,7 +35,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
         return;
       }
 
-      final result = await _shopifyService.getCustomerOrders(accessToken: accessToken);
+      final result = await context.read<ShopifyService>().getCustomerOrders(accessToken: accessToken);
       if (result == null || result['customer'] == null) {
         setState(() {
           _isLoading = false;

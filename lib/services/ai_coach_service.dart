@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/ai_coach_models.dart';
+import 'package:flutter/foundation.dart';
 import 'ai_coach_parser.dart';
 
 class AiCoachTarget {
@@ -99,11 +100,11 @@ class AiCoachService {
         weeklyMeals = AiCoachParser.parseMealPlan(mealText);
         // Verify parser produced unique days; if not, use varied fallback
         if (weeklyMeals.every((d) => d.mealsByTime.isEmpty)) {
-          print('[AI Coach] Parser returned empty days, falling back to templates');
+          debugPrint('[AI Coach] Parser returned empty days, falling back to templates');
           weeklyMeals = _fallbackMeals(target.dailyCalories);
         }
       } catch (e) {
-        print('[AI Coach] Meal plan API failed: $e');
+        debugPrint('[AI Coach] Meal plan API failed: $e');
         weeklyMeals = _fallbackMeals(target.dailyCalories);
       }
     } else {
@@ -123,11 +124,11 @@ class AiCoachService {
         });
         weeklyWorkouts = AiCoachParser.parseWorkoutPlan(workoutText);
         if (weeklyWorkouts.every((d) => d.isRestDay)) {
-          print('[AI Coach] Parser returned all rest days, falling back to templates');
+          debugPrint('[AI Coach] Parser returned all rest days, falling back to templates');
           weeklyWorkouts = _fallbackWorkouts(preferences.workoutDays);
         }
       } catch (e) {
-        print('[AI Coach] Workout plan API failed: $e');
+        debugPrint('[AI Coach] Workout plan API failed: $e');
         weeklyWorkouts = _fallbackWorkouts(preferences.workoutDays);
       }
     } else {
@@ -152,18 +153,18 @@ class AiCoachService {
     request.headers['X-API-Key'] = 'elefit_flutter_secure_key_2025'; // Matches backend EC2 config
     request.body = jsonEncode(body);
 
-    print('[AI Coach] POST $url');
+    debugPrint('[AI Coach] POST $url');
     final streamedResponse = await http.Client().send(request);
-    print('[AI Coach] Response status: ${streamedResponse.statusCode}');
+    debugPrint('[AI Coach] Response status: ${streamedResponse.statusCode}');
 
     if (streamedResponse.statusCode != 200) {
       final errorBody = await streamedResponse.stream.bytesToString();
-      print('[AI Coach] Error body: $errorBody');
+      debugPrint('[AI Coach] Error body: $errorBody');
       throw Exception('API error ${streamedResponse.statusCode}: $errorBody');
     }
 
     final fullText = await streamedResponse.stream.bytesToString();
-    print('[AI Coach] Response length: ${fullText.length} chars, preview: ${fullText.substring(0, fullText.length > 200 ? 200 : fullText.length)}');
+    debugPrint('[AI Coach] Response length: ${fullText.length} chars, preview: ${fullText.substring(0, fullText.length > 200 ? 200 : fullText.length)}');
     return fullText;
   }
 

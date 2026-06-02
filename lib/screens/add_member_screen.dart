@@ -5,7 +5,7 @@ import '../services/member_service.dart';
 import '../theme/app_theme.dart';
 
 class AddMemberScreen extends StatefulWidget {
-  final Member? existingMember; // For editing existing member
+  final Member? existingMember;
 
   const AddMemberScreen({Key? key, this.existingMember}) : super(key: key);
 
@@ -16,8 +16,8 @@ class AddMemberScreen extends StatefulWidget {
 class _AddMemberScreenState extends State<AddMemberScreen> {
   final _nicknameController = TextEditingController();
   final _memberService = MemberService();
-  
-  Gender _selectedGender = Gender.male;
+
+  Gender _selectedGender   = Gender.male;
   DateTime? _selectedBirthdate;
   int? _selectedHeight;
   UserType _selectedUserType = UserType.standard;
@@ -30,10 +30,10 @@ class _AddMemberScreenState extends State<AddMemberScreen> {
     super.initState();
     if (widget.existingMember != null) {
       _nicknameController.text = widget.existingMember!.nickname;
-      _selectedGender = widget.existingMember!.gender;
-      _selectedBirthdate = widget.existingMember!.birthdate;
-      _selectedHeight = widget.existingMember!.heightCm;
-      _selectedUserType = widget.existingMember!.userType;
+      _selectedGender     = widget.existingMember!.gender;
+      _selectedBirthdate  = widget.existingMember!.birthdate;
+      _selectedHeight     = widget.existingMember!.heightCm;
+      _selectedUserType   = widget.existingMember!.userType;
     }
   }
 
@@ -43,162 +43,136 @@ class _AddMemberScreenState extends State<AddMemberScreen> {
     super.dispose();
   }
 
-  bool get _canSave {
-    return _nicknameController.text.trim().isNotEmpty &&
-        _selectedBirthdate != null &&
-        _selectedHeight != null;
-  }
+  bool get _canSave =>
+      _nicknameController.text.trim().isNotEmpty &&
+      _selectedBirthdate != null &&
+      _selectedHeight != null;
 
   Future<void> _saveMember() async {
     if (!_canSave) return;
-    
     setState(() => _isLoading = true);
-    
     try {
       final member = Member(
         id: widget.existingMember?.id ?? MemberService.generateId(),
-        nickname: _nicknameController.text.trim(),
-        gender: _selectedGender,
-        birthdate: _selectedBirthdate!,
-        heightCm: _selectedHeight!,
-        userType: _selectedUserType,
-        createdAt: widget.existingMember?.createdAt,
+        nickname:   _nicknameController.text.trim(),
+        gender:     _selectedGender,
+        birthdate:  _selectedBirthdate!,
+        heightCm:   _selectedHeight!,
+        userType:   _selectedUserType,
+        createdAt:  widget.existingMember?.createdAt,
       );
-      
       if (isEditing) {
         await _memberService.updateMember(member);
       } else {
         await _memberService.addMember(member);
       }
-      
-      if (mounted) {
-        Navigator.pop(context, member);
-      }
+      if (mounted) Navigator.pop(context, member);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error saving member: $e')),
+          SnackBar(
+            content: Text('Error saving member: $e'),
+            backgroundColor: AppTheme.error,
+          ),
         );
       }
     } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
+  // ── Pickers ─────────────────────────────────────────────────────────────
+
   void _showBirthdatePicker() {
     final now = DateTime.now();
-    final initialDate = _selectedBirthdate ?? DateTime(now.year - 25, 1, 1);
-    
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => SizedBox(
-        height: 300,
-        child: Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                border: Border(bottom: BorderSide(color: Colors.grey[200]!)),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-                  ),
-                  const Text('Birthdate', style: TextStyle(fontWeight: FontWeight.w600)),
-                  TextButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                    },
-                    child: Text('Done', style: TextStyle(color: AppTheme.primaryColor)),
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: CupertinoDatePicker(
-                mode: CupertinoDatePickerMode.date,
-                initialDateTime: initialDate,
-                minimumYear: 1920,
-                maximumYear: now.year,
-                onDateTimeChanged: (date) {
-                  setState(() => _selectedBirthdate = date);
-                },
-              ),
-            ),
-          ],
-        ),
+    DateTime tempDate = _selectedBirthdate ?? DateTime(now.year - 25, 1, 1);
+    _showPickerSheet(
+      title: 'Birthdate',
+      onDone: () => setState(() => _selectedBirthdate = tempDate),
+      child: CupertinoDatePicker(
+        mode: CupertinoDatePickerMode.date,
+        initialDateTime: tempDate,
+        minimumYear: 1920,
+        maximumYear: now.year,
+        onDateTimeChanged: (d) => tempDate = d,
       ),
     );
   }
 
   void _showHeightPicker() {
-    final initialHeight = _selectedHeight ?? 170;
-    int tempHeight = initialHeight;
-    
+    final initial = _selectedHeight ?? 170;
+    int tempH = initial;
+    _showPickerSheet(
+      title: 'Height (cm)',
+      onDone: () => setState(() => _selectedHeight = tempH),
+      child: CupertinoPicker(
+        scrollController: FixedExtentScrollController(initialItem: initial - 100),
+        itemExtent: 44,
+        onSelectedItemChanged: (i) => tempH = i + 100,
+        children: List.generate(151, (i) {
+          final h = i + 100;
+          return Center(
+            child: Text('$h cm',
+                style: const TextStyle(
+                    fontSize: 18, color: AppTheme.textPrimary)),
+          );
+        }),
+      ),
+    );
+  }
+
+  void _showPickerSheet({
+    required String title,
+    required VoidCallback onDone,
+    required Widget child,
+  }) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.white,
+      backgroundColor: AppTheme.surface1,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(AppTheme.radiusXxl)),
       ),
-      builder: (context) => SizedBox(
+      builder: (_) => SizedBox(
         height: 300,
-        child: Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Column(children: [
+          // Handle
+          Center(
+            child: Container(
+              margin: const EdgeInsets.only(top: 10),
+              width: 40, height: 4,
               decoration: BoxDecoration(
-                border: Border(bottom: BorderSide(color: Colors.grey[200]!)),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-                  ),
-                  const Text('Height (cm)', style: TextStyle(fontWeight: FontWeight.w600)),
-                  TextButton(
-                    onPressed: () {
-                      setState(() => _selectedHeight = tempHeight);
-                      Navigator.pop(context);
-                    },
-                    child: Text('Done', style: TextStyle(color: AppTheme.primaryColor)),
-                  ),
-                ],
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(2),
               ),
             ),
-            Expanded(
-              child: CupertinoPicker(
-                scrollController: FixedExtentScrollController(
-                  initialItem: initialHeight - 100,
-                ),
-                itemExtent: 40,
-                onSelectedItemChanged: (index) {
-                  tempHeight = index + 100;
+          ),
+          // Header
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            child: Row(children: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('Cancel',
+                    style: AppTheme.labelLG.copyWith(
+                        color: AppTheme.textSecondary)),
+              ),
+              Expanded(
+                  child: Center(
+                      child: Text(title, style: AppTheme.headingSM))),
+              TextButton(
+                onPressed: () {
+                  onDone();
+                  Navigator.pop(context);
                 },
-                children: List.generate(151, (index) {
-                  final height = index + 100;
-                  return Center(
-                    child: Text(
-                      '$height cm',
-                      style: const TextStyle(fontSize: 18),
-                    ),
-                  );
-                }),
+                child: Text('Done',
+                    style: AppTheme.labelLG.copyWith(color: AppTheme.lime)),
               ),
-            ),
-          ],
-        ),
+            ]),
+          ),
+          Divider(height: 1, color: Colors.white.withOpacity(0.06)),
+          Expanded(child: child),
+        ]),
       ),
     );
   }
@@ -206,330 +180,364 @@ class _AddMemberScreenState extends State<AddMemberScreen> {
   void _showUserTypePicker() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.white,
+      backgroundColor: AppTheme.surface1,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(AppTheme.radiusXxl)),
       ),
-      builder: (context) => DraggableScrollableSheet(
+      builder: (_) => DraggableScrollableSheet(
         initialChildSize: 0.6,
         minChildSize: 0.4,
-        maxChildSize: 0.8,
+        maxChildSize: 0.85,
         expand: false,
-        builder: (context, scrollController) => Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(16),
+        builder: (_, scrollCtrl) => Column(children: [
+          Center(
+            child: Container(
+              margin: const EdgeInsets.only(top: 12),
+              width: 40, height: 4,
               decoration: BoxDecoration(
-                border: Border(bottom: BorderSide(color: Colors.grey[200]!)),
-              ),
-              child: const Center(
-                child: Text('User type', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(2),
               ),
             ),
-            Expanded(
-              child: ListView.builder(
-                controller: scrollController,
-                itemCount: UserType.values.length,
-                itemBuilder: (context, index) {
-                  final type = UserType.values[index];
-                  final isSelected = _selectedUserType == type;
-                  return ListTile(
-                    title: Text(
-                      type.displayName,
-                      style: TextStyle(
-                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                        color: isSelected ? AppTheme.primaryColor : Colors.black,
-                      ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+            child: Text('User type', style: AppTheme.headingSM),
+          ),
+          Divider(height: 1, color: Colors.white.withOpacity(0.06)),
+          Expanded(
+            child: ListView.separated(
+              controller: scrollCtrl,
+              itemCount: UserType.values.length,
+              separatorBuilder: (_, __) =>
+                  Divider(height: 1, color: Colors.white.withOpacity(0.04)),
+              itemBuilder: (_, i) {
+                final type = UserType.values[i];
+                final selected = _selectedUserType == type;
+                return ListTile(
+                  title: Text(
+                    type.displayName,
+                    style: TextStyle(
+                      fontWeight:
+                          selected ? FontWeight.w800 : FontWeight.w500,
+                      color: selected ? AppTheme.lime : AppTheme.textPrimary,
                     ),
-                    subtitle: Text(
-                      type.description,
-                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                    ),
-                    trailing: isSelected 
-                        ? Icon(Icons.check, color: AppTheme.primaryColor)
-                        : null,
-                    onTap: () {
-                      setState(() => _selectedUserType = type);
-                      Navigator.pop(context);
-                    },
-                  );
-                },
-              ),
+                  ),
+                  subtitle: Text(type.description,
+                      style: AppTheme.bodySM),
+                  trailing: selected
+                      ? const Icon(Icons.check_rounded,
+                          color: AppTheme.lime, size: 18)
+                      : null,
+                  onTap: () {
+                    setState(() => _selectedUserType = type);
+                    Navigator.pop(context);
+                  },
+                );
+              },
             ),
-            SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () => Navigator.pop(context),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                        ),
-                        child: const Text('Cancel'),
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () => Navigator.pop(context),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.primaryColor,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                        ),
-                        child: const Text('Save'),
-                      ),
-                    ),
-                  ],
+          ),
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+              child: GestureDetector(
+                onTap: () => Navigator.pop(context),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  decoration: BoxDecoration(
+                    color: AppTheme.surface2,
+                    borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+                  ),
+                  child: const Center(
+                    child: Text('Done',
+                        style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            color: AppTheme.textSecondary)),
+                  ),
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+        ]),
       ),
     );
   }
+
+  // ── Build ────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
+      backgroundColor: AppTheme.bg,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: AppTheme.bg,
+        surfaceTintColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded,
+              color: AppTheme.textPrimary, size: 18),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
           isEditing ? 'Edit Member' : 'Add Member',
-          style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w600),
+          style: AppTheme.headingSM,
         ),
       ),
       body: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Info banner
-            Container(
-              width: double.infinity,
-              margin: const EdgeInsets.all(16),
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.grey[100],
-                borderRadius: BorderRadius.circular(12),
+        padding: const EdgeInsets.only(bottom: 40),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          // Info banner
+          Container(
+            margin: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppTheme.surface2,
+              borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+              border: Border.all(color: Colors.white.withOpacity(0.06)),
+            ),
+            child: Row(children: [
+              const Icon(Icons.info_outline_rounded,
+                  color: AppTheme.textTertiary, size: 16),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Personal information is used for body composition calculations only.',
+                  style: AppTheme.bodyMD,
+                ),
               ),
-              child: Text(
-                'Personal information is used for measurement purposes only.',
-                style: TextStyle(color: Colors.grey[600], fontSize: 14),
+            ]),
+          ),
+
+          // Avatar
+          Center(
+            child: GestureDetector(
+              onTap: () {},
+              child: Container(
+                width: 88, height: 88,
+                decoration: const BoxDecoration(
+                  color: AppTheme.surface3,
+                  shape: BoxShape.circle,
+                ),
+                child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.camera_alt_outlined,
+                          color: AppTheme.textSecondary, size: 28),
+                      const SizedBox(height: 4),
+                      Text('Photo',
+                          style: AppTheme.bodySM.copyWith(
+                              color: AppTheme.textTertiary)),
+                    ]),
               ),
             ),
-            
-            // Avatar
-            Center(
-              child: GestureDetector(
-                onTap: () {
-                  // TODO: Implement image picker
-                },
-                child: Container(
-                  width: 100,
-                  height: 100,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[400],
-                    shape: BoxShape.circle,
+          ),
+          const SizedBox(height: 28),
+
+          // Nickname
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('NICKNAME',
+                  style: AppTheme.labelMD.copyWith(
+                      color: AppTheme.textTertiary)),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _nicknameController,
+                maxLength: 25,
+                style: AppTheme.headingSM,
+                cursorColor: AppTheme.lime,
+                decoration: InputDecoration(
+                  hintText: 'Enter a nickname',
+                  hintStyle: AppTheme.headingSM.copyWith(
+                      color: AppTheme.textTertiary),
+                  filled: true,
+                  fillColor: AppTheme.surface1,
+                  contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 14),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                    borderSide: BorderSide(
+                        color: Colors.white.withOpacity(0.08)),
                   ),
-                  child: Icon(
-                    Icons.camera_alt,
-                    color: Colors.grey[200],
-                    size: 40,
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                    borderSide:
+                        const BorderSide(color: AppTheme.lime, width: 1.5),
                   ),
+                  counterStyle: AppTheme.bodySM,
                 ),
+                onChanged: (_) => setState(() {}),
               ),
-            ),
-            const SizedBox(height: 24),
-            
-            // Nickname field
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Nickname', style: TextStyle(color: Colors.grey)),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _nicknameController,
-                    maxLength: 25,
-                    decoration: InputDecoration(
-                      hintText: 'Please enter your Nickname',
-                      hintStyle: TextStyle(color: Colors.grey[400]),
-                      border: const UnderlineInputBorder(),
-                      enabledBorder: UnderlineInputBorder(
-                        borderSide: BorderSide(color: Colors.grey[300]!),
-                      ),
-                      focusedBorder: UnderlineInputBorder(
-                        borderSide: BorderSide(color: AppTheme.primaryColor),
-                      ),
-                      counterText: '${_nicknameController.text.length}/25',
-                    ),
-                    onChanged: (_) => setState(() {}),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-            
-            // Gender selector
-            _buildSelectorRow(
-              'Gender',
-              Row(
-                children: [
-                  _buildGenderButton(Gender.male, Icons.male),
-                  const SizedBox(width: 16),
-                  _buildGenderButton(Gender.female, Icons.female),
-                ],
-              ),
-            ),
-            
-            // Birthdate selector
-            _buildSelectorRow(
-              'Birthdate',
-              GestureDetector(
-                onTap: _showBirthdatePicker,
-                child: Row(
-                  children: [
-                    Text(
-                      _selectedBirthdate != null
-                          ? '${_selectedBirthdate!.year}-${_selectedBirthdate!.month.toString().padLeft(2, '0')}-${_selectedBirthdate!.day.toString().padLeft(2, '0')}'
-                          : '--',
-                      style: TextStyle(
-                        color: _selectedBirthdate != null ? Colors.black : Colors.grey,
-                        fontSize: 16,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Icon(Icons.chevron_right, color: Colors.grey[400]),
-                  ],
-                ),
-              ),
-            ),
-            
-            // Height selector
-            _buildSelectorRow(
-              'Height',
-              GestureDetector(
-                onTap: _showHeightPicker,
-                child: Row(
-                  children: [
-                    Text(
-                      _selectedHeight != null ? '$_selectedHeight cm' : '--',
-                      style: TextStyle(
-                        color: _selectedHeight != null ? Colors.black : Colors.grey,
-                        fontSize: 16,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Icon(Icons.chevron_right, color: Colors.grey[400]),
-                  ],
-                ),
-              ),
-            ),
-            
-            // User type selector
-            _buildSelectorRow(
-              'User type',
-              GestureDetector(
-                onTap: _showUserTypePicker,
-                child: Row(
-                  children: [
-                    Text(
-                      _selectedUserType.displayName,
-                      style: const TextStyle(fontSize: 16),
-                    ),
-                    const SizedBox(width: 8),
-                    Icon(Icons.chevron_right, color: Colors.grey[400]),
-                  ],
-                ),
-              ),
-            ),
-            
-            const SizedBox(height: 32),
-            
-            // Confirm button
-            Container(
-              width: double.infinity,
-              margin: const EdgeInsets.symmetric(horizontal: 16),
-              child: ElevatedButton(
-                onPressed: _canSave && !_isLoading ? _saveMember : null,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _canSave ? AppTheme.primaryColor : Colors.grey[300],
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+            ]),
+          ),
+          const SizedBox(height: 8),
+
+          // Selector rows
+          _buildRow(
+            'Gender',
+            Row(children: [
+              _genderBtn(Gender.male, Icons.male, 'Male'),
+              const SizedBox(width: 10),
+              _genderBtn(Gender.female, Icons.female, 'Female'),
+            ]),
+          ),
+          _buildRow(
+            'Birthdate',
+            GestureDetector(
+              onTap: _showBirthdatePicker,
+              child: Row(children: [
+                Text(
+                  _selectedBirthdate != null
+                      ? '${_selectedBirthdate!.year}-'
+                          '${_selectedBirthdate!.month.toString().padLeft(2, '0')}-'
+                          '${_selectedBirthdate!.day.toString().padLeft(2, '0')}'
+                      : 'Tap to select',
+                  style: AppTheme.headingSM.copyWith(
+                    color: _selectedBirthdate != null
+                        ? AppTheme.textPrimary
+                        : AppTheme.textTertiary,
                   ),
                 ),
-                child: _isLoading
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                const SizedBox(width: 6),
+                const Icon(Icons.chevron_right_rounded,
+                    color: AppTheme.textTertiary, size: 18),
+              ]),
+            ),
+          ),
+          _buildRow(
+            'Height',
+            GestureDetector(
+              onTap: _showHeightPicker,
+              child: Row(children: [
+                Text(
+                  _selectedHeight != null
+                      ? '$_selectedHeight cm'
+                      : 'Tap to select',
+                  style: AppTheme.headingSM.copyWith(
+                    color: _selectedHeight != null
+                        ? AppTheme.textPrimary
+                        : AppTheme.textTertiary,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                const Icon(Icons.chevron_right_rounded,
+                    color: AppTheme.textTertiary, size: 18),
+              ]),
+            ),
+          ),
+          _buildRow(
+            'User type',
+            GestureDetector(
+              onTap: _showUserTypePicker,
+              child: Row(children: [
+                Text(_selectedUserType.displayName,
+                    style: AppTheme.headingSM),
+                const SizedBox(width: 6),
+                const Icon(Icons.chevron_right_rounded,
+                    color: AppTheme.textTertiary, size: 18),
+              ]),
+            ),
+          ),
+
+          const SizedBox(height: 32),
+
+          // Confirm button
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: GestureDetector(
+              onTap: _canSave && !_isLoading ? _saveMember : null,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                decoration: BoxDecoration(
+                  color: _canSave ? AppTheme.lime : AppTheme.surface3,
+                  borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+                  boxShadow: _canSave
+                      ? [
+                          BoxShadow(
+                            color: AppTheme.lime.withOpacity(0.3),
+                            blurRadius: 16,
+                            offset: const Offset(0, 6),
+                          ),
+                        ]
+                      : [],
+                ),
+                child: Center(
+                  child: _isLoading
+                      ? const SizedBox(
+                          width: 20, height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.black),
+                        )
+                      : Text(
+                          'Confirm',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w900,
+                            color: _canSave
+                                ? Colors.black
+                                : AppTheme.textTertiary,
+                          ),
                         ),
-                      )
-                    : Text(
-                        'Confirm',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: _canSave ? Colors.white : Colors.grey[500],
-                        ),
-                      ),
+                ),
               ),
             ),
-            const SizedBox(height: 32),
-          ],
-        ),
+          ),
+        ]),
       ),
     );
   }
 
-  Widget _buildGenderButton(Gender gender, IconData icon) {
-    final isSelected = _selectedGender == gender;
+  Widget _genderBtn(Gender gender, IconData icon, String label) {
+    final selected = _selectedGender == gender;
     return GestureDetector(
       onTap: () => setState(() => _selectedGender = gender),
-      child: Container(
-        width: 48,
-        height: 48,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
-          color: isSelected ? AppTheme.primaryColor : Colors.grey[300],
-          shape: BoxShape.circle,
+          color: selected ? AppTheme.lime.withOpacity(0.12) : AppTheme.surface3,
+          borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+          border: Border.all(
+            color: selected ? AppTheme.lime : Colors.white.withOpacity(0.08),
+            width: selected ? 1.5 : 1,
+          ),
         ),
-        child: Icon(
-          icon,
-          color: Colors.white,
-          size: 28,
-        ),
+        child: Row(children: [
+          Icon(icon,
+              color: selected ? AppTheme.lime : AppTheme.textSecondary,
+              size: 18),
+          const SizedBox(width: 6),
+          Text(label,
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 13,
+                color: selected ? AppTheme.lime : AppTheme.textSecondary,
+              )),
+        ]),
       ),
     );
   }
 
-  Widget _buildSelectorRow(String label, Widget selector) {
+  Widget _buildRow(String label, Widget trailing) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppTheme.surface1,
         border: Border(
-          bottom: BorderSide(color: Colors.grey[200]!),
+          bottom: BorderSide(color: Colors.white.withOpacity(0.05)),
         ),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: const TextStyle(fontSize: 16)),
-          selector,
-        ],
-      ),
+      child: Row(children: [
+        Text(label, style: AppTheme.bodyLG.copyWith(color: AppTheme.textPrimary)),
+        const Spacer(),
+        trailing,
+      ]),
     );
   }
 }

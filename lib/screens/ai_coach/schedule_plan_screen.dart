@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../models/ai_coach_models.dart';
 import '../../theme/app_theme.dart';
-import '../home_screen.dart';
+import '../../services/pdf_service.dart';
 import '../profile_screen.dart';
+import 'ai_coach_screen.dart';
 
 const List<String> _MEAL_TIMES = ['Breakfast', 'Lunch', 'Snacks', 'Dinner'];
 
@@ -25,6 +26,29 @@ class AiCoachSchedulePlanScreen extends StatefulWidget {
 class _AiCoachSchedulePlanScreenState extends State<AiCoachSchedulePlanScreen> {
   int _selectedDayIndex = 0;
   String _activeTab = 'meals'; // 'meals', 'workout', 'suggestions'
+  bool _isDownloading = false;
+
+  Future<void> _downloadPDF() async {
+    if (_isDownloading) return;
+    if (!mounted) return;
+    setState(() => _isDownloading = true);
+    try {
+      await PdfService.sharePlanPDF(widget.plan);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not generate PDF: $e'),
+            backgroundColor: Colors.red.shade800,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isDownloading = false);
+    }
+  }
 
   /// Generate the 7 calendar dates starting from generatedDate
   List<_ScheduleDate> get _scheduleDates {
@@ -56,7 +80,7 @@ class _AiCoachSchedulePlanScreenState extends State<AiCoachSchedulePlanScreen> {
               child: Row(
                 children: [
                   GestureDetector(
-                    onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const HomeScreen())),
+                    onTap: () => Navigator.pop(context),
                     child: Container(
                       width: 40, height: 40,
                       decoration: BoxDecoration(shape: BoxShape.circle, color: AppTheme.accentColor),
@@ -66,10 +90,17 @@ class _AiCoachSchedulePlanScreenState extends State<AiCoachSchedulePlanScreen> {
                   const SizedBox(width: 12),
                   const Expanded(child: Text('Weekly Schedule', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900))),
                   // Download button
-                  Container(
-                    width: 40, height: 40,
-                    decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withOpacity(0.05), border: Border.all(color: Colors.white.withOpacity(0.1))),
-                    child: const Center(child: Icon(Icons.download_outlined, color: Colors.white, size: 20)),
+                  GestureDetector(
+                    onTap: _downloadPDF,
+                    child: Container(
+                      width: 40, height: 40,
+                      decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withOpacity(0.05), border: Border.all(color: Colors.white.withOpacity(0.1))),
+                      child: Center(
+                        child: _isDownloading
+                            ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: AppTheme.accentColor, strokeWidth: 2))
+                            : const Icon(Icons.download_outlined, color: Colors.white, size: 20),
+                      ),
+                    ),
                   ),
                   const SizedBox(width: 8),
                   // Favorite button
@@ -216,9 +247,19 @@ class _AiCoachSchedulePlanScreenState extends State<AiCoachSchedulePlanScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  _buildNavIcon(Icons.auto_awesome, 'AI ASSISTANT', false, () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const HomeScreen()))),
+                  _buildNavIcon(Icons.auto_awesome, 'AI ASSISTANT', false, () => Navigator.pop(context)),
                   _buildNavIcon(Icons.calendar_today_outlined, 'WEEKLY SCHEDULE', true, () {}),
-                  _buildNavIcon(Icons.person_outline, 'PROFILE', false, () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ProfileScreen()))),
+                  _buildNavIcon(Icons.person_outline, 'PROFILE', false, () {
+                    Navigator.push(context,
+                        MaterialPageRoute(builder: (_) => ProfileScreen(
+                          showAiCoachNav: true,
+                          onAiAssistantTap: () {
+                            Navigator.pop(context); // pop Profile → Schedule
+                            Navigator.pop(context); // pop Schedule → AI Coach
+                          },
+                          onWeeklyScheduleTap: () => Navigator.pop(context),
+                        )));
+                  }),
                 ],
               ),
             ),

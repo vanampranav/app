@@ -40,19 +40,17 @@ class _KitchenScaleScreenState extends State<KitchenScaleScreen> {
   }
 
   void _setupListeners() {
-    // Listen for weight data
+    // Only accept kitchen scale readings.
+    // Body fat scale readings are tagged bodyFatScale by FitDaysService
+    // (or weigh ≥ 10 kg which food almost never does).
     widget.fitDaysService.weightDataStream.listen((measurement) {
-      if (mounted) {
-        setState(() {
-          _latestMeasurement = measurement;
-          // Update current unit from measurement
-          if (measurement.unit.isNotEmpty) {
-            _currentUnit = measurement.unit;
-          }
-          // If receiving weight data, device must be connected
-          _isConnected = true;
-        });
-      }
+      if (!mounted) return;
+      if (measurement.source == WeightSource.bodyFatScale) return;
+      setState(() {
+        _latestMeasurement = measurement;
+        if (measurement.unit.isNotEmpty) _currentUnit = measurement.unit;
+        _isConnected = true;
+      });
     });
     
     // Listen for connection state changes
@@ -75,24 +73,24 @@ class _KitchenScaleScreenState extends State<KitchenScaleScreen> {
     final dateKey = 'meal_entries_${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
     final entriesJson = prefs.getString(dateKey);
 
-    print('Loading meals for date key: $dateKey');
+    debugPrint('Loading meals for date key: $dateKey');
     
     if (entriesJson != null) {
       try {
         final List<dynamic> entriesList = jsonDecode(entriesJson);
         final entries = entriesList.map((e) => MealEntry.fromJson(e)).toList();
-        print('Loaded ${entries.length} meal entries');
+        debugPrint('Loaded ${entries.length} meal entries');
         setState(() {
           _dailySummary = DailySummary(date: today, entries: entries);
         });
       } catch (e) {
-        print('Error loading meal entries: $e');
+        debugPrint('Error loading meal entries: $e');
         setState(() {
           _dailySummary = DailySummary(date: today, entries: []);
         });
       }
     } else {
-      print('No saved meals found');
+      debugPrint('No saved meals found');
       setState(() {
         _dailySummary = DailySummary(date: today, entries: []);
       });
@@ -107,7 +105,7 @@ class _KitchenScaleScreenState extends State<KitchenScaleScreen> {
     final dateKey = 'meal_entries_${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
     final entriesJson = jsonEncode(_dailySummary!.entries.map((e) => e.toJson()).toList());
     await prefs.setString(dateKey, entriesJson);
-    print('Saved ${_dailySummary!.entries.length} meal entries to $dateKey');
+    debugPrint('Saved ${_dailySummary!.entries.length} meal entries to $dateKey');
   }
 
   void _addFood(MealType meal) async {
@@ -143,7 +141,7 @@ class _KitchenScaleScreenState extends State<KitchenScaleScreen> {
         break;
     }
     
-    print('Current weight for food search: ${currentWeight.toStringAsFixed(1)} g (original: ${_latestMeasurement?.weight} $unit)');
+    debugPrint('Current weight for food search: ${currentWeight.toStringAsFixed(1)} g (original: ${_latestMeasurement?.weight} $unit)');
     
     final result = await Navigator.push(
       context,

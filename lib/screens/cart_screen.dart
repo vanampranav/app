@@ -8,7 +8,7 @@ import '../services/shopify_service.dart';
 import '../providers/location_provider.dart'; 
 import 'shop_screen.dart'; 
 import '../widgets/main_layout.dart'; 
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class CartScreen extends StatefulWidget {
   const CartScreen({Key? key}) : super(key: key);
@@ -116,12 +116,12 @@ class _CartScreenState extends State<CartScreen> {
             alignment: Alignment.centerRight,
             padding: const EdgeInsets.only(right: 20),
             decoration: BoxDecoration(
-              color: Colors.red.shade100,
+              color: AppTheme.error.withOpacity(0.15),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(
-              Icons.delete_outline,
-              color: Colors.red.shade700,
+            child: const Icon(
+              Icons.delete_outline_rounded,
+              color: AppTheme.error,
               size: 28,
             ),
           ),
@@ -164,11 +164,11 @@ class _CartScreenState extends State<CartScreen> {
                       fit: BoxFit.cover,
                       errorBuilder: (context, error, stackTrace) {
                         return Container(
-                          color: Colors.grey.shade200,
+                          color: AppTheme.surface2,
                           child: const Icon(
-                            Icons.image_not_supported,
+                            Icons.image_not_supported_outlined,
                             size: 40,
-                            color: Colors.grey,
+                            color: AppTheme.textTertiary,
                           ),
                         );
                       },
@@ -197,7 +197,7 @@ class _CartScreenState extends State<CartScreen> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
-                              locationProvider.formatPrice(item.price * item.quantity),
+                              locationProvider.formatPrice(item.price * item.quantity, fromCurrencyCode: locationProvider.isInIndia ? 'INR' : 'USD'),
                               style: TextStyle(
                                 color: AppTheme.accentColor,
                                 fontWeight: FontWeight.bold,
@@ -261,14 +261,10 @@ class _CartScreenState extends State<CartScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            offset: const Offset(0, -4),
-            blurRadius: 8,
-          ),
-        ],
+        color: AppTheme.surface1,
+        border: Border(
+          top: BorderSide(color: Colors.white.withOpacity(0.07)),
+        ),
       ),
       child: SafeArea(
         child: Column(
@@ -278,7 +274,7 @@ class _CartScreenState extends State<CartScreen> {
               children: [
                 const Text('Subtotal'),
                 Text(
-                  locationProvider.formatPrice(cart.subtotal),
+                  locationProvider.formatPrice(cart.subtotal, fromCurrencyCode: locationProvider.isInIndia ? 'INR' : 'USD'),
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
               ],
@@ -289,7 +285,7 @@ class _CartScreenState extends State<CartScreen> {
               children: [
                 const Text('Shipping'),
                 Text(
-                  locationProvider.formatPrice(cart.shipping),
+                  locationProvider.formatPrice(cart.shipping, fromCurrencyCode: locationProvider.isInIndia ? 'INR' : 'USD'),
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
               ],
@@ -300,7 +296,7 @@ class _CartScreenState extends State<CartScreen> {
               children: [
                 const Text('Tax'),
                 Text(
-                  locationProvider.formatPrice(cart.tax),
+                  locationProvider.formatPrice(cart.tax, fromCurrencyCode: locationProvider.isInIndia ? 'INR' : 'USD'),
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
               ],
@@ -314,7 +310,7 @@ class _CartScreenState extends State<CartScreen> {
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
                 Text(
-                  locationProvider.formatPrice(cart.total),
+                  locationProvider.formatPrice(cart.total, fromCurrencyCode: locationProvider.isInIndia ? 'INR' : 'USD'),
                   style: Theme.of(context).textTheme.titleLarge?.copyWith(
                     color: AppTheme.accentColor,
                     fontWeight: FontWeight.bold,
@@ -324,6 +320,16 @@ class _CartScreenState extends State<CartScreen> {
             ),
             const SizedBox(height: 16),
             ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.lime,
+                foregroundColor: Colors.black,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                minimumSize: const Size(double.infinity, 0),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+                ),
+                elevation: 0,
+              ),
               onPressed: () async {
                 setState(() {
                   _isLoading = true;
@@ -333,8 +339,8 @@ class _CartScreenState extends State<CartScreen> {
                   final addressModel = context.read<AddressModel>();
                   
                   // Get user authentication token
-                  final prefs = await SharedPreferences.getInstance();
-                  final customerAccessToken = prefs.getString('auth_token');
+                  const _secureStorage = FlutterSecureStorage();
+                  final customerAccessToken = await _secureStorage.read(key: 'auth_token');
                   
                   // Get default shipping address
                   await addressModel.loadAddresses();
@@ -345,9 +351,9 @@ class _CartScreenState extends State<CartScreen> {
                     'quantity': item.quantity,
                   }).toList();
 
-                  print('Sending cart items to checkout: $cartItems');
-                  print('Customer access token: ${customerAccessToken != null ? 'available' : 'not available'}');
-                  print('Default address: ${defaultAddress != null ? 'available' : 'not available'}');
+                  debugPrint('Sending cart items to checkout: $cartItems');
+                  debugPrint('Customer access token: ${customerAccessToken != null ? 'available' : 'not available'}');
+                  debugPrint('Default address: ${defaultAddress != null ? 'available' : 'not available'}');
                   
                   // Prepare shipping address for Shopify
                   Map<String, dynamic>? shippingAddress;
@@ -378,7 +384,7 @@ class _CartScreenState extends State<CartScreen> {
                     });
 
                     if (checkoutUrl != null) {
-                      print('Received checkout URL: $checkoutUrl');
+                      debugPrint('Received checkout URL: $checkoutUrl');
                       final result = await Navigator.push<bool>(
                         context,
                         MaterialPageRoute(
@@ -402,7 +408,7 @@ class _CartScreenState extends State<CartScreen> {
                     }
                   }
                 } catch (e) {
-                  print('Error during checkout: $e');
+                  debugPrint('Error during checkout: $e');
                   if (mounted) {
                     setState(() {
                       _isLoading = false;
@@ -416,16 +422,12 @@ class _CartScreenState extends State<CartScreen> {
                   }
                 }
               },
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                minimumSize: const Size(double.infinity, 0),
-              ),
               child: _isLoading
                 ? const SizedBox(
                     height: 20,
                     width: 20,
                     child: CircularProgressIndicator(
-                      color: Colors.white,
+                      color: Colors.black,
                       strokeWidth: 2,
                     ),
                   )

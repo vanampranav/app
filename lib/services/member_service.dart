@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/member_model.dart';
 
@@ -25,7 +26,7 @@ class MemberService {
       final List<dynamic> list = jsonDecode(json);
       return list.map((e) => Member.fromJson(e)).toList();
     } catch (e) {
-      print('Error loading members: $e');
+      debugPrint('Error loading members: $e');
       return [];
     }
   }
@@ -125,7 +126,7 @@ class MemberService {
       }
       return measurements;
     } catch (e) {
-      print('Error loading measurements: $e');
+      debugPrint('Error loading measurements: $e');
       return [];
     }
   }
@@ -219,20 +220,37 @@ class MemberService {
            '_${DateTime.now().microsecond}';
   }
 
-  /// Create default member if none exist
+  /// Create a member using onboarding profile data from SharedPreferences.
+  /// Falls back to a generic default if no onboarding data is present.
   Future<Member> createDefaultMember() async {
+    await _ensureInitialized();
+    final name      = _prefs!.getString('user_name')       ?? '';
+    final genderStr = _prefs!.getString('user_gender')     ?? 'male';
+    final birthYear = _prefs!.getInt('user_birth_year')    ?? 1990;
+    final birthMonth= _prefs!.getInt('user_birth_month')   ?? 1;
+    final birthDay  = _prefs!.getInt('user_birth_day')     ?? 1;
+    final heightRaw = _prefs!.getDouble('user_height_cm')  ?? 170.0;
+
+    final nickname  = name.trim().split(' ').firstWhere((s) => s.isNotEmpty,
+        orElse: () => 'User');
+    final gender    = genderStr == 'female' ? Gender.female : Gender.male;
+    final birthdate = DateTime(birthYear, birthMonth, birthDay);
+    final heightCm  = heightRaw.round().clamp(50, 300);
+
     final member = Member(
       id: generateId(),
-      nickname: 'User',
-      gender: Gender.male,
-      birthdate: DateTime(1990, 1, 1),
-      heightCm: 170,
+      nickname: nickname,
+      gender: gender,
+      birthdate: birthdate,
+      heightCm: heightCm,
       userType: UserType.standard,
     );
     return addMember(member);
   }
 
-  /// Ensure at least one member exists
+  /// Ensure at least one member exists.
+  /// On first launch after onboarding, creates the member from the onboarding
+  /// profile so the FitDays SDK is immediately calibrated correctly.
   Future<Member> ensureMemberExists() async {
     final members = await getMembers();
     if (members.isEmpty) {

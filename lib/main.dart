@@ -8,6 +8,7 @@ import 'providers/theme_provider.dart';
 import 'screens/home_screen.dart';
 import 'screens/auth_screen.dart';
 import 'screens/product_details_screen.dart';
+import 'screens/onboarding/onboarding_screen.dart';
 import 'theme/app_theme.dart';
 import 'services/shopify_service.dart';
 import 'services/onesignal_service.dart';
@@ -25,9 +26,9 @@ void main() async {
   // Initialize Firebase (optional - only if GoogleService-Info.plist is configured)
   try {
     await Firebase.initializeApp();
-    print('Firebase initialized successfully');
+    debugPrint('Firebase initialized successfully');
   } catch (e) {
-    print('Firebase initialization skipped: $e');
+    debugPrint('Firebase initialization skipped: $e');
     // Continue without Firebase - OneSignal handles notifications
   }
   
@@ -50,14 +51,6 @@ void main() async {
     ),
   );
 
-  // Initialize Shopify service
-  final shopifyService = ShopifyService();
-  await shopifyService.initialize();
-
-  // Test API connection
-  final isConnected = await shopifyService.testConnection();
-  print('Shopify API Connection Test: ${isConnected ? 'Success' : 'Failed'}');
-
   runApp(
     MultiProvider(
       providers: [
@@ -66,7 +59,13 @@ void main() async {
         ChangeNotifierProvider(create: (ctx) => AddressModel()),
         ChangeNotifierProvider(create: (ctx) => ThemeProvider()),
         ChangeNotifierProvider(create: (ctx) => LocationProvider()),
-        Provider.value(value: shopifyService),
+        ChangeNotifierProxyProvider<LocationProvider, ShopifyService>(
+          create: (_) => ShopifyService(),
+          update: (_, locationProvider, shopifyService) {
+            shopifyService!.setIndiaMode(locationProvider.isInIndia);
+            return shopifyService;
+          },
+        ),
       ],
       child: const MyApp(),
     ),
@@ -87,10 +86,7 @@ class MyApp extends StatelessWidget {
           themeMode: themeProvider.themeMode,
           debugShowCheckedModeBanner: false,
           navigatorKey: NavigationService.navigatorKey,
-          home: MainLayout(
-            currentIndex: 0,
-            child: const HomeScreen(),
-          ),
+          home: const _SplashRouter(),
           onGenerateRoute: (settings) {
             if (settings.name == '/product-details') {
               final args = settings.arguments as Map<String, dynamic>;
@@ -105,6 +101,58 @@ class MyApp extends StatelessWidget {
           },
         );
       },
+    );
+  }
+}
+
+// Checks onboarding flag and routes to the appropriate first screen.
+class _SplashRouter extends StatefulWidget {
+  const _SplashRouter();
+
+  @override
+  State<_SplashRouter> createState() => _SplashRouterState();
+}
+
+class _SplashRouterState extends State<_SplashRouter> {
+  @override
+  void initState() {
+    super.initState();
+    _route();
+  }
+
+  Future<void> _route() async {
+    final prefs = await SharedPreferences.getInstance();
+    final onboarded = prefs.getBool('onboarded') ?? false;
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(
+      PageRouteBuilder(
+        pageBuilder: (_, __, ___) => onboarded
+            ? MainLayout(currentIndex: 0, child: const HomeScreen())
+            : const OnboardingScreen(),
+        transitionDuration: const Duration(milliseconds: 400),
+        transitionsBuilder: (_, animation, __, child) => FadeTransition(
+          opacity: animation,
+          child: child,
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Minimal splash while SharedPreferences loads (< 100ms)
+    return const Scaffold(
+      backgroundColor: AppTheme.bg,
+      body: Center(
+        child: SizedBox(
+          width: 28,
+          height: 28,
+          child: CircularProgressIndicator(
+            color: AppTheme.lime,
+            strokeWidth: 2.5,
+          ),
+        ),
+      ),
     );
   }
 }

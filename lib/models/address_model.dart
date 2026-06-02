@@ -152,7 +152,7 @@ class AddressModel extends ChangeNotifier {
           .map((json) => Address.fromJson(jsonDecode(json)))
           .toList();
     } catch (e) {
-      print('Error loading addresses: $e');
+      debugPrint('Error loading addresses: $e');
       _addresses = [];
     }
 
@@ -169,7 +169,7 @@ class AddressModel extends ChangeNotifier {
       
       await prefs.setStringList('user_addresses', addressesJson);
     } catch (e) {
-      print('Error saving addresses: $e');
+      debugPrint('Error saving addresses: $e');
     }
   }
 

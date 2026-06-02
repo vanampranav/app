@@ -35,13 +35,13 @@ class WishlistItem {
 
   factory WishlistItem.fromJson(Map<String, dynamic> json) {
     return WishlistItem(
-      id: json['id'],
-      title: json['title'],
-      price: json['price'].toDouble(),
-      imageUrl: json['imageUrl'],
-      description: json['description'],
-      variantId: json['variantId'],
-      variants: json['variants'] != null 
+      id: json['id']?.toString() ?? '',
+      title: json['title']?.toString() ?? '',
+      price: (json['price'] as num?)?.toDouble() ?? 0.0,
+      imageUrl: json['imageUrl']?.toString() ?? '',
+      description: json['description']?.toString() ?? '',
+      variantId: json['variantId']?.toString(),
+      variants: json['variants'] != null
           ? List<Map<String, dynamic>>.from(json['variants'])
           : null,
     );
@@ -65,9 +65,14 @@ class WishlistModel extends ChangeNotifier {
 
   Future<void> _loadWishlist() async {
     final String? wishlistJson = _prefs.getString('wishlist');
-    if (wishlistJson != null) {
+    if (wishlistJson == null) return;
+    try {
       final List<dynamic> wishlistList = json.decode(wishlistJson);
       _items = wishlistList.map((item) => WishlistItem.fromJson(item)).toList();
+    } catch (e) {
+      debugPrint('Error loading wishlist, clearing corrupted data: $e');
+      await _prefs.remove('wishlist');
+      _items = [];
     }
   }
 

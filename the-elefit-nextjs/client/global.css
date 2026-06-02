@@ -1,0 +1,115 @@
+/** @import must precede all other statements */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /**
+   * Tailwind CSS theme
+   * tailwind.config.ts expects the following color variables to be expressed as HSL values.
+   * A different format will require also updating the theme in tailwind.config.ts.
+  */
+  :root {
+    /* EleFit Dark Theme - Always dark mode */
+    --background: 0 0% 24%; /* #3D3D3D */
+    --foreground: 0 0% 100%; /* #FFF */
+
+    --card: 0 0% 13%; /* #212121 */
+    --card-foreground: 0 0% 89%; /* #E4E4E4 */
+
+    --popover: 0 0% 7%; /* #121212 */
+    --popover-foreground: 0 0% 100%;
+
+    --primary: 63 70% 59%; /* #CCD853 - EleFit lime green */
+    --primary-foreground: 0 0% 0%; /* Black text on lime */
+
+    --secondary: 0 0% 13%; /* #212121 */
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 0 0% 17%; /* #2A2A2A */
+    --muted-foreground: 0 0% 60%; /* #999 */
+
+    --accent: 63 70% 59%; /* #CCD853 */
+    --accent-foreground: 0 0% 0%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 0 0% 27%; /* #454545 */
+    --input: 0 0% 13%; /* #212121 */
+    --ring: 63 70% 59%; /* #CCD853 */
+
+    --radius: 1rem;
+
+    --sidebar-background: 0 0% 5%; /* #0D0D0D */
+    --sidebar-foreground: 0 0% 89%;
+    --sidebar-primary: 63 70% 59%;
+    --sidebar-primary-foreground: 0 0% 0%;
+    --sidebar-accent: 0 0% 13%;
+
+    /* Extended color palette */
+    --color-898989: #472b2b;
+    --color-ccd853: #CCD853;
+    --color-212121: #212121;
+    --color-eaeaea: #EAEAEA;
+    --color-7a7a7a: #382929;
+    --color-ffffff: #FFFFFF;
+    --color-121212: #121212;
+    --color-999999: #332525;
+    --color-e1e1e1: #E1E1E1;
+    --color-e25402: #E25402;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 0 0% 13%;
+    --sidebar-ring: 63 70% 59%;
+  }
+
+  .dark {
+    /* Same as root - EleFit is always dark themed */
+    --background: 0 0% 9%;
+    --foreground: 0 0% 100%;
+    --card: 0 0% 13%;
+    --card-foreground: 0 0% 89%;
+    --popover: 0 0% 7%;
+    --popover-foreground: 0 0% 100%;
+    --primary: 63 70% 59%;
+    --primary-foreground: 0 0% 0%;
+    --secondary: 0 0% 13%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 0 0% 17%;
+    --muted-foreground: 0 0% 60%;
+    --accent: 63 70% 59%;
+    --accent-foreground: 0 0% 0%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 27%;
+    --input: 0 0% 13%;
+    --ring: 63 70% 59%;
+    --sidebar-background: 0 0% 5%;
+    --sidebar-foreground: 0 0% 89%;
+    --sidebar-primary: 63 70% 59%;
+    --sidebar-primary-foreground: 0 0% 0%;
+    --sidebar-accent: 0 0% 13%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 0 0% 13%;
+    --sidebar-ring: 63 70% 59%;
+  }
+}
+
+@layer base {
+  body {
+    @apply bg-gray-900 text-white pt-[68px];
+  }
+
+  :where(p, span, li, h1, h2, h3, h4, h5, h6, a, button, label, td, th) {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  pre,
+  code {
+    overflow-x: auto;
+    white-space: pre;
+  }
+}

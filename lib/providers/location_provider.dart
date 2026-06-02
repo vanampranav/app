@@ -21,8 +21,8 @@ class LocationProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  String formatPrice(double price) {
-    return _locationService.formatPrice(price);
+  String formatPrice(double price, {String fromCurrencyCode = 'USD'}) {
+    return _locationService.formatPrice(price, fromCurrencyCode: fromCurrencyCode);
   }
 
   String get currencyCode => _locationService.currencyCode;

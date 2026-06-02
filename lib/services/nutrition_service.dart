@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -135,7 +136,7 @@ class NutritionService {
         return foodItem;
       }).toList();
     } catch (e) {
-      print('Error searching food: $e');
+      debugPrint('Error searching food: $e');
       throw Exception('Failed to search food: $e');
     }
   }
@@ -150,7 +151,7 @@ class NutritionService {
       
       return response['food'] ?? {};
     } catch (e) {
-      print('Error getting food details: $e');
+      debugPrint('Error getting food details: $e');
       throw Exception('Failed to get food details: $e');
     }
   }
@@ -218,7 +219,7 @@ class NutritionService {
         'source': 'FatSecret',
       };
     } catch (e) {
-      print('Error calculating nutrition: $e');
+      debugPrint('Error calculating nutrition: $e');
       throw Exception('Failed to calculate nutrition: $e');
     }
   }
@@ -234,7 +235,7 @@ class NutritionService {
       final List<dynamic> recentList = jsonDecode(recentJson);
       return recentList.map((e) => FoodItem.fromJson(e)).toList();
     } catch (e) {
-      print('Error loading recently used: $e');
+      debugPrint('Error loading recently used: $e');
       return [];
     }
   }
@@ -263,7 +264,7 @@ class NutritionService {
       
       await prefs.setString('recently_used_foods', jsonEncode(recentList));
     } catch (e) {
-      print('Error saving to recently used: $e');
+      debugPrint('Error saving to recently used: $e');
     }
   }
   

@@ -1,14 +1,41 @@
+import 'package:flutter/foundation.dart';
 import 'package:graphql/client.dart';
 import 'dart:async';
+import '../config/shopify_config.dart';
 
-class ShopifyService {
-  static const String _storeUrl = 'theelefit.com';
-  static const String _storefrontAccessToken = '3476fc91bc4860c5b02aea3983766cb1';
-  static const String _apiKey = '307e11a2d080bd92db478241bc9d20dc';
-  static const String _apiSecretKey = '21eb801073c48a83cd3dc7093077d087';
-  
+class ShopifyService with ChangeNotifier {
+  static const String _storeUrl = ShopifyConfig.storeUrl;
+  static const String _storefrontAccessToken = ShopifyConfig.storefrontAccessToken;
+
+  static const String _indiaStoreUrl = ShopifyConfig.indiaStoreUrl;
+  static const String _indiaStorefrontAccessToken = ShopifyConfig.indiaStorefrontAccessToken;
+
   GraphQLClient? _client;
+  GraphQLClient? _indiaClient;
   bool _isInitialized = false;
+  bool _isIndia = false;
+
+  final Map<String, Map<String, dynamic>?> _productsCache = {};
+  final Map<String, Map<String, dynamic>?> _indiaProductsCache = {};
+
+  bool get isIndiaMode => _isIndia;
+
+  void setIndiaMode(bool isIndia) {
+    if (_isIndia == isIndia) return;
+    _isIndia = isIndia;
+    notifyListeners();
+  }
+
+  String _cacheKey({String? collectionHandle, String? tag}) {
+    if (collectionHandle != null && collectionHandle.isNotEmpty) return 'collection:$collectionHandle';
+    if (tag != null && tag.isNotEmpty) return 'tag:$tag';
+    return 'all';
+  }
+
+  Map<String, dynamic>? getCachedProducts({String? collectionHandle, String? tag}) {
+    final cache = _isIndia ? _indiaProductsCache : _productsCache;
+    return cache[_cacheKey(collectionHandle: collectionHandle, tag: tag)];
+  }
 
   ShopifyService() {
     initialize();
@@ -17,24 +44,33 @@ class ShopifyService {
   Future<void> initialize() async {
     if (_isInitialized) return;
 
-    final HttpLink httpLink = HttpLink(
-      'https://$_storeUrl/api/2024-01/graphql',
-      defaultHeaders: {
-        'X-Shopify-Storefront-Access-Token': _storefrontAccessToken,
-        'Content-Type': 'application/json',
-      },
-    );
-
     _client = GraphQLClient(
       cache: GraphQLCache(),
-      link: httpLink,
+      link: HttpLink(
+        'https://$_storeUrl/api/2024-01/graphql',
+        defaultHeaders: {
+          'X-Shopify-Storefront-Access-Token': _storefrontAccessToken,
+          'Content-Type': 'application/json',
+        },
+      ),
       defaultPolicies: DefaultPolicies(
-        query: Policies(
-          fetch: FetchPolicy.noCache,
-        ),
-        mutate: Policies(
-          fetch: FetchPolicy.noCache,
-        ),
+        query: Policies(fetch: FetchPolicy.noCache),
+        mutate: Policies(fetch: FetchPolicy.noCache),
+      ),
+    );
+
+    _indiaClient = GraphQLClient(
+      cache: GraphQLCache(),
+      link: HttpLink(
+        'https://$_indiaStoreUrl/api/2024-01/graphql.json',
+        defaultHeaders: {
+          'X-Shopify-Access-Token': _indiaStorefrontAccessToken,
+          'Content-Type': 'application/json',
+        },
+      ),
+      defaultPolicies: DefaultPolicies(
+        query: Policies(fetch: FetchPolicy.noCache),
+        mutate: Policies(fetch: FetchPolicy.noCache),
       ),
     );
 
@@ -42,10 +78,8 @@ class ShopifyService {
   }
 
   Future<GraphQLClient> get client async {
-    if (!_isInitialized) {
-      await initialize();
-    }
-    return _client!;
+    if (!_isInitialized) await initialize();
+    return _isIndia ? _indiaClient! : _client!;
   }
 
   Future<String?> createCheckout(List<Map<String, dynamic>> items, {
@@ -55,19 +89,19 @@ class ShopifyService {
     try {
       final graphQLClient = await client;
       
-      print('Creating cart with items: $items');
-      print('Customer access token: ${customerAccessToken != null ? 'provided' : 'not provided'}');
-      print('Shipping address: ${shippingAddress != null ? 'provided' : 'not provided'}');
+      debugPrint('Creating cart with items: $items');
+      debugPrint('Customer access token: ${customerAccessToken != null ? 'provided' : 'not provided'}');
+      debugPrint('Shipping address: ${shippingAddress != null ? 'provided' : 'not provided'}');
 
       // Step 1: Validate customer access token if provided
       if (customerAccessToken != null) {
-        print('Validating customer access token...');
+        debugPrint('Validating customer access token...');
         final isValidToken = await _validateCustomerAccessToken(customerAccessToken);
         if (!isValidToken) {
-          print('Customer access token is invalid or expired, proceeding without authentication');
+          debugPrint('Customer access token is invalid or expired, proceeding without authentication');
           customerAccessToken = null;
         } else {
-          print('Customer access token is valid');
+          debugPrint('Customer access token is valid');
         }
       }
 
@@ -136,34 +170,34 @@ class ShopifyService {
       );
 
       if (createCartResult.hasException) {
-        print('Error creating cart: ${createCartResult.exception}');
+        debugPrint('Error creating cart: ${createCartResult.exception}');
         return null;
       }
 
       final cartData = createCartResult.data?['cartCreate'];
       if (cartData == null || cartData['cart'] == null) {
-        print('Invalid cart data received');
-        print('Full response: ${createCartResult.data}');
+        debugPrint('Invalid cart data received');
+        debugPrint('Full response: ${createCartResult.data}');
         return null;
       }
 
       // Debug: Log cart creation result
       final cart = cartData['cart'];
       final cartId = cart['id'] as String;
-      print('Cart created successfully with ID: $cartId');
+      debugPrint('Cart created successfully with ID: $cartId');
       
       // Debug: Check if buyer identity was set
       if (cart['buyerIdentity'] != null) {
         final buyerIdentity = cart['buyerIdentity'];
-        print('Buyer identity set: ${buyerIdentity}');
+        debugPrint('Buyer identity set: ${buyerIdentity}');
         if (buyerIdentity['customer'] != null) {
           final customer = buyerIdentity['customer'];
-          print('Customer authenticated: ${customer['email']} (${customer['firstName']} ${customer['lastName']})');
+          debugPrint('Customer authenticated: ${customer['email']} (${customer['firstName']} ${customer['lastName']})');
         } else {
-          print('Warning: Buyer identity exists but no customer data');
+          debugPrint('Warning: Buyer identity exists but no customer data');
         }
       } else {
-        print('Warning: No buyer identity in cart - customer authentication may have failed');
+        debugPrint('Warning: No buyer identity in cart - customer authentication may have failed');
       }
       
       // Add lines mutation
@@ -214,7 +248,7 @@ class ShopifyService {
         };
       }).toList();
 
-      print('Adding lines to cart: $lines');
+      debugPrint('Adding lines to cart: $lines');
 
       // Add items to cart
       final addLinesResult = await graphQLClient.mutate(
@@ -228,38 +262,38 @@ class ShopifyService {
       );
 
       if (addLinesResult.hasException) {
-        print('Error adding lines to cart: ${addLinesResult.exception}');
+        debugPrint('Error adding lines to cart: ${addLinesResult.exception}');
         return null;
       }
 
       final addLinesData = addLinesResult.data?['cartLinesAdd'];
       if (addLinesData == null) {
-        print('Invalid response data received');
-        print('Response data: ${addLinesResult.data}');
+        debugPrint('Invalid response data received');
+        debugPrint('Response data: ${addLinesResult.data}');
         return null;
       }
 
       if (addLinesData['userErrors'] != null && 
           (addLinesData['userErrors'] as List).isNotEmpty) {
-        print('Cart line errors: ${addLinesData['userErrors']}');
+        debugPrint('Cart line errors: ${addLinesData['userErrors']}');
         return null;
       }
 
       if (addLinesData['cart'] == null) {
-        print('Invalid cart data received after adding lines');
-        print('Response data: ${addLinesResult.data}');
+        debugPrint('Invalid cart data received after adding lines');
+        debugPrint('Response data: ${addLinesResult.data}');
         return null;
       }
 
       // Step 3: Update cart with shipping address if available
       String? finalCheckoutUrl = addLinesData['cart']['checkoutUrl'] as String?;
       if (finalCheckoutUrl == null) {
-        print('No checkout URL returned');
+        debugPrint('No checkout URL returned');
         return null;
       }
 
       if (shippingAddress != null) {
-        print('Updating cart with shipping address...');
+        debugPrint('Updating cart with shipping address...');
         
         const String updateCartMutation = '''
           mutation cartBuyerIdentityUpdate(\$cartId: ID!, \$buyerIdentity: CartBuyerIdentityInput!) {
@@ -328,7 +362,7 @@ class ShopifyService {
         );
 
         if (updateResult.hasException) {
-          print('Warning: Could not update cart with address: ${updateResult.exception}');
+          debugPrint('Warning: Could not update cart with address: ${updateResult.exception}');
           // Continue with original checkout URL even if address update fails
         } else {
           final updateData = updateResult.data?['cartBuyerIdentityUpdate'];
@@ -336,17 +370,17 @@ class ShopifyService {
             final updatedCheckoutUrl = updateData['cart']['checkoutUrl'] as String?;
             if (updatedCheckoutUrl != null) {
               finalCheckoutUrl = updatedCheckoutUrl;
-              print('Successfully updated cart with shipping address');
+              debugPrint('Successfully updated cart with shipping address');
             }
           }
         }
       }
 
-      print('Created cart and got checkout URL: $finalCheckoutUrl');
+      debugPrint('Created cart and got checkout URL: $finalCheckoutUrl');
       return finalCheckoutUrl;
     } catch (e, stackTrace) {
-      print('Exception while creating cart: $e');
-      print('Stack trace: $stackTrace');
+      debugPrint('Exception while creating cart: $e');
+      debugPrint('Stack trace: $stackTrace');
       return null;
     }
   }
@@ -376,20 +410,20 @@ class ShopifyService {
       );
 
       if (result.hasException) {
-        print('Customer validation error: ${result.exception}');
+        debugPrint('Customer validation error: ${result.exception}');
         return false;
       }
 
       final customerData = result.data?['customer'];
       if (customerData != null) {
-        print('Customer validated: ${customerData['email']} (${customerData['firstName']} ${customerData['lastName']})');
+        debugPrint('Customer validated: ${customerData['email']} (${customerData['firstName']} ${customerData['lastName']})');
         return true;
       }
       
-      print('Customer access token is invalid or expired');
+      debugPrint('Customer access token is invalid or expired');
       return false;
     } catch (e) {
-      print('Customer validation failed: $e');
+      debugPrint('Customer validation failed: $e');
       return false;
     }
   }
@@ -416,24 +450,24 @@ class ShopifyService {
       );
 
       if (result.hasException) {
-        print('API Test Error: ${result.exception}');
+        debugPrint('API Test Error: ${result.exception}');
         return false;
       }
 
       final shopData = result.data?['shop'];
       if (shopData != null) {
-        print('Connected to shop: ${shopData['name']}');
-        print('Shop URL: ${shopData['primaryDomain']['url']}');
+        debugPrint('Connected to shop: ${shopData['name']}');
+        debugPrint('Shop URL: ${shopData['primaryDomain']['url']}');
         return true;
       }
       return false;
     } catch (e) {
-      print('Connection test failed: $e');
+      debugPrint('Connection test failed: $e');
       return false;
     }
   }
 
-  Future<Map<String, dynamic>?> getProducts({int first = 20, String? collectionHandle, String? tag}) async {
+  Future<Map<String, dynamic>?> getProducts({int first = 250, String? collectionHandle, String? tag}) async {
     String query;
     
     if (collectionHandle != null && collectionHandle.isNotEmpty) {
@@ -594,30 +628,28 @@ class ShopifyService {
       final QueryResult result = await graphQLClient.query(options);
 
       if (result.hasException) {
-        print('Error fetching products: ${result.exception}');
+        debugPrint('Error fetching products: ${result.exception}');
         return null;
       }
 
-      // Debug logging
-      print('Query type: ${collectionHandle != null ? "Collection: $collectionHandle" : tag != null ? "Tag: $tag" : "All products"}');
-      print('Result data: ${result.data}');
+      Map<String, dynamic>? response;
 
-      // Handle collection query response differently
       if (collectionHandle != null && collectionHandle.isNotEmpty) {
         if (result.data?['collection'] != null) {
-          final products = result.data!['collection']['products'];
-          print('Products found in collection: ${products?['edges']?.length ?? 0}');
-          return {
-            'products': products
-          };
+          response = {'products': result.data!['collection']['products']};
         }
-        print('Collection not found or empty: $collectionHandle');
-        return null;
+      } else {
+        response = result.data;
       }
 
-      return result.data;
+      if (response != null) {
+        final cache = _isIndia ? _indiaProductsCache : _productsCache;
+        cache[_cacheKey(collectionHandle: collectionHandle, tag: tag)] = response;
+      }
+
+      return response;
     } catch (e) {
-      print('Exception while fetching products: $e');
+      debugPrint('Exception while fetching products: $e');
       return null;
     }
   }
@@ -648,7 +680,7 @@ class ShopifyService {
       final QueryResult result = await graphQLClient.query(options);
 
       if (result.hasException) {
-        print('Error fetching collections: ${result.exception}');
+        debugPrint('Error fetching collections: ${result.exception}');
         return [];
       }
 
@@ -657,9 +689,9 @@ class ShopifyService {
             .map((edge) => edge['node'] as Map<String, dynamic>)
             .toList();
         
-        print('Available collections:');
+        debugPrint('Available collections:');
         for (var collection in collections) {
-          print('  - ${collection['title']} (handle: ${collection['handle']})');
+          debugPrint('  - ${collection['title']} (handle: ${collection['handle']})');
         }
         
         return collections;
@@ -667,7 +699,7 @@ class ShopifyService {
 
       return [];
     } catch (e) {
-      print('Exception while fetching collections: $e');
+      debugPrint('Exception while fetching collections: $e');
       return [];
     }
   }
@@ -731,18 +763,18 @@ class ShopifyService {
       final QueryResult result = await graphQLClient.query(options);
 
       if (result.hasException) {
-        print('Error fetching product by ID: ${result.exception}');
+        debugPrint('Error fetching product by ID: ${result.exception}');
         return null;
       }
 
       if (result.data?['product'] != null) {
         return result.data?['product'];
       } else {
-        print('Product not found with ID: $productId');
+        debugPrint('Product not found with ID: $productId');
         return null;
       }
     } catch (e) {
-      print('Exception while fetching product by ID: $e');
+      debugPrint('Exception while fetching product by ID: $e');
       return null;
     }
   }
@@ -782,13 +814,13 @@ class ShopifyService {
       final QueryResult result = await graphQLClient.mutate(options);
 
       if (result.hasException) {
-        print('Error creating access token: ${result.exception}');
+        debugPrint('Error creating access token: ${result.exception}');
         return null;
       }
 
       return result.data;
     } catch (e) {
-      print('Exception while creating access token: $e');
+      debugPrint('Exception while creating access token: $e');
       return null;
     }
   }
@@ -834,13 +866,13 @@ class ShopifyService {
       final QueryResult result = await graphQLClient.mutate(options);
 
       if (result.hasException) {
-        print('Error creating customer: ${result.exception}');
+        debugPrint('Error creating customer: ${result.exception}');
         return null;
       }
 
       return result.data;
     } catch (e) {
-      print('Exception while creating customer: $e');
+      debugPrint('Exception while creating customer: $e');
       return null;
     }
   }
@@ -870,13 +902,13 @@ class ShopifyService {
       final QueryResult result = await graphQLClient.mutate(options);
 
       if (result.hasException) {
-        print('Error sending password recovery email: ${result.exception}');
+        debugPrint('Error sending password recovery email: ${result.exception}');
         return null;
       }
 
       return result.data;
     } catch (e) {
-      print('Exception while sending password recovery email: $e');
+      debugPrint('Exception while sending password recovery email: $e');
       return null;
     }
   }
@@ -932,13 +964,13 @@ class ShopifyService {
       final QueryResult result = await graphQLClient.query(options);
 
       if (result.hasException) {
-        print('Error fetching orders: ${result.exception}');
+        debugPrint('Error fetching orders: ${result.exception}');
         return null;
       }
 
       return result.data;
     } catch (e) {
-      print('Exception while fetching orders: $e');
+      debugPrint('Exception while fetching orders: $e');
       return null;
     }
   }

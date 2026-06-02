@@ -34,15 +34,11 @@ android {
 
     defaultConfig {
         applicationId = "com.theelefit.app"
-        minSdk = 23  // Required for Firebase Messaging
+        minSdk = 26  // Health Connect requires Android 8.0 (API 26) minimum
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-        
-        ndk {
-            // Only build for arm64-v8a (covers 99% of modern Android devices)
-            abiFilters.addAll(listOf("arm64-v8a"))
-        }
+
     }
 
     signingConfigs {

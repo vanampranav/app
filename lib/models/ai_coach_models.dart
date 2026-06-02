@@ -151,8 +151,29 @@ class DayWorkout {
   }
 }
 
+/// Summary of a saved plan — used in the "My Plans" list
+class FitnessPlanSummary {
+  final String id;
+  final String name;
+  final String goal;
+  final int dailyCalories;
+  final String workoutFocus;
+  final DateTime generatedDate;
+
+  FitnessPlanSummary({
+    required this.id,
+    required this.name,
+    required this.goal,
+    required this.dailyCalories,
+    required this.workoutFocus,
+    required this.generatedDate,
+  });
+}
+
 /// The complete 7-day fitness plan, mirroring Next.js structure exactly
 class FitnessPlan {
+  final String id;           // Firestore document ID (empty for unsaved plans)
+  final String name;         // Auto-generated plan name
   final int dailyCalories;
   final Map<String, int> macros;
   final String goal;
@@ -162,6 +183,8 @@ class FitnessPlan {
   final List<DayWorkout> weeklyWorkouts; // index 0-6 = Day 1-7
 
   FitnessPlan({
+    this.id = '',
+    this.name = '',
     required this.dailyCalories,
     required this.macros,
     this.goal = 'Get Fit',
@@ -171,8 +194,24 @@ class FitnessPlan {
     required this.weeklyWorkouts,
   }) : generatedDate = generatedDate ?? DateTime.now();
 
+  FitnessPlan copyWith({String? id, String? name}) {
+    return FitnessPlan(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      dailyCalories: dailyCalories,
+      macros: macros,
+      goal: goal,
+      workoutFocus: workoutFocus,
+      generatedDate: generatedDate,
+      weeklyMeals: weeklyMeals,
+      weeklyWorkouts: weeklyWorkouts,
+    );
+  }
+
   Map<String, dynamic> toJson() {
     return {
+      'id': id,
+      'name': name,
       'dailyCalories': dailyCalories,
       'macros': macros,
       'goal': goal,
@@ -185,11 +224,13 @@ class FitnessPlan {
 
   factory FitnessPlan.fromJson(Map<String, dynamic> json) {
     return FitnessPlan(
-      dailyCalories: json['dailyCalories'] ?? 0,
-      macros: Map<String, int>.from(json['macros'] ?? {}),
-      goal: json['goal'] ?? '',
-      workoutFocus: json['workoutFocus'] ?? '',
-      generatedDate: DateTime.tryParse(json['generatedDate'] ?? '') ?? DateTime.now(),
+      id: json['id']?.toString() ?? '',
+      name: json['name']?.toString() ?? '',
+      dailyCalories: (json['dailyCalories'] as num?)?.toInt() ?? 0,
+      macros: (json['macros'] as Map?)?.map((k, v) => MapEntry(k.toString(), (v as num).toInt())) ?? {},
+      goal: json['goal']?.toString() ?? '',
+      workoutFocus: json['workoutFocus']?.toString() ?? '',
+      generatedDate: DateTime.tryParse(json['generatedDate']?.toString() ?? '') ?? DateTime.now(),
       weeklyMeals: (json['weeklyMeals'] as List?)?.map((m) => DayMeals.fromJson(m)).toList() ?? [],
       weeklyWorkouts: (json['weeklyWorkouts'] as List?)?.map((w) => DayWorkout.fromJson(w)).toList() ?? [],
     );

@@ -56,13 +56,13 @@ class CartItem {
 
   factory CartItem.fromJson(Map<String, dynamic> json) {
     return CartItem(
-      id: json['id'],
-      variantId: json['variantId'],
-      title: json['title'],
-      price: json['price'].toDouble(),
-      imageUrl: json['imageUrl'],
-      quantity: json['quantity'],
-      size: json['size'],
+      id: json['id']?.toString() ?? '',
+      variantId: json['variantId']?.toString() ?? '',
+      title: json['title']?.toString() ?? '',
+      price: (json['price'] as num?)?.toDouble() ?? 0.0,
+      imageUrl: json['imageUrl']?.toString() ?? '',
+      quantity: (json['quantity'] as num?)?.toInt() ?? 1,
+      size: json['size']?.toString() ?? 'M',
     );
   }
 
@@ -89,10 +89,15 @@ class CartModel with ChangeNotifier {
 
   Future<void> _loadCart() async {
     final String? cartJson = _prefs.getString('cart');
-    if (cartJson != null) {
+    if (cartJson == null) return;
+    try {
       final List<dynamic> cartList = json.decode(cartJson);
       _items = cartList.map((item) => CartItem.fromJson(item)).toList();
       _updateTotals();
+    } catch (e) {
+      debugPrint('Error loading cart, clearing corrupted data: $e');
+      await _prefs.remove('cart');
+      _items = [];
     }
   }
 

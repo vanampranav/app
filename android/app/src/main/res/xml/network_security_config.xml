@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Allow cleartext (HTTP) traffic everywhere.
+    Razorpay, Shopify and other payment SDKs load resources from many CDN /
+    analytics domains that are not known in advance, so a domain-specific
+    allowlist always misses some of them.  The base-config below allows
+    cleartext for every host while still trusting only system CAs.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system"/>
+        </trust-anchors>
+    </base-config>
+</network-security-config>
