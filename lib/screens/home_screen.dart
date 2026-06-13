@@ -15,6 +15,7 @@ import '../screens/ai_coach/ai_coach_screen.dart' as ai_coach;
 import '../screens/nutrition/nutrition_log_screen.dart';
 import '../screens/cart_screen.dart';
 import '../screens/shop_screen.dart';
+import '../widgets/main_layout.dart';
 import '../screens/devices_screen.dart';
 import '../screens/measurement_screen.dart';
 import '../services/member_service.dart';
@@ -691,21 +692,21 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               label: 'Protein',
               current: _proteinG,
               target: _proteinGoal,
-              color: const Color(0xFFFF6B6B),
+              color:  AppTheme.purpleLight,
             ),
             const SizedBox(height: AppTheme.md),
             EFMacroBar(
               label: 'Carbs',
               current: _carbsG,
               target: _carbsGoal,
-              color: const Color(0xFF4ECDC4),
+              color: AppTheme.purpleLight,
             ),
             const SizedBox(height: AppTheme.md),
             EFMacroBar(
               label: 'Fat',
               current: _fatG,
               target: _fatGoal,
-              color: const Color(0xFFFFD93D),
+              color: AppTheme.purpleLight,
             ),
           ],
         ),
@@ -729,9 +730,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 child: EFQuickAction(
                   icon: Icons.restaurant_menu_rounded,
                   label: 'Log\nFood',
-                  accentColor: const Color(0xFF4ECDC4),
-                  onTap: () => Navigator.push(
-                      context, EFPageRoute(page: const NutritionLogScreen())),
+                  accentColor: AppTheme.lime,
+                  onTap: () => Navigator.of(context).pushReplacement(
+                    EFPageRoute(
+                      page: MainLayout(
+                        currentIndex: 1,
+                        child: const NutritionLogScreen(),
+                      ),
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(width: AppTheme.sm),
@@ -739,7 +746,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 child: EFQuickAction(
                   icon: Icons.auto_awesome_rounded,
                   label: 'AI\nCoach',
-                  accentColor: AppTheme.purple,
+                  accentColor: AppTheme.lime,
                   onTap: () => Navigator.push(
                       context, EFPageRoute(page: const ai_coach.AiCoachScreen())),
                 ),
@@ -758,7 +765,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 child: EFQuickAction(
                   icon: Icons.shopping_bag_outlined,
                   label: 'Shop\nGear',
-                  accentColor: const Color(0xFFFF6B35),
+                  accentColor: AppTheme.lime,
                   onTap: () => Navigator.push(
                       context, EFPageRoute(page: const ShopScreen())),
                 ),

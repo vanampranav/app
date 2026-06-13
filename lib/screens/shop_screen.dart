@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../theme/app_theme.dart';
 import '../services/shopify_service.dart';
 import '../utils/constants.dart';
@@ -248,21 +249,22 @@ class _ShopScreenState extends State<ShopScreen> {
                               child: Stack(
                                 fit: StackFit.expand,
                                 children: [
-                                  Image.network(
-                                    product['images']['edges'].isNotEmpty 
-                                        ? product['images']['edges'][0]['node']['url'] 
+                                  CachedNetworkImage(
+                                    imageUrl: product['images']['edges'].isNotEmpty
+                                        ? product['images']['edges'][0]['node']['url']
                                         : AppConstants.productPlaceholder,
                                     fit: BoxFit.cover,
-                                    errorBuilder: (context, error, stackTrace) {
-                                      return Container(
-                                        color: Colors.grey.shade200,
-                                        child: const Icon(
-                                          Icons.image_not_supported,
-                                          size: 50,
-                                          color: Colors.grey,
-                                        ),
-                                      );
-                                    },
+                                    placeholder: (_, __) => Container(
+                                      color: Colors.grey.shade200,
+                                    ),
+                                    errorWidget: (_, __, ___) => Container(
+                                      color: Colors.grey.shade200,
+                                      child: const Icon(
+                                        Icons.image_not_supported,
+                                        size: 50,
+                                        color: Colors.grey,
+                                      ),
+                                    ),
                                   ),
                                   Positioned(
                                     top: 8,

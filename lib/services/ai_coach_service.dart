@@ -47,6 +47,8 @@ class AiCoachService {
             'timelineWeeks': profile.timelineWeeks,
           },
           'prompt': profile.name, // goal prompt
+          if (preferences.foodPreferences.isNotEmpty)
+            'foodPreferences': preferences.foodPreferences,
         }),
       );
 
@@ -96,6 +98,8 @@ class AiCoachService {
           'timelineWeeks': profile.timelineWeeks,
           'weight': profile.currentWeight,
           'capped': target.capped,
+          if (preferences.foodPreferences.isNotEmpty)
+            'foodPreferences': preferences.foodPreferences,
         });
         weeklyMeals = AiCoachParser.parseMealPlan(mealText);
         // Verify parser produced unique days; if not, use varied fallback

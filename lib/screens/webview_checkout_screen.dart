@@ -653,32 +653,28 @@ class _WebViewCheckoutScreenState extends State<WebViewCheckoutScreen> {
   }
   
   Future<void> _handleAndroidIntent(String intentUrl) async {
+    if (Platform.isIOS) {
+      // intent:// is Android-only — ignore on iOS.
+      debugPrint('Skipping Android intent URL on iOS: $intentUrl');
+      return;
+    }
+
     debugPrint('Handling Android intent: $intentUrl');
-    
     try {
-      // Try to parse and launch the intent URL directly
       final Uri uri = Uri.parse(intentUrl);
-      
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
-        debugPrint('Successfully launched intent URL');
         return;
       }
-      
-      // If direct launch fails, try to extract the package name and launch the app
       final packageMatch = RegExp(r'package=([^;]+)').firstMatch(intentUrl);
       if (packageMatch != null) {
         final packageName = packageMatch.group(1);
-        debugPrint('Extracted package name: $packageName');
-        
-        // Try to launch the app directly
         final appUri = Uri.parse('market://details?id=$packageName');
         if (await canLaunchUrl(appUri)) {
           await launchUrl(appUri, mode: LaunchMode.externalApplication);
           return;
         }
       }
-      
       throw Exception('Could not handle intent URL');
     } catch (e) {
       debugPrint('Intent handling failed: $e');
@@ -688,47 +684,64 @@ class _WebViewCheckoutScreenState extends State<WebViewCheckoutScreen> {
   
   Future<void> _handleGooglePay(String url) async {
     debugPrint('Handling Google Pay URL: $url');
-    
+
     final List<String> googlePayUrls = [
-      url, // Original URL
-      'googlepay://pay', // Direct Google Pay app
-      'tez://pay', // Google Pay (Tez) app
-      'https://pay.google.com', // Web fallback
+      url,
+      'googlepay://pay',
+      'tez://pay',
     ];
-    
-    for (String payUrl in googlePayUrls) {
+
+    for (final payUrl in googlePayUrls) {
       try {
         final Uri uri = Uri.parse(payUrl);
         if (await canLaunchUrl(uri)) {
           await launchUrl(uri, mode: LaunchMode.externalApplication);
-          debugPrint('Successfully launched Google Pay with URL: $payUrl');
           return;
         }
       } catch (e) {
         debugPrint('Failed to launch Google Pay URL $payUrl: $e');
-        continue;
       }
     }
-    
-    // If all Google Pay options fail, try to open Play Store
-    await _openPlayStore('com.google.android.apps.nfc.payment');
+
+    // Fallback: open the store page for Google Pay
+    if (Platform.isIOS) {
+      await launchUrl(
+        Uri.parse('https://apps.apple.com/app/google-pay/id1193357041'),
+        mode: LaunchMode.externalApplication,
+      );
+    } else {
+      await _openPlayStore('com.google.android.apps.nfc.payment');
+    }
   }
   
   Future<void> _handleUPIPayment(String url) async {
     debugPrint('Handling UPI payment URL: $url');
-    
+
     try {
       final Uri uri = Uri.parse(url);
+      if (Platform.isIOS) {
+        // On iOS, canLaunchUrl requires LSApplicationQueriesSchemes (registered in
+        // Info.plist). If the app is installed canLaunchUrl returns true; if not,
+        // it returns false. Try launching directly — iOS handles the "not installed"
+        // case with its own system prompt.
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+          return;
+        }
+        // App not installed — show App Store options.
+        await _showUPIAppOptions();
+        return;
+      }
+
+      // Android path
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
-        debugPrint('Successfully launched UPI payment');
         return;
       }
     } catch (e) {
       debugPrint('UPI payment launch failed: $e');
     }
-    
-    // Fallback: Show available UPI apps
+
     await _showUPIAppOptions();
   }
   
@@ -778,27 +791,76 @@ class _WebViewCheckoutScreenState extends State<WebViewCheckoutScreen> {
   
   Future<void> _showUPIAppOptions() async {
     if (!mounted) return;
-    
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('UPI Payment'),
-        content: const Text('Please install a UPI app like Google Pay, PhonePe, or Paytm to complete the payment.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('OK'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              _openPlayStore('com.google.android.apps.nfc.payment'); // Google Pay
-            },
-            child: const Text('Install Google Pay'),
-          ),
-        ],
-      ),
-    );
+
+    if (Platform.isIOS) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('UPI App Required'),
+          content: const Text(
+              'You need a UPI payment app installed to complete this payment. '
+              'Install one from the App Store:'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                launchUrl(
+                  Uri.parse('https://apps.apple.com/app/phonepe/id1173054228'),
+                  mode: LaunchMode.externalApplication,
+                );
+              },
+              child: const Text('PhonePe'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                launchUrl(
+                  Uri.parse('https://apps.apple.com/app/google-pay/id1193357041'),
+                  mode: LaunchMode.externalApplication,
+                );
+              },
+              child: const Text('Google Pay'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                launchUrl(
+                  Uri.parse('https://apps.apple.com/app/paytm/id473941634'),
+                  mode: LaunchMode.externalApplication,
+                );
+              },
+              child: const Text('Paytm'),
+            ),
+          ],
+        ),
+      );
+    } else {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('UPI Payment'),
+          content: const Text(
+              'Please install a UPI app like Google Pay, PhonePe, or Paytm to complete the payment.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('OK'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                _openPlayStore('com.google.android.apps.nfc.payment');
+              },
+              child: const Text('Install Google Pay'),
+            ),
+          ],
+        ),
+      );
+    }
   }
   
   Future<void> _showPaymentError(String url, String error) async {

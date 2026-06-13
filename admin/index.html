@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EleFit — Admin Dashboard</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0D0D0D;
+      --surface1: #161616;
+      --surface2: #1E1E1E;
+      --surface3: #272727;
+      --border:   #2A2A2A;
+      --lime:     #C8DA2B;
+      --lime-dim: rgba(200,218,43,0.12);
+      --text1:    #F2F2F2;
+      --text2:    #A0A0A0;
+      --text3:    #606060;
+      --red:      #FF4757;
+      --blue:     #5B9CF6;
+      --purple:   #7C3AED;
+      --orange:   #FF6B35;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text1);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 14px;
+      min-height: 100vh;
+    }
+
+    /* ── LOGIN ─────────────────────────────────────────────── */
+    #login-screen {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 24px;
+    }
+
+    .login-card {
+      background: var(--surface1);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 40px;
+      width: 100%;
+      max-width: 400px;
+    }
+
+    .login-card .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 32px;
+    }
+
+    .login-card .logo-icon {
+      width: 40px; height: 40px;
+      background: var(--lime);
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px;
+    }
+
+    .login-card h1 { font-size: 22px; font-weight: 800; }
+    .login-card p  { color: var(--text2); font-size: 13px; margin-top: 4px; }
+
+    .btn-google {
+      width: 100%;
+      background: #fff;
+      color: #1f1f1f;
+      border: 1px solid #dadce0;
+      border-radius: 12px;
+      padding: 13px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      transition: box-shadow .2s, opacity .2s;
+    }
+    .btn-google:hover { box-shadow: 0 1px 6px rgba(0,0,0,.3); }
+    .btn-google:disabled { opacity: .5; cursor: default; }
+
+    .btn-primary {
+      width: 100%;
+      background: var(--lime);
+      color: #000;
+      border: none;
+      border-radius: 12px;
+      padding: 14px;
+      font-size: 15px;
+      font-weight: 800;
+      cursor: pointer;
+      margin-top: 8px;
+      transition: opacity .2s;
+    }
+    .btn-primary:hover { opacity: .88; }
+    .btn-primary:disabled { opacity: .5; cursor: default; }
+
+    #login-error {
+      background: rgba(255,71,87,.12);
+      border: 1px solid rgba(255,71,87,.3);
+      border-radius: 8px;
+      color: var(--red);
+      padding: 10px 14px;
+      font-size: 13px;
+      margin-top: 12px;
+      display: none;
+    }
+
+    /* ── DASHBOARD ─────────────────────────────────────────── */
+    #dashboard { display: none; }
+
+    .topbar {
+      background: var(--surface1);
+      border-bottom: 1px solid var(--border);
+      padding: 0 28px;
+      height: 60px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .topbar .logo-icon {
+      width: 32px; height: 32px;
+      background: var(--lime);
+      border-radius: 9px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px; flex-shrink: 0;
+    }
+
+    .topbar h1 { font-size: 16px; font-weight: 800; flex: 1; }
+    .topbar .admin-badge {
+      background: var(--lime-dim);
+      color: var(--lime);
+      border: 1px solid rgba(200,218,43,.25);
+      border-radius: 20px;
+      padding: 4px 12px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .5px;
+    }
+
+    .signout-btn {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text2);
+      padding: 6px 14px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all .2s;
+    }
+    .signout-btn:hover { border-color: var(--red); color: var(--red); }
+
+    .main { padding: 28px; max-width: 1400px; margin: 0 auto; }
+
+    /* ── STATS ROW ─────────────────────────────────────────── */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+
+    .stat-card {
+      background: var(--surface1);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px;
+    }
+
+    .stat-card .label {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text3);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    .stat-card .value {
+      font-size: 32px;
+      font-weight: 900;
+      letter-spacing: -1px;
+      color: var(--text1);
+    }
+
+    .stat-card.accent .value { color: var(--lime); }
+
+    .stat-card .sub {
+      font-size: 11px;
+      color: var(--text3);
+      margin-top: 4px;
+    }
+
+    /* ── TOOLBAR ───────────────────────────────────────────── */
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+
+    .toolbar h2 { font-size: 16px; font-weight: 800; flex: 1; min-width: 120px; }
+
+    .search-box {
+      background: var(--surface1);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text1);
+      padding: 9px 14px;
+      font-size: 13px;
+      outline: none;
+      width: 240px;
+      transition: border-color .2s;
+    }
+    .search-box:focus { border-color: var(--lime); }
+    .search-box::placeholder { color: var(--text3); }
+
+    .filter-select {
+      background: var(--surface1);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text1);
+      padding: 9px 14px;
+      font-size: 13px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    .refresh-btn {
+      background: var(--lime-dim);
+      border: 1px solid rgba(200,218,43,.25);
+      border-radius: 10px;
+      color: var(--lime);
+      padding: 9px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity .2s;
+    }
+    .refresh-btn:hover { opacity: .8; }
+
+    /* ── TABLE ─────────────────────────────────────────────── */
+    .table-wrap {
+      background: var(--surface1);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+
+    table { width: 100%; border-collapse: collapse; }
+
+    thead th {
+      background: var(--surface2);
+      color: var(--text3);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .8px;
+      text-transform: uppercase;
+      padding: 12px 16px;
+      text-align: left;
+      white-space: nowrap;
+      border-bottom: 1px solid var(--border);
+    }
+
+    tbody tr {
+      border-bottom: 1px solid var(--border);
+      transition: background .15s;
+    }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: var(--surface2); }
+
+    tbody td {
+      padding: 14px 16px;
+      vertical-align: middle;
+      color: var(--text1);
+      font-size: 13px;
+    }
+
+    .avatar {
+      width: 34px; height: 34px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800;
+      font-size: 13px;
+      flex-shrink: 0;
+    }
+
+    .user-cell { display: flex; align-items: center; gap: 10px; }
+    .user-cell .name { font-weight: 600; font-size: 13px; }
+    .user-cell .email { font-size: 11px; color: var(--text2); margin-top: 1px; }
+
+    .badge {
+      display: inline-block;
+      border-radius: 6px;
+      padding: 3px 9px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .badge-goal  { background: rgba(91,156,246,.12); color: var(--blue); }
+    .badge-new   { background: rgba(200,218,43,.12); color: var(--lime); border: 1px solid rgba(200,218,43,.2); }
+    .badge-today { background: rgba(200,218,43,.18); color: var(--lime); font-weight: 800; }
+
+    .credits-cell { font-weight: 700; color: var(--lime); }
+    .credits-cell.zero { color: var(--text3); }
+
+    .date-cell { color: var(--text2); font-size: 12px; white-space: nowrap; }
+
+    /* ── LOADING / EMPTY ───────────────────────────────────── */
+    .loading-row td, .empty-row td {
+      text-align: center;
+      padding: 60px;
+      color: var(--text3);
+    }
+
+    .spinner {
+      width: 28px; height: 28px;
+      border: 3px solid var(--border);
+      border-top-color: var(--lime);
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      margin: 0 auto 12px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── PAGINATION ────────────────────────────────────────── */
+    .pagination {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 16px;
+      border-top: 1px solid var(--border);
+      color: var(--text2);
+      font-size: 12px;
+    }
+
+    .page-btns { display: flex; gap: 6px; }
+    .page-btn {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      color: var(--text1);
+      padding: 5px 12px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all .15s;
+    }
+    .page-btn:hover { border-color: var(--lime); color: var(--lime); }
+    .page-btn:disabled { opacity: .35; cursor: default; }
+    .page-btn.active { background: var(--lime-dim); border-color: rgba(200,218,43,.3); color: var(--lime); font-weight: 700; }
+
+    /* ── FIRESTORE RULE BANNER ─────────────────────────────── */
+    #rule-banner {
+      background: rgba(124,58,237,.1);
+      border: 1px solid rgba(124,58,237,.3);
+      border-radius: 12px;
+      padding: 16px 20px;
+      margin-bottom: 24px;
+      display: none;
+    }
+    #rule-banner h3 { color: #A78BFA; font-size: 13px; font-weight: 700; margin-bottom: 6px; }
+    #rule-banner p { color: var(--text2); font-size: 12px; line-height: 1.6; }
+    #rule-banner code {
+      background: var(--surface2);
+      border-radius: 6px;
+      padding: 2px 6px;
+      font-family: monospace;
+      font-size: 11px;
+      color: #A78BFA;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── LOGIN SCREEN ──────────────────────────────────────── -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="logo">
+      <div class="logo-icon">💪</div>
+      <div>
+        <h1>EleFit Admin</h1>
+        <p>Sign in to manage users</p>
+      </div>
+    </div>
+    <button class="btn-google" id="login-btn" onclick="doLogin()">
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M17.64 9.205c0-.639-.057-1.252-.164-1.841H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615Z" fill="#4285F4"/>
+        <path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18Z" fill="#34A853"/>
+        <path d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332Z" fill="#FBBC05"/>
+        <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58Z" fill="#EA4335"/>
+      </svg>
+      Sign in with Google
+    </button>
+    <div id="login-error"></div>
+  </div>
+</div>
+
+<!-- ── DASHBOARD ─────────────────────────────────────────── -->
+<div id="dashboard">
+  <div class="topbar">
+    <div class="logo-icon">💪</div>
+    <h1>EleFit Admin</h1>
+    <span class="admin-badge" id="admin-email-badge"></span>
+    <button class="signout-btn" onclick="doSignOut()">Sign out</button>
+  </div>
+
+  <div class="main">
+
+    <div id="rule-banner">
+      <h3>⚠️ Firestore permission error — action required</h3>
+      <p>
+        Add this rule to your Firestore security rules at
+        <strong>console.firebase.google.com → Firestore → Rules</strong>
+        to allow admin reads:
+      </p>
+      <br/>
+      <p>
+        Inside <code>match /users/{uid}</code>, add:<br/>
+        <code>allow read: if request.auth != null && (request.auth.uid == uid || request.auth.token.email == 'vanam.pranav03@gmail.com');</code>
+      </p>
+    </div>
+
+    <div class="stats-row">
+      <div class="stat-card accent">
+        <div class="label">Total Users</div>
+        <div class="value" id="stat-total">—</div>
+        <div class="sub">all time</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">New Today</div>
+        <div class="value" id="stat-today">—</div>
+        <div class="sub">last 24 hours</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">This Week</div>
+        <div class="value" id="stat-week">—</div>
+        <div class="sub">last 7 days</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">With Goal Set</div>
+        <div class="value" id="stat-goals">—</div>
+        <div class="sub">completed onboarding</div>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <h2>All Users</h2>
+      <input class="search-box" type="text" id="search" placeholder="Search name or email…" oninput="renderTable()" />
+      <select class="filter-select" id="goal-filter" onchange="renderTable()">
+        <option value="">All goals</option>
+        <option value="Lose weight">Lose weight</option>
+        <option value="Gain muscle">Gain muscle</option>
+        <option value="Improve fitness">Improve fitness</option>
+        <option value="Maintain weight">Maintain weight</option>
+      </select>
+      <button class="refresh-btn" onclick="loadUsers()">↻ Refresh</button>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>User</th>
+            <th>Age</th>
+            <th>Gender</th>
+            <th>Weight</th>
+            <th>Goal</th>
+            <th>Activity</th>
+            <th>Credits</th>
+            <th>Joined</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="users-tbody">
+          <tr class="loading-row">
+            <td colspan="9">
+              <div class="spinner"></div>
+              Loading users…
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="pagination">
+        <span id="page-info">—</span>
+        <div class="page-btns" id="page-btns"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Firebase JS SDK v10 -->
+<script type="module">
+  import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+  import {
+    getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged
+  } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
+  import {
+    getFirestore, collection, getDocs, orderBy, query
+  } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+
+  const ADMIN_EMAIL = 'vanam.pranav03@gmail.com';
+
+  const app = initializeApp({
+    apiKey:     'AIzaSyA2zu144EAVw0j7lC9uTyjPfBmSW7jHEbU',
+    authDomain: 'getfit-with-elefit.firebaseapp.com',
+    projectId:  'getfit-with-elefit',
+    storageBucket: 'getfit-with-elefit.firebasestorage.app',
+    messagingSenderId: '302421573042',
+  });
+
+  const auth = getAuth(app);
+  const db   = getFirestore(app);
+
+  // ── Globals ──────────────────────────────────────────────
+  let allUsers   = [];
+  const PAGE_SIZE = 25;
+  let currentPage = 1;
+
+  // ── Auth state ────────────────────────────────────────────
+  onAuthStateChanged(auth, user => {
+    if (user && user.email === ADMIN_EMAIL) {
+      showDashboard(user);
+    } else if (user) {
+      signOut(auth);
+      showLoginError('Access denied. Admin only.');
+    }
+  });
+
+  // ── Login ─────────────────────────────────────────────────
+  window.doLogin = async function () {
+    const btn = document.getElementById('login-btn');
+    btn.disabled = true;
+    btn.textContent = 'Opening Google…';
+    document.getElementById('login-error').style.display = 'none';
+
+    try {
+      await signInWithPopup(auth, new GoogleAuthProvider());
+    } catch (e) {
+      if (e.code !== 'auth/popup-closed-by-user' && e.code !== 'auth/cancelled-popup-request') {
+        showLoginError('Sign in failed. Please try again.');
+      }
+      btn.disabled = false;
+      btn.textContent = 'Sign in with Google';
+    }
+  };
+
+  window.doSignOut = async function () {
+    await signOut(auth);
+    document.getElementById('dashboard').style.display = 'none';
+    document.getElementById('login-screen').style.display = 'flex';
+  };
+
+  // ── Show dashboard ────────────────────────────────────────
+  function showDashboard(user) {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('dashboard').style.display = 'block';
+    document.getElementById('admin-email-badge').textContent = user.email;
+    loadUsers();
+  }
+
+  // ── Load users from Firestore ─────────────────────────────
+  window.loadUsers = async function () {
+    setTableLoading();
+    try {
+      const q = query(collection(db, 'users'), orderBy('createdAt', 'desc'));
+      const snap = await getDocs(q);
+      allUsers = [];
+      snap.forEach(doc => {
+        allUsers.push({ uid: doc.id, ...doc.data() });
+      });
+      document.getElementById('rule-banner').style.display = 'none';
+    } catch (e) {
+      if (e.code === 'permission-denied' || e.code === 'PERMISSION_DENIED') {
+        // Fallback: try without orderBy (needs composite index)
+        try {
+          const snap2 = await getDocs(collection(db, 'users'));
+          allUsers = [];
+          snap2.forEach(doc => allUsers.push({ uid: doc.id, ...doc.data() }));
+          // Sort client-side
+          allUsers.sort((a, b) => {
+            const da = a.createdAt ? new Date(a.createdAt) : new Date(0);
+            const db2 = b.createdAt ? new Date(b.createdAt) : new Date(0);
+            return db2 - da;
+          });
+          document.getElementById('rule-banner').style.display = 'none';
+        } catch (e2) {
+          document.getElementById('rule-banner').style.display = 'block';
+          setTableEmpty('Permission denied. See the banner above for setup instructions.');
+          return;
+        }
+      } else {
+        // Sort client-side if no index
+        allUsers.sort((a, b) => {
+          const da = a.createdAt ? new Date(a.createdAt) : new Date(0);
+          const db2 = b.createdAt ? new Date(b.createdAt) : new Date(0);
+          return db2 - da;
+        });
+      }
+    }
+
+    updateStats();
+    currentPage = 1;
+    renderTable();
+  };
+
+  // ── Render table ──────────────────────────────────────────
+  window.renderTable = function () {
+    const search = document.getElementById('search').value.toLowerCase();
+    const goal   = document.getElementById('goal-filter').value;
+
+    const filtered = allUsers.filter(u => {
+      const name  = (u.firstName || '').toLowerCase();
+      const email = (u.email || '').toLowerCase();
+      const matchSearch = !search || name.includes(search) || email.includes(search) || u.uid.includes(search);
+      const matchGoal   = !goal || (u.goal || '') === goal;
+      return matchSearch && matchGoal;
+    });
+
+    const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+    if (currentPage > totalPages) currentPage = totalPages;
+
+    const start = (currentPage - 1) * PAGE_SIZE;
+    const page  = filtered.slice(start, start + PAGE_SIZE);
+
+    const tbody = document.getElementById('users-tbody');
+
+    if (filtered.length === 0) {
+      tbody.innerHTML = `<tr class="empty-row"><td colspan="9">No users found</td></tr>`;
+      document.getElementById('page-info').textContent = '0 users';
+      document.getElementById('page-btns').innerHTML = '';
+      return;
+    }
+
+    tbody.innerHTML = page.map(u => userRow(u)).join('');
+
+    document.getElementById('page-info').textContent =
+      `${start + 1}–${Math.min(start + PAGE_SIZE, filtered.length)} of ${filtered.length} users`;
+
+    renderPageBtns(totalPages);
+  };
+
+  function userRow(u) {
+    const name     = u.firstName || '—';
+    const email    = u.email    || '—';
+    const age      = u.age      || '—';
+    const gender   = u.gender   ? capitalize(u.gender) : '—';
+    const weight   = u.weight   ? `${u.weight} kg` : '—';
+    const goal     = u.goal     || '—';
+    const activity = u.activityLevel ? activityShort(u.activityLevel) : '—';
+    const credits  = u.credits  !== undefined ? u.credits : '—';
+    const joined   = u.createdAt ? fmtDate(u.createdAt) : '—';
+    const isNew    = u.createdAt && isWithin24h(u.createdAt);
+    const isToday  = u.createdAt && isWithin24h(u.createdAt);
+
+    const color   = avatarColor(name);
+    const initial = name !== '—' ? name[0].toUpperCase() : '?';
+
+    const creditsClass = (credits === 0 || credits === '—') ? 'credits-cell zero' : 'credits-cell';
+
+    return `
+      <tr>
+        <td>
+          <div class="user-cell">
+            <div class="avatar" style="background:${color.bg};color:${color.fg}">${initial}</div>
+            <div>
+              <div class="name">${esc(name)}</div>
+              <div class="email">${esc(email)}</div>
+            </div>
+          </div>
+        </td>
+        <td>${age}</td>
+        <td>${gender}</td>
+        <td>${weight}</td>
+        <td>${goal !== '—' ? `<span class="badge badge-goal">${esc(goal)}</span>` : '—'}</td>
+        <td>${activity}</td>
+        <td class="${creditsClass}">${credits}</td>
+        <td class="date-cell">${joined}</td>
+        <td>${isToday ? '<span class="badge badge-today">NEW TODAY</span>' : isNew ? '<span class="badge badge-new">New</span>' : ''}</td>
+      </tr>`;
+  }
+
+  function renderPageBtns(totalPages) {
+    const container = document.getElementById('page-btns');
+    if (totalPages <= 1) { container.innerHTML = ''; return; }
+    let html = `<button class="page-btn" onclick="changePage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>‹</button>`;
+    for (let i = 1; i <= totalPages; i++) {
+      if (totalPages > 7 && Math.abs(i - currentPage) > 2 && i !== 1 && i !== totalPages) {
+        if (i === 2 || i === totalPages - 1) html += `<button class="page-btn" disabled>…</button>`;
+        continue;
+      }
+      html += `<button class="page-btn ${i === currentPage ? 'active' : ''}" onclick="changePage(${i})">${i}</button>`;
+    }
+    html += `<button class="page-btn" onclick="changePage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>›</button>`;
+    container.innerHTML = html;
+  }
+
+  window.changePage = function (p) {
+    currentPage = p;
+    renderTable();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // ── Stats ─────────────────────────────────────────────────
+  function updateStats() {
+    const now   = Date.now();
+    const day   = 86400000;
+    const week  = 7 * day;
+    let today = 0, wk = 0, goals = 0;
+    allUsers.forEach(u => {
+      if (u.createdAt) {
+        const t = new Date(u.createdAt).getTime();
+        if (now - t < day)  today++;
+        if (now - t < week) wk++;
+      }
+      if (u.goal) goals++;
+    });
+    document.getElementById('stat-total').textContent = allUsers.length;
+    document.getElementById('stat-today').textContent = today;
+    document.getElementById('stat-week').textContent  = wk;
+    document.getElementById('stat-goals').textContent = goals;
+  }
+
+  // ── Helpers ───────────────────────────────────────────────
+  function setTableLoading() {
+    document.getElementById('users-tbody').innerHTML =
+      `<tr class="loading-row"><td colspan="9"><div class="spinner"></div>Loading users…</td></tr>`;
+  }
+
+  function setTableEmpty(msg) {
+    document.getElementById('users-tbody').innerHTML =
+      `<tr class="empty-row"><td colspan="9">${msg}</td></tr>`;
+  }
+
+  function showLoginError(msg) {
+    const el = document.getElementById('login-error');
+    el.textContent = msg;
+    el.style.display = 'block';
+  }
+
+  function fmtDate(iso) {
+    const d = new Date(iso);
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const pad = n => String(n).padStart(2,'0');
+    return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}, ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  function isWithin24h(iso) {
+    return Date.now() - new Date(iso).getTime() < 86400000;
+  }
+
+  function capitalize(s) { return s ? s[0].toUpperCase() + s.slice(1) : ''; }
+
+  function activityShort(s) {
+    if (!s) return '—';
+    const map = {
+      'sedentary': 'Sedentary',
+      'lightly_active': 'Light',
+      'moderately_active': 'Moderate',
+      'very_active': 'Very active',
+      'extra_active': 'Extra active',
+    };
+    return map[s.toLowerCase()] || capitalize(s);
+  }
+
+  function esc(s) {
+    return String(s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  const COLORS = [
+    { bg:'rgba(200,218,43,.15)', fg:'#C8DA2B' },
+    { bg:'rgba(91,156,246,.15)', fg:'#5B9CF6' },
+    { bg:'rgba(255,107,53,.15)', fg:'#FF6B35' },
+    { bg:'rgba(124,58,237,.15)', fg:'#A78BFA' },
+    { bg:'rgba(0,210,211,.15)', fg:'#00D2D3' },
+    { bg:'rgba(255,71,87,.15)', fg:'#FF4757' },
+  ];
+  function avatarColor(name) {
+    let h = 0;
+    for (let i = 0; i < name.length; i++) h = name.charCodeAt(i) + ((h << 5) - h);
+    return COLORS[Math.abs(h) % COLORS.length];
+  }
+
+  function friendlyAuthError(code) {
+    switch (code) {
+      case 'auth/user-not-found':
+      case 'auth/wrong-password':
+      case 'auth/invalid-credential': return 'Invalid email or password.';
+      case 'auth/too-many-requests':  return 'Too many attempts. Try again later.';
+      default: return 'Sign in failed. Please try again.';
+    }
+  }
+
+</script>
+
+</body>
+</html>

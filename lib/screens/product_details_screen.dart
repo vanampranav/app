@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../models/cart_model.dart';
 import '../theme/app_theme.dart';
 import '../models/product_model.dart';
@@ -290,10 +291,11 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
               ),
               items: _productImages.map((url) {
                 return Builder(
-                  builder: (_) => Image.network(
-                    url,
+                  builder: (_) => CachedNetworkImage(
+                    imageUrl: url,
                     fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Container(
+                    placeholder: (_, __) => Container(color: AppTheme.surface2),
+                    errorWidget: (_, __, ___) => Container(
                       color: AppTheme.surface2,
                       child: const Icon(Icons.image_not_supported,
                           size: 50, color: AppTheme.textTertiary),

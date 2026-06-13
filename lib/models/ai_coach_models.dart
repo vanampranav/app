@@ -37,12 +37,16 @@ class AiCoachPreferences {
   String activityLevel;
   int workoutDays;
   List<String> dietaryPreferences;
+  // Foods the user normally eats — used to personalise the meal plan.
+  // Stored in Firebase but never shown on the profile screen.
+  String foodPreferences;
 
   AiCoachPreferences({
     this.helpType = 'both',
     this.activityLevel = 'moderate',
     this.workoutDays = 3,
     this.dietaryPreferences = const [],
+    this.foodPreferences = '',
   });
 
   Map<String, dynamic> toJson() {
@@ -51,6 +55,7 @@ class AiCoachPreferences {
       'activityLevel': activityLevel,
       'workoutDays': workoutDays,
       'dietaryPreferences': dietaryPreferences,
+      'foodPreferences': foodPreferences,
     };
   }
 }

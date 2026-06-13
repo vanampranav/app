@@ -381,17 +381,13 @@ class _FoodDetailModalState extends State<FoodDetailModal> {
             ? Image.network(
                 widget.food.imageUrl!,
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) {
-                  final fi = FoodIconHelper.get(
-                      foodName: widget.food.name, nutrition: _nutrition);
-                  return Center(child: Icon(fi.icon, color: fi.color, size: 32));
-                },
+                errorBuilder: (_, __, ___) => Center(
+                  child: Text(FoodEmojiHelper.get(widget.food.name),
+                      style: const TextStyle(fontSize: 36))),
               )
-            : Builder(builder: (_) {
-                final fi = FoodIconHelper.get(
-                    foodName: widget.food.name, nutrition: _nutrition);
-                return Center(child: Icon(fi.icon, color: fi.color, size: 32));
-              }),
+            : Center(
+                child: Text(FoodEmojiHelper.get(widget.food.name),
+                    style: const TextStyle(fontSize: 36))),
       ),
       const SizedBox(height: 12),
       Text(

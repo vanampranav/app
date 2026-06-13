@@ -54,7 +54,7 @@ class ShopifyService with ChangeNotifier {
         },
       ),
       defaultPolicies: DefaultPolicies(
-        query: Policies(fetch: FetchPolicy.noCache),
+        query: Policies(fetch: FetchPolicy.cacheAndNetwork),
         mutate: Policies(fetch: FetchPolicy.noCache),
       ),
     );
@@ -69,7 +69,7 @@ class ShopifyService with ChangeNotifier {
         },
       ),
       defaultPolicies: DefaultPolicies(
-        query: Policies(fetch: FetchPolicy.noCache),
+        query: Policies(fetch: FetchPolicy.cacheAndNetwork),
         mutate: Policies(fetch: FetchPolicy.noCache),
       ),
     );
@@ -467,11 +467,12 @@ class ShopifyService with ChangeNotifier {
     }
   }
 
-  Future<Map<String, dynamic>?> getProducts({int first = 250, String? collectionHandle, String? tag}) async {
+  Future<Map<String, dynamic>?> getProducts({int first = 50, String? collectionHandle, String? tag}) async {
     String query;
-    
+
+    // descriptionHtml is intentionally excluded here — it's large and only
+    // needed on the product detail page, which fetches it via getProductById.
     if (collectionHandle != null && collectionHandle.isNotEmpty) {
-      // Query products by collection handle
       query = '''
         query {
           collection(handle: "$collectionHandle") {
@@ -482,7 +483,6 @@ class ShopifyService with ChangeNotifier {
                   title
                   handle
                   description
-                  descriptionHtml
                   priceRange {
                     minVariantPrice {
                       amount
@@ -521,7 +521,6 @@ class ShopifyService with ChangeNotifier {
         }
       ''';
     } else if (tag != null && tag.isNotEmpty) {
-      // Query products by tag
       query = '''
         query {
           products(first: $first, query: "tag:$tag") {
@@ -531,7 +530,6 @@ class ShopifyService with ChangeNotifier {
                 title
                 handle
                 description
-                descriptionHtml
                 priceRange {
                   minVariantPrice {
                     amount
@@ -569,7 +567,6 @@ class ShopifyService with ChangeNotifier {
         }
       ''';
     } else {
-      // Query all products
       query = '''
         query {
           products(first: $first) {
@@ -579,7 +576,6 @@ class ShopifyService with ChangeNotifier {
                 title
                 handle
                 description
-                descriptionHtml
                 priceRange {
                   minVariantPrice {
                     amount
@@ -622,7 +618,6 @@ class ShopifyService with ChangeNotifier {
       final graphQLClient = await client;
       final QueryOptions options = QueryOptions(
         document: gql(query),
-        fetchPolicy: FetchPolicy.noCache,
       );
 
       final QueryResult result = await graphQLClient.query(options);
@@ -674,7 +669,6 @@ class ShopifyService with ChangeNotifier {
       final graphQLClient = await client;
       final QueryOptions options = QueryOptions(
         document: gql(query),
-        fetchPolicy: FetchPolicy.noCache,
       );
 
       final QueryResult result = await graphQLClient.query(options);
@@ -718,6 +712,7 @@ class ShopifyService with ChangeNotifier {
           title
           handle
           description
+          descriptionHtml
           priceRange {
             minVariantPrice {
               amount

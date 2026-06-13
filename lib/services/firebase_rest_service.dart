@@ -89,6 +89,13 @@ class FirebaseRestService {
     if (_refreshToken != null) {
       await _secureStorage.write(key: _prefRefreshToken, value: _refreshToken!);
     }
+    // Seed the Firestore user doc immediately so the admin dashboard can see new users.
+    try {
+      await updateUserProfile({
+        'email': _email ?? '',
+        'createdAt': DateTime.now().toUtc().toIso8601String(),
+      });
+    } catch (_) {}
     return data;
   }
 
@@ -135,13 +142,14 @@ class FirebaseRestService {
     // Sync key fields into users/{uid} so the AI Coach wizard can pre-fill.
     try {
       await updateUserProfile({
-        'firstName':     data['firstName']     ?? '',
-        'age':           data['age']            ?? 0,
-        'height':        data['heightCm']       ?? 0,
-        'weight':        data['weightKg']       ?? 0,
+        'email':         _email              ?? '',
+        'firstName':     data['firstName']   ?? '',
+        'age':           data['age']          ?? 0,
+        'height':        data['heightCm']     ?? 0,
+        'weight':        data['weightKg']     ?? 0,
         'targetWeight':  data['targetWeightKg'] ?? 0,
-        'gender':        data['gender']         ?? '',
-        'activityLevel': data['activityLevel']  ?? '',
+        'gender':        data['gender']       ?? '',
+        'activityLevel': data['activityLevel'] ?? '',
       });
     } catch (_) {}
   }

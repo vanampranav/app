@@ -37,7 +37,8 @@ class _AiCoachWizardState extends State<AiCoachWizard> {
   String _helpType = 'both';
   String _activityLevel = 'moderate';
   double _workoutDays = 4;
-  final _dietaryCtrl = TextEditingController();
+  final _dietaryCtrl     = TextEditingController(); // restriction chips overflow
+  final _foodPrefsCtrl   = TextEditingController(); // usual foods & cuisine
   final Set<String> _selectedDietaryChips = {};
   
   // Step 4 Targets
@@ -65,6 +66,7 @@ class _AiCoachWizardState extends State<AiCoachWizard> {
     _targetWeightCtrl.dispose();
     _timelineCtrl.dispose();
     _dietaryCtrl.dispose();
+    _foodPrefsCtrl.dispose();
     super.dispose();
   }
 
@@ -139,6 +141,21 @@ class _AiCoachWizardState extends State<AiCoachWizard> {
             if (raw.contains('no dairy') || raw.contains('dairy')) _selectedDietaryChips.add('no dairy');
             if (raw.contains('no eggs') || raw.contains('eggs')) _selectedDietaryChips.add('no eggs');
             _dietaryCtrl.text = profile['dietaryRestrictions'].toString();
+          }
+          if (profile['timelineWeeks'] != null) {
+            final weeks = int.tryParse(profile['timelineWeeks'].toString()) ?? 0;
+            if (weeks > 0) {
+              if (weeks % 4 == 0) {
+                _timelineCtrl.text = (weeks ~/ 4).toString();
+                _timelineUnit = 'months';
+              } else {
+                _timelineCtrl.text = weeks.toString();
+                _timelineUnit = 'weeks';
+              }
+            }
+          }
+          if (profile['foodPreferences'] != null && profile['foodPreferences'].toString().isNotEmpty) {
+            _foodPrefsCtrl.text = profile['foodPreferences'].toString();
           }
         });
       }
@@ -224,7 +241,10 @@ class _AiCoachWizardState extends State<AiCoachWizard> {
                 'targetWeight': int.tryParse(_targetWeightCtrl.text),
                 'gender': _gender,
                 'activityLevel': _activityLevel,
+                'timelineWeeks': _buildProfile().timelineWeeks,
                 'dietaryRestrictions': _buildPreferences().dietaryPreferences.join(', '),
+                if (_foodPrefsCtrl.text.trim().isNotEmpty)
+                  'foodPreferences': _foodPrefsCtrl.text.trim(),
               });
             } catch (_) {}
           }
@@ -268,6 +288,7 @@ class _AiCoachWizardState extends State<AiCoachWizard> {
       activityLevel: _activityLevel,
       workoutDays: _workoutDays.toInt(),
       dietaryPreferences: parts.isEmpty ? ['no restrictions'] : parts,
+      foodPreferences: _foodPrefsCtrl.text.trim(),
     );
   }
 
@@ -287,7 +308,8 @@ class _AiCoachWizardState extends State<AiCoachWizard> {
       );
 
       if (!mounted) return;
-      setState(() => _isLoading = false);
+      // Keep _isLoading = true while we deduct credits and save — this prevents
+      // the frozen blank-screen glitch between generation and navigation.
 
       if (_fbService.isLoggedIn) {
         // Deduct 1 credit before saving the plan
@@ -320,12 +342,16 @@ class _AiCoachWizardState extends State<AiCoachWizard> {
   bool _checkProfileDiffers() {
     if (_firebaseProfile == null) return true;
     final p = _firebaseProfile!;
+    final currentTimelineWeeks = _buildProfile().timelineWeeks;
+    final savedTimelineWeeks = int.tryParse(p['timelineWeeks']?.toString() ?? '') ?? 0;
     return (p['age']?.toString() ?? '') != _ageCtrl.text ||
            (p['weight']?.toString() ?? '') != _weightCtrl.text ||
            (p['height']?.toString() ?? '') != _heightCtrl.text ||
            (p['targetWeight']?.toString() ?? '') != _targetWeightCtrl.text ||
            (p['gender']?.toString() ?? '') != _gender ||
-           (p['activityLevel']?.toString() ?? '') != _activityLevel;
+           (p['activityLevel']?.toString() ?? '') != _activityLevel ||
+           savedTimelineWeeks != currentTimelineWeeks ||
+           (p['foodPreferences']?.toString() ?? '') != _foodPrefsCtrl.text.trim();
   }
 
   @override
@@ -596,7 +622,7 @@ class _AiCoachWizardState extends State<AiCoachWizard> {
         ]),
         const SizedBox(height: 32),
 
-        _buildFieldLabel('DIETARY PREFERENCES'),
+        _buildFieldLabel('DIETARY RESTRICTIONS'),
         Wrap(
           spacing: 8,
           runSpacing: 8,
@@ -608,7 +634,21 @@ class _AiCoachWizardState extends State<AiCoachWizard> {
           ],
         ),
         const SizedBox(height: 12),
-        _buildInput(_dietaryCtrl, hint: 'Other restrictions (optional)'),
+        _buildInput(_dietaryCtrl, hint: 'Any other restrictions (optional)'),
+        const SizedBox(height: 24),
+
+        _buildFieldLabel('YOUR USUAL FOODS & CUISINE'),
+        const SizedBox(height: 4),
+        Text(
+          'Tell us what you normally eat. We\'ll build your plan around it.',
+          style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 11),
+        ),
+        const SizedBox(height: 10),
+        _buildInput(
+          _foodPrefsCtrl,
+          hint: 'e.g. I eat idli for breakfast, rice-dal for lunch. I drink tea twice daily. Love biryani on weekends.',
+          maxLines: 3,
+        ),
         const SizedBox(height: 32),
 
         if (_errorMsg != null)
@@ -716,13 +756,18 @@ class _AiCoachWizardState extends State<AiCoachWizard> {
     );
   }
 
-  Widget _buildInput(TextEditingController ctrl, {String? hint}) {
+  Widget _buildInput(TextEditingController ctrl, {String? hint, int maxLines = 1}) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
-      height: 48,
-      decoration: BoxDecoration(color: const Color(0xFF111111), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white.withOpacity(0.05))),
+      height: maxLines == 1 ? 48 : null,
+      decoration: BoxDecoration(
+        color: const Color(0xFF111111),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
+      ),
       child: TextField(
         controller: ctrl,
+        maxLines: maxLines,
         style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
         decoration: InputDecoration(
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import '../theme/app_theme.dart';
 import '../services/shopify_service.dart';
 import '../services/health_service.dart';
@@ -19,6 +20,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String? _userEmail;
   bool _healthConnected = false;
   bool _healthLoading   = false;
+  DateTime? _lastSyncTime;
 
   @override
   void initState() {
@@ -31,14 +33,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final prefs = await SharedPreferences.getInstance();
     final email = await secureStorage.read(key: 'user_email');
     final healthConnected = await HealthService().isConnected;
+    final lastSync = await HealthService().lastSyncTime;
     if (mounted) {
       setState(() {
         _userEmail = email;
         _notificationsEnabled = prefs.getBool('notifications_enabled') ?? true;
         _emailMarketing = prefs.getBool('email_marketing') ?? false;
         _healthConnected = healthConnected;
+        _lastSyncTime = lastSync;
       });
     }
+  }
+
+  String get _platformName => defaultTargetPlatform == TargetPlatform.iOS
+      ? 'Apple Health'
+      : 'Health Connect';
+
+  String _formatSyncTime(DateTime t) {
+    final diff = DateTime.now().difference(t);
+    if (diff.inMinutes < 1)  return 'just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours   < 24) return '${diff.inHours}h ago';
+    return '${diff.inDays}d ago';
   }
 
   Future<void> _toggleHealthConnection() async {
@@ -48,15 +64,69 @@ class _SettingsScreenState extends State<SettingsScreen> {
       setState(() { _healthConnected = false; _healthLoading = false; });
     } else {
       final granted = await HealthService().requestPermissions();
-      setState(() { _healthConnected = granted; _healthLoading = false; });
+      final lastSync = await HealthService().lastSyncTime;
+      setState(() {
+        _healthConnected = granted;
+        _lastSyncTime = lastSync;
+        _healthLoading = false;
+      });
       if (!granted && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: const Text(
-            'Health Connect requires the app to be published on Google Play. '
-            'You can test it on the emulator (Android 14+).',
-          ),
-        ));
+        _showHealthConnectionError();
       }
+    }
+  }
+
+  void _showHealthConnectionError() {
+    final isIos = defaultTargetPlatform == TargetPlatform.iOS;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Could not connect to $_platformName'),
+        content: Text(isIos
+            ? 'Go to Settings > Privacy & Security > Health > EleFit and enable all permissions.'
+            : 'Make sure Health Connect is installed and grant EleFit access inside the Health Connect app.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await HealthService().openHealthApp();
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.lime),
+            child: Text(isIos ? 'Open Settings' : 'Open Health Connect'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _syncChip(String label) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+        decoration: BoxDecoration(
+          color: AppTheme.lime.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: AppTheme.lime.withOpacity(0.25)),
+        ),
+        child: Text(label,
+            style: TextStyle(
+                fontSize: 11,
+                color: Colors.green[700],
+                fontWeight: FontWeight.w500)),
+      );
+
+  Future<void> _recheckHealthConnection() async {
+    setState(() => _healthLoading = true);
+    final connected = await HealthService().checkPermissions();
+    final lastSync  = await HealthService().lastSyncTime;
+    if (mounted) {
+      setState(() {
+        _healthConnected = connected;
+        _lastSyncTime    = lastSync;
+        _healthLoading   = false;
+      });
     }
   }
 
@@ -274,60 +344,215 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('Connected Apps',
-                      style: TextStyle(
+                      style: const TextStyle(
                           fontFamily: 'Helvetica',
                           fontSize: 18,
                           fontWeight: FontWeight.bold)),
                   const SizedBox(height: 4),
                   Text(
-                    'Sync your data with your device\'s health platform.',
+                    'Sync your health data automatically.',
                     style: TextStyle(fontSize: 13, color: Colors.grey[600]),
                   ),
                   const SizedBox(height: 16),
-                  // Apple Health / Health Connect tile
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: Container(
-                      width: 44, height: 44,
-                      decoration: BoxDecoration(
+
+                  // ── Health platform tile ──────────────────────────────────
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: _healthConnected
+                          ? AppTheme.lime.withOpacity(0.06)
+                          : AppTheme.surface3.withOpacity(0.5),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
                         color: _healthConnected
-                            ? AppTheme.lime.withOpacity(0.12)
-                            : AppTheme.surface3,
-                        borderRadius: BorderRadius.circular(12),
+                            ? AppTheme.lime.withOpacity(0.3)
+                            : Colors.transparent,
                       ),
-                      child: Icon(Icons.favorite_outlined,
-                          color: _healthConnected
-                              ? AppTheme.lime
-                              : AppTheme.textTertiary,
-                          size: 22),
                     ),
-                    title: const Text('Apple Health / Health Connect'),
-                    subtitle: Text(
-                      _healthConnected
-                          ? 'Connected · syncing weight & nutrition'
-                          : 'Not connected',
-                      style: TextStyle(
-                          color: _healthConnected
-                              ? AppTheme.lime
-                              : Colors.grey[500],
-                          fontSize: 12),
-                    ),
-                    trailing: _healthLoading
-                        ? const SizedBox(
-                            width: 24, height: 24,
-                            child: CircularProgressIndicator(
-                                color: AppTheme.lime, strokeWidth: 2))
-                        : TextButton(
-                            onPressed: _toggleHealthConnection,
-                            style: TextButton.styleFrom(
-                              foregroundColor: _healthConnected
-                                  ? Colors.red
-                                  : AppTheme.lime,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Header row
+                        Row(
+                          children: [
+                            Container(
+                              width: 42, height: 42,
+                              decoration: BoxDecoration(
+                                color: _healthConnected
+                                    ? AppTheme.lime.withOpacity(0.15)
+                                    : Colors.grey.withOpacity(0.12),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Icon(
+                                defaultTargetPlatform == TargetPlatform.iOS
+                                    ? Icons.favorite_rounded
+                                    : Icons.monitor_heart_outlined,
+                                color: _healthConnected
+                                    ? AppTheme.lime
+                                    : Colors.grey[400],
+                                size: 22,
+                              ),
                             ),
-                            child: Text(_healthConnected
-                                ? 'Disconnect'
-                                : 'Connect'),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    _platformName,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 15),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Row(
+                                    children: [
+                                      Container(
+                                        width: 7, height: 7,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: _healthConnected
+                                              ? Colors.green
+                                              : Colors.grey[400],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 5),
+                                      Text(
+                                        _healthConnected
+                                            ? 'Connected'
+                                            : 'Not connected',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: _healthConnected
+                                              ? Colors.green[700]
+                                              : Colors.grey[500],
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (_healthLoading)
+                              const SizedBox(
+                                width: 22, height: 22,
+                                child: CircularProgressIndicator(
+                                    color: AppTheme.lime, strokeWidth: 2),
+                              )
+                            else
+                              TextButton(
+                                onPressed: _toggleHealthConnection,
+                                style: TextButton.styleFrom(
+                                  foregroundColor: _healthConnected
+                                      ? Colors.red[400]
+                                      : AppTheme.lime,
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 6),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                ),
+                                child: Text(
+                                  _healthConnected ? 'Disconnect' : 'Connect',
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 13),
+                                ),
+                              ),
+                          ],
+                        ),
+
+                        // ── Connected details ─────────────────────────────
+                        if (_healthConnected) ...[
+                          const SizedBox(height: 14),
+                          const Divider(height: 1),
+                          const SizedBox(height: 12),
+
+                          // Last sync row
+                          Row(
+                            children: [
+                              Icon(Icons.sync_rounded,
+                                  size: 14, color: Colors.grey[500]),
+                              const SizedBox(width: 6),
+                              Text(
+                                _lastSyncTime != null
+                                    ? 'Last synced ${_formatSyncTime(_lastSyncTime!)}'
+                                    : 'Not yet synced — connect your scale or log a meal',
+                                style: TextStyle(
+                                    fontSize: 12, color: Colors.grey[600]),
+                              ),
+                            ],
                           ),
+                          const SizedBox(height: 10),
+
+                          // What's syncing
+                          Text('Syncing:',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey[600],
+                                  fontWeight: FontWeight.w600)),
+                          const SizedBox(height: 6),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: [
+                              _syncChip('Weight & Body Fat'),
+                              _syncChip('Steps'),
+                              _syncChip('Heart Rate'),
+                              _syncChip('Sleep'),
+                              _syncChip('Nutrition'),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+
+                          // Action buttons row
+                          Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  onPressed: _recheckHealthConnection,
+                                  icon: const Icon(Icons.refresh_rounded,
+                                      size: 16),
+                                  label: const Text('Re-check',
+                                      style: TextStyle(fontSize: 12)),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: AppTheme.lime,
+                                    side: BorderSide(
+                                        color: AppTheme.lime.withOpacity(0.5)),
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 8),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  onPressed: () =>
+                                      HealthService().openHealthApp(),
+                                  icon: const Icon(Icons.open_in_new_rounded,
+                                      size: 16),
+                                  label: Text(
+                                    defaultTargetPlatform ==
+                                            TargetPlatform.iOS
+                                        ? 'Apple Health'
+                                        : 'Health Connect',
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: AppTheme.textSecondary,
+                                    side: BorderSide(
+                                        color: Colors.grey.withOpacity(0.3)),
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 8),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
                 ],
               ),

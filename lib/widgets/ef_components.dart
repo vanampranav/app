@@ -892,7 +892,7 @@ class EFNavBar extends StatelessWidget {
     _NavItem(icon: Icons.home_outlined,              activeIcon: Icons.home_rounded,              label: 'Home'),
     _NavItem(icon: Icons.restaurant_menu_outlined,   activeIcon: Icons.restaurant_menu_rounded,   label: 'Nutrition'),
     _NavItem(icon: Icons.storefront_outlined,        activeIcon: Icons.storefront_rounded,        label: 'Shop'),
-    _NavItem(icon: Icons.monitor_weight_outlined,    activeIcon: Icons.monitor_weight,            label: 'Scale'),
+    _NavItem(icon: Icons.insights_outlined,           activeIcon: Icons.insights,                  label: 'Performance'),
     _NavItem(icon: Icons.person_outline,             activeIcon: Icons.person_rounded,            label: 'Profile'),
   ];
 

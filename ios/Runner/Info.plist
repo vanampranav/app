@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
@@ -26,16 +28,29 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>FirebaseMessagingAutoInitEnabled</key>
 	<true/>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>upi</string>
+		<string>phonepe</string>
+		<string>tez</string>
+		<string>googlepay</string>
+		<string>gpay</string>
+		<string>paytm</string>
+		<string>bhim</string>
+		<string>amazonpay</string>
+		<string>razorpay</string>
+		<string>rzp</string>
+	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
-	<key>NSHealthShareUsageDescription</key>
-	<string>EleFit reads your health data to sync weight, steps, and activity with your fitness goals.</string>
-	<key>NSHealthUpdateUsageDescription</key>
-	<string>EleFit writes your scale measurements and nutrition logs to Apple Health so other apps can use them.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>We need Bluetooth access to connect to your smart scale and receive weight data.</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
 	<string>We need Bluetooth access to scan for and connect to your smart scale.</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>EleFit reads your health data to sync weight, steps, and activity with your fitness goals.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>EleFit writes your scale measurements and nutrition logs to Apple Health so other apps can use them.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>We need location access to scan for Bluetooth Low Energy devices.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>

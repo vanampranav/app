@@ -1,9 +1,10 @@
 #import "GeneratedPluginRegistrant.h"
-// ...existing code...
 #ifndef Runner_Bridging_Header_h
 #define Runner_Bridging_Header_h
 
 #import <Foundation/Foundation.h>
+
+#if !TARGET_OS_SIMULATOR
 
 /* Core algorithm/constants (exposes enums like ICSexType, ICKitchenScaleUnit, etc.) */
 #if __has_include(<ICDeviceManager/ICAlgDef.h>)
@@ -65,5 +66,6 @@
 #import <ICLogger/ICLogger.h>
 #endif
 
+#endif /* !TARGET_OS_SIMULATOR */
+
 #endif /* Runner_Bridging_Header_h */
-// ...existing code...

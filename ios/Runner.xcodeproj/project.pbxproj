@@ -16,12 +16,12 @@
 		97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
 		97D61DC8448F2600A0C032DA /* Pods_RunnerTests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1D2ECF33DCD4F1F96D63F655 /* Pods_RunnerTests.framework */; };
 		ACF19114BCC5651BAB9C929B /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 51AB4F223E90E9B6DEEA7ED5 /* Pods_Runner.framework */; };
-		E296D3832F4C9841007E4767 /* ICBleProtocol.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = E296D3772F4C97B1007E4767 /* ICBleProtocol.xcframework */; };
-		E296D3842F4C9841007E4767 /* ICBleProtocol.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = E296D3772F4C97B1007E4767 /* ICBleProtocol.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		E296D3852F4C9843007E4767 /* ICBodyFatAlgorithms.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = E296D37F2F4C97E4007E4767 /* ICBodyFatAlgorithms.xcframework */; };
-		E296D3862F4C9843007E4767 /* ICBodyFatAlgorithms.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = E296D37F2F4C97E4007E4767 /* ICBodyFatAlgorithms.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		E296D3872F4C9845007E4767 /* ICDeviceManager.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = E296D37B2F4C97BF007E4767 /* ICDeviceManager.xcframework */; };
-		E296D3882F4C9845007E4767 /* ICDeviceManager.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = E296D37B2F4C97BF007E4767 /* ICDeviceManager.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		E296D3832F4C9841007E4767 /* ICBleProtocol.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = E296D3772F4C97B1007E4767 /* ICBleProtocol.xcframework */; platformFilter = ios; };
+		E296D3842F4C9841007E4767 /* ICBleProtocol.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = E296D3772F4C97B1007E4767 /* ICBleProtocol.xcframework */; platformFilter = ios; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		E296D3852F4C9843007E4767 /* ICBodyFatAlgorithms.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = E296D37F2F4C97E4007E4767 /* ICBodyFatAlgorithms.xcframework */; platformFilter = ios; };
+		E296D3862F4C9843007E4767 /* ICBodyFatAlgorithms.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = E296D37F2F4C97E4007E4767 /* ICBodyFatAlgorithms.xcframework */; platformFilter = ios; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		E296D3872F4C9845007E4767 /* ICDeviceManager.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = E296D37B2F4C97BF007E4767 /* ICDeviceManager.xcframework */; platformFilter = ios; };
+		E296D3882F4C9845007E4767 /* ICDeviceManager.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = E296D37B2F4C97BF007E4767 /* ICDeviceManager.xcframework */; platformFilter = ios; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		E296D3892F4C9847007E4767 /* ICLogger 2.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = E296D3812F4C97F4007E4767 /* ICLogger 2.xcframework */; };
 		E296D38A2F4C9847007E4767 /* ICLogger 2.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = E296D3812F4C97F4007E4767 /* ICLogger 2.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		E296D38C2F4C9A1F007E4767 /* FitDaysSDKManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E296D38B2F4C9A1F007E4767 /* FitDaysSDKManager.swift */; };
@@ -78,6 +78,7 @@
 		97C147001CF9000F007C117D /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		97C147021CF9000F007C117D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		BED491FB0ED7F11D60F3D879 /* Pods-Runner.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"; sourceTree = "<group>"; };
+		E276E0DC2FCEC83D00708E1A /* Runner.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Runner.entitlements; sourceTree = "<group>"; };
 		E296D3772F4C97B1007E4767 /* ICBleProtocol.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = ICBleProtocol.xcframework; sourceTree = "<group>"; };
 		E296D37B2F4C97BF007E4767 /* ICDeviceManager.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = ICDeviceManager.xcframework; sourceTree = "<group>"; };
 		E296D37F2F4C97E4007E4767 /* ICBodyFatAlgorithms.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = ICBodyFatAlgorithms.xcframework; sourceTree = "<group>"; };
@@ -174,6 +175,7 @@
 		97C146F01CF9000F007C117D /* Runner */ = {
 			isa = PBXGroup;
 			children = (
+				E276E0DC2FCEC83D00708E1A /* Runner.entitlements */,
 				E296D38B2F4C9A1F007E4767 /* FitDaysSDKManager.swift */,
 				E296D3812F4C97F4007E4767 /* ICLogger 2.xcframework */,
 				E296D37B2F4C97BF007E4767 /* ICDeviceManager.xcframework */,
@@ -482,7 +484,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = iphoneos;
@@ -497,6 +499,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = UJMW9NXB22;
 				ENABLE_BITCODE = NO;
@@ -613,7 +616,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
 				MTL_ENABLE_DEBUG_INFO = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
@@ -664,7 +667,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = iphoneos;
@@ -681,6 +684,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = UJMW9NXB22;
 				ENABLE_BITCODE = NO;
@@ -705,6 +709,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = UJMW9NXB22;
 				ENABLE_BITCODE = NO;

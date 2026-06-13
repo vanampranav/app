@@ -4,7 +4,7 @@ import '../models/cart_model.dart';
 import '../screens/home_screen.dart';
 import '../screens/nutrition/nutrition_log_screen.dart';
 import '../screens/shop_screen.dart';
-import '../screens/devices_screen.dart';
+import '../screens/performance_screen.dart';
 import '../screens/profile_screen.dart';
 import 'ef_components.dart';
 
@@ -43,7 +43,7 @@ class _MainLayoutState extends State<MainLayout> {
       case 0:  page = const HomeScreen();           break;
       case 1:  page = const NutritionLogScreen();   break;
       case 2:  page = const ShopScreen();           break;
-      case 3:  page = const DevicesScreen();        break;
+      case 3:  page = const PerformanceScreen();     break;
       case 4:  page = const ProfileScreen();        break;
       default: page = const HomeScreen();
     }

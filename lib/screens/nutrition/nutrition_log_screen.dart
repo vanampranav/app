@@ -631,19 +631,12 @@ class _NutritionLogScreenState extends State<NutritionLogScreen> {
             Container(
               width: 40, height: 40,
               decoration: BoxDecoration(
-                color: FoodIconHelper.get(
-                    foodName: entry.foodName,
-                    nutrition: entry.nutrition).color.withOpacity(0.12),
+                color: AppTheme.surface2,
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(
-                FoodIconHelper.get(
-                    foodName: entry.foodName,
-                    nutrition: entry.nutrition).icon,
-                size: 20,
-                color: FoodIconHelper.get(
-                    foodName: entry.foodName,
-                    nutrition: entry.nutrition).color,
+              child: Center(
+                child: Text(FoodEmojiHelper.get(entry.foodName),
+                    style: const TextStyle(fontSize: 22)),
               ),
             ),
             const SizedBox(width: 12),
@@ -838,17 +831,12 @@ class _FoodEntryDetailSheet extends StatelessWidget {
             Container(
               width: 42, height: 42,
               decoration: BoxDecoration(
-                color: accent.withOpacity(0.12),
+                color: AppTheme.surface2,
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(
-                FoodIconHelper.get(
-                    foodName: entry.foodName,
-                    nutrition: entry.nutrition).icon,
-                size: 22,
-                color: FoodIconHelper.get(
-                    foodName: entry.foodName,
-                    nutrition: entry.nutrition).color,
+              child: Center(
+                child: Text(FoodEmojiHelper.get(entry.foodName),
+                    style: const TextStyle(fontSize: 22)),
               ),
             ),
             const SizedBox(width: 12),

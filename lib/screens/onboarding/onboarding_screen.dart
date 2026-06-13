@@ -74,6 +74,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   // ── Complete step ──────────────────────────────────────────────────────────
   bool   _saving        = false;
 
+  // ── Name text controller ───────────────────────────────────────────────────
+  late final TextEditingController _nameCtrl;
+
   // ── Drum-picker controllers ────────────────────────────────────────────────
   late FixedExtentScrollController _monthCtrl;
   late FixedExtentScrollController _dayCtrl;
@@ -107,6 +110,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   void initState() {
     super.initState();
     _fb.init();
+    _nameCtrl      = TextEditingController(text: _name);
     _monthCtrl     = FixedExtentScrollController(initialItem: 5);
     _dayCtrl       = FixedExtentScrollController(initialItem: 14);
     _yearCtrl      = FixedExtentScrollController(initialItem: 55);
@@ -121,6 +125,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
   @override
   void dispose() {
+    _nameCtrl.dispose();
     _monthCtrl.dispose();   _dayCtrl.dispose();      _yearCtrl.dispose();
     _heightCmCtrl.dispose();_heightFtCtrl.dispose(); _heightInCtrl.dispose();
     _weightKgCtrl.dispose();_weightLbsCtrl.dispose();
@@ -197,9 +202,41 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     } catch (e) {
       setState(() {
         _authLoading = false;
-        _authError = e.toString().replaceAll('Exception: ', '');
+        _authError = _friendlyError(e);
       });
     }
+  }
+
+  String _friendlyError(Object e) {
+    final msg = e.toString().toLowerCase();
+    if (msg.contains('socket') ||
+        msg.contains('connection reset') ||
+        msg.contains('connection refused') ||
+        msg.contains('network') ||
+        msg.contains('errno = 54') ||
+        msg.contains('clientexception') ||
+        msg.contains('handshake') ||
+        msg.contains('timeout')) {
+      return 'No internet connection. Please check your network and try again.';
+    }
+    if (msg.contains('email') && msg.contains('already')) {
+      return 'An account with this email already exists. Try signing in instead.';
+    }
+    if (msg.contains('invalid') && msg.contains('credential') ||
+        msg.contains('wrong password') ||
+        msg.contains('user not found')) {
+      return 'Incorrect email or password. Please try again.';
+    }
+    if (msg.contains('too many')) {
+      return 'Too many attempts. Please wait a few minutes and try again.';
+    }
+    if (msg.contains('weak password')) {
+      return 'Password is too weak. Use at least 6 characters.';
+    }
+    if (msg.contains('invalid email')) {
+      return 'Please enter a valid email address.';
+    }
+    return e.toString().replaceAll('Exception: ', '');
   }
 
   void _prefillFromProfile(Map<String, dynamic> p) {
@@ -324,7 +361,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       setState(() => _saving = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(e.toString().replaceAll('Exception: ', '')),
+          content: Text(_friendlyError(e)),
           backgroundColor: AppTheme.error,
         ));
       }
@@ -483,7 +520,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                     color: AppTheme.lime, strokeWidth: 2),
               ),
               SizedBox(width: 12),
-              Text('Saving to Firebase...',
+              Text('Saving your profile...',
                   style: TextStyle(
                       color: AppTheme.textSecondary,
                       fontWeight: FontWeight.w700,
@@ -720,7 +757,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                'Data encrypted with AES-256 and stored in Firebase.',
+                'Your data is encrypted with AES-256 and stored securely.',
                 style: AppTheme.bodySM,
               ),
             ),
@@ -801,7 +838,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                 } catch (e) {
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                      content: Text(e.toString().replaceAll('Exception: ', '')),
+                      content: Text(_friendlyError(e)),
                       backgroundColor: AppTheme.error,
                     ));
                   }
@@ -835,7 +872,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         _EFTextField(
           hint: 'Your first name',
           autofocus: true,
-          initialValue: _name,
+          controller: _nameCtrl,
           textCapitalization: TextCapitalization.words,
           onChanged: (v) => setState(() => _name = v),
         ),
@@ -1345,7 +1382,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         Text('$first, your plan\nis ready 🎉',
             style: AppTheme.displayMD.copyWith(height: 1.1)),
         const SizedBox(height: 8),
-        Text('Saving to your Firebase profile when you tap Let\'s Go.',
+        Text('Your plan will be saved when you tap Let\'s Go.',
             style: AppTheme.bodyMD),
         const SizedBox(height: 28),
         // Calorie hero card
@@ -1423,8 +1460,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
             const Text('☁️', style: TextStyle(fontSize: 16)),
             const SizedBox(width: 10),
             Expanded(child: Text(
-              'All your data will be saved to a dedicated '
-              'profiles collection in Firebase, linked to '
+              'All your data will be saved securely and linked to '
               'your account at ${_fb.email ?? _authEmail}.',
               style: AppTheme.bodySM.copyWith(color: AppTheme.textSecondary, height: 1.5),
             )),
@@ -1530,6 +1566,7 @@ class _EFTextField extends StatelessWidget {
   final TextCapitalization textCapitalization;
   final TextInputType? keyboardType;
   final String? initialValue;
+  final TextEditingController? controller;
   const _EFTextField({
     required this.hint,
     required this.onChanged,
@@ -1537,6 +1574,7 @@ class _EFTextField extends StatelessWidget {
     this.textCapitalization = TextCapitalization.none,
     this.keyboardType,
     this.initialValue,
+    this.controller,
   });
 
   @override
@@ -1546,9 +1584,9 @@ class _EFTextField extends StatelessWidget {
       autofocus: autofocus,
       textCapitalization: textCapitalization,
       keyboardType: keyboardType,
-      controller: initialValue != null
+      controller: controller ?? (initialValue != null
           ? (TextEditingController()..text = initialValue!)
-          : null,
+          : null),
       style: AppTheme.headingLG.copyWith(color: AppTheme.textPrimary),
       cursorColor: AppTheme.lime,
       decoration: InputDecoration(
