@@ -34,7 +34,7 @@ dependencies:
   onesignal_flutter: ^5.3.4
   
   # Firebase (core only — auth + firestore done via REST to avoid version conflicts)
-  firebase_core: ^2.24.2
+  firebase_core: ^3.6.0
 
   # PDF generation and sharing
   pdf: ^3.10.8
