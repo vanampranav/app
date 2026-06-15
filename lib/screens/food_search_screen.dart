@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 import '../models/food_models.dart';
 import '../models/device_model.dart';
 import '../services/nutrition_service.dart';
@@ -29,13 +31,17 @@ class _FoodSearchScreenState extends State<FoodSearchScreen> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocus = FocusNode();
 
-  List<FoodItem>  _searchResults  = [];
-  List<FoodItem>  _recentlyUsed   = [];
-  List<MealEntry> _tempFoodList   = [];
-  bool _isLoading    = false;
-  bool _hasSearched  = false;
-  bool _showCart     = false;   // expand the added-items panel
+  List<FoodItem>  _searchResults    = [];
+  List<FoodItem>  _recentlyUsed     = [];
+  List<MealEntry> _tempFoodList     = [];
+  List<String>    _suggestions      = [];
+  bool _isLoading        = false;
+  bool _hasSearched      = false;
+  bool _showCart         = false;
+  bool _showSuggestions  = false;
+  bool _isBarcodeLoading = false;
   String? _errorMessage;
+  Timer? _debounce;
   late MealType _selectedMealType;
 
   static const _mealEmoji = {
@@ -60,6 +66,7 @@ class _FoodSearchScreenState extends State<FoodSearchScreen> {
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _searchController.dispose();
     _searchFocus.dispose();
     super.dispose();
@@ -128,17 +135,43 @@ class _FoodSearchScreenState extends State<FoodSearchScreen> {
   Widget build(BuildContext context) {
     final accent = _mealColor[_selectedMealType]!;
 
+    final keyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
+
     return Scaffold(
       backgroundColor: AppTheme.bg,
       body: SafeArea(
         child: Column(
           children: [
             _buildHeader(accent),
-            _buildSearchBar(),
+            _buildSearchBar(keyboardOpen: keyboardOpen),
             Expanded(child: _buildBody()),
+            if (!(keyboardOpen && _showSuggestions)) _buildFatSecretBadge(),
             _buildBottomBar(accent),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildFatSecretBadge() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            'Nutrition data powered by ',
+            style: AppTheme.labelSM.copyWith(color: AppTheme.textTertiary),
+          ),
+          Text(
+            'fatsecret',
+            style: AppTheme.labelSM.copyWith(
+              color: const Color(0xFF8CC63F),
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.3,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -244,50 +277,172 @@ class _FoodSearchScreenState extends State<FoodSearchScreen> {
   }
 
   // ── Search bar ──────────────────────────────────────────────────────────────
-  Widget _buildSearchBar() {
+  Widget _buildSearchBar({bool keyboardOpen = false}) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-      child: TextField(
-        controller: _searchController,
-        focusNode: _searchFocus,
-        style: AppTheme.bodyLG.copyWith(color: AppTheme.textPrimary),
-        cursorColor: AppTheme.lime,
-        textInputAction: TextInputAction.search,
-        onSubmitted: _searchFood,
-        onChanged: (v) {
-          if (v.isEmpty) setState(() { _searchResults = []; _hasSearched = false; });
-        },
-        decoration: InputDecoration(
-          hintText: 'Search food…',
-          hintStyle: AppTheme.bodyLG.copyWith(color: AppTheme.textTertiary),
-          prefixIcon: const Icon(Icons.search_rounded,
-              color: AppTheme.textTertiary, size: 22),
-          suffixIcon: _searchController.text.isNotEmpty
-              ? IconButton(
-                  icon: const Icon(Icons.clear_rounded,
-                      color: AppTheme.textTertiary, size: 18),
-                  onPressed: () {
-                    _searchController.clear();
-                    setState(() { _searchResults = []; _hasSearched = false; });
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _searchController,
+                  focusNode: _searchFocus,
+                  style: AppTheme.bodyLG.copyWith(color: AppTheme.textPrimary),
+                  cursorColor: AppTheme.lime,
+                  textInputAction: TextInputAction.search,
+                  onSubmitted: (v) {
+                    setState(() => _showSuggestions = false);
+                    _searchFood(v);
                   },
-                )
-              : null,
-          filled: true,
-          fillColor: AppTheme.surface1,
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-            borderSide:
-                BorderSide(color: Colors.white.withOpacity(0.08)),
+                  onChanged: (v) {
+                    if (v.isEmpty) {
+                      _debounce?.cancel();
+                      setState(() {
+                        _searchResults = [];
+                        _hasSearched = false;
+                        _suggestions = [];
+                        _showSuggestions = false;
+                      });
+                      return;
+                    }
+                    _debounce?.cancel();
+                    _debounce = Timer(const Duration(milliseconds: 350), () async {
+                      final results = await widget.nutritionService.searchAutocomplete(v);
+                      if (mounted && _searchController.text == v) {
+                        setState(() {
+                          _suggestions = results;
+                          _showSuggestions = results.isNotEmpty;
+                        });
+                      }
+                    });
+                  },
+                  decoration: InputDecoration(
+                    hintText: 'Search food…',
+                    hintStyle: AppTheme.bodyLG.copyWith(color: AppTheme.textTertiary),
+                    prefixIcon: const Icon(Icons.search_rounded,
+                        color: AppTheme.textTertiary, size: 22),
+                    suffixIcon: _searchController.text.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear_rounded,
+                                color: AppTheme.textTertiary, size: 18),
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() {
+                                _searchResults = [];
+                                _hasSearched = false;
+                                _suggestions = [];
+                                _showSuggestions = false;
+                              });
+                            },
+                          )
+                        : null,
+                    filled: true,
+                    fillColor: AppTheme.surface1,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                      borderSide: BorderSide(color: Colors.white.withOpacity(0.08)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                      borderSide: const BorderSide(color: AppTheme.lime, width: 1.5),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              // Barcode scan button
+              GestureDetector(
+                onTap: _isBarcodeLoading ? null : _openBarcodeScanner,
+                child: Container(
+                  width: 50, height: 50,
+                  decoration: BoxDecoration(
+                    color: AppTheme.surface1,
+                    borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                    border: Border.all(color: Colors.white.withOpacity(0.08)),
+                  ),
+                  child: _isBarcodeLoading
+                      ? const Padding(
+                          padding: EdgeInsets.all(14),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppTheme.lime,
+                          ),
+                        )
+                      : const Icon(Icons.qr_code_scanner_rounded,
+                          color: AppTheme.lime, size: 24),
+                ),
+              ),
+            ],
           ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-            borderSide: const BorderSide(color: AppTheme.lime, width: 1.5),
-          ),
-        ),
+          // Autocomplete dropdown (floats over body, height capped to prevent overflow)
+          if (_showSuggestions)
+            ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: keyboardOpen ? 176 : 264),
+              child: Container(
+                margin: const EdgeInsets.only(top: 4),
+                decoration: BoxDecoration(
+                  color: AppTheme.surface2,
+                  borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                  border: Border.all(color: Colors.white.withOpacity(0.08)),
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    children: _suggestions.map((s) => InkWell(
+                      onTap: () {
+                        _searchController.text = s;
+                        setState(() { _showSuggestions = false; _suggestions = []; });
+                        _searchFood(s);
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.search_rounded,
+                                color: AppTheme.textTertiary, size: 16),
+                            const SizedBox(width: 10),
+                            Text(s, style: AppTheme.bodyMD.copyWith(color: AppTheme.textPrimary)),
+                          ],
+                        ),
+                      ),
+                    )).toList(),
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
+  }
+
+  // ── Barcode scanner ─────────────────────────────────────────────────────────
+  Future<void> _openBarcodeScanner() async {
+    final result = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => const _BarcodeScannerPage()),
+    );
+    if (result == null || !mounted) return;
+
+    setState(() => _isBarcodeLoading = true);
+    try {
+      final food = await widget.nutritionService.searchByBarcode(result);
+      if (!mounted) return;
+      if (food == null) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('No food found for this barcode. Try searching by name.'),
+        ));
+      } else {
+        _selectFood(food);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Barcode lookup failed: ${e.toString().replaceAll('Exception: ', '')}'),
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _isBarcodeLoading = false);
+    }
   }
 
   // ── Body ────────────────────────────────────────────────────────────────────
@@ -657,4 +812,80 @@ class _CartMeta {
   final String emoji, label;
   final Color color;
   const _CartMeta(this.emoji, this.label, this.color);
+}
+
+// ── Barcode scanner full-screen page ────────────────────────────────────────
+class _BarcodeScannerPage extends StatefulWidget {
+  const _BarcodeScannerPage();
+  @override
+  State<_BarcodeScannerPage> createState() => _BarcodeScannerPageState();
+}
+
+class _BarcodeScannerPageState extends State<_BarcodeScannerPage> {
+  final MobileScannerController _scanner = MobileScannerController();
+  bool _scanned = false;
+
+  @override
+  void dispose() {
+    _scanner.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        title: const Text('Scan Barcode'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.flash_on_rounded),
+            onPressed: () => _scanner.toggleTorch(),
+          ),
+        ],
+      ),
+      body: Stack(
+        children: [
+          MobileScanner(
+            controller: _scanner,
+            onDetect: (capture) {
+              if (_scanned) return;
+              final barcode = capture.barcodes.isNotEmpty ? capture.barcodes.first : null;
+              final code = barcode?.rawValue;
+              if (code != null && code.isNotEmpty) {
+                _scanned = true;
+                Navigator.of(context).pop(code);
+              }
+            },
+          ),
+          // Scan frame overlay
+          Center(
+            child: Container(
+              width: 260,
+              height: 160,
+              decoration: BoxDecoration(
+                border: Border.all(color: AppTheme.lime, width: 2.5),
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: 48,
+            left: 0, right: 0,
+            child: Text(
+              'Point your camera at a food barcode',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.8),
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

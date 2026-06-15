@@ -559,7 +559,7 @@ class _MeasurementScreenState extends State<MeasurementScreen> {
 
   Future<void> _saveMeasurement(WeightMeasurement measurement) async {
     if (_activeMember == null) return;
-    
+
     final bodyMeasurement = BodyMeasurement(
       id: MemberService.generateId(),
       memberId: _activeMember!.id,
@@ -576,11 +576,133 @@ class _MeasurementScreenState extends State<MeasurementScreen> {
       skeletalMusclePercent: measurement.skeletalMuscle,
       bodyAge: measurement.physicalAge?.toInt(),
     );
-    
+
     await _memberService.addMeasurement(bodyMeasurement);
 
     // Push to Apple Health / Health Connect (silent — never blocks UI)
     HealthService().syncScaleReading(measurement);
+  }
+
+  /// BMI from height in member profile — no BIA needed
+  double _calcBmi(double weightKg) {
+    if (_activeMember == null) return 0;
+    final heightM = _activeMember!.heightCm / 100.0;
+    return weightKg / (heightM * heightM);
+  }
+
+  /// Mifflin-St Jeor BMR estimate — no BIA needed
+  int _calcBmr(double weightKg) {
+    if (_activeMember == null) return 0;
+    final h = _activeMember!.heightCm.toDouble();
+    final a = _activeMember!.age.toDouble();
+    final base = (10 * weightKg) + (6.25 * h) - (5 * a);
+    return (_activeMember!.gender == Gender.male ? base + 5 : base - 161).round();
+  }
+
+  void _showManualEntryDialog() {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surface1,
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppTheme.radiusXxl)),
+        title: Text('Log Weight Manually',
+            style: AppTheme.headingSM.copyWith(fontSize: 16)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: controller,
+              autofocus: true,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              style: AppTheme.numericMD.copyWith(fontSize: 28),
+              textAlign: TextAlign.center,
+              decoration: InputDecoration(
+                hintText: '0.0',
+                hintStyle: AppTheme.numericMD.copyWith(
+                    fontSize: 28, color: AppTheme.textTertiary),
+                suffixText: 'kg',
+                suffixStyle: AppTheme.bodyLG,
+                filled: true,
+                fillColor: AppTheme.surface2,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(children: [
+              const Icon(Icons.info_outline_rounded,
+                  size: 13, color: AppTheme.textTertiary),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'BMI & BMR are calculated automatically. Body fat & composition require the smart scale.',
+                  style: AppTheme.bodySM,
+                ),
+              ),
+            ]),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancel', style: AppTheme.bodyMD),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.lime,
+              foregroundColor: Colors.black,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppTheme.radiusPill)),
+            ),
+            onPressed: () async {
+              final weight = double.tryParse(controller.text.trim());
+              Navigator.pop(ctx);
+              if (weight != null && weight > 0 && weight < 500) {
+                await _saveManualWeight(weight);
+              }
+            },
+            child: const Text('Save',
+                style: TextStyle(fontWeight: FontWeight.w900)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _saveManualWeight(double weightKg) async {
+    if (_activeMember == null) return;
+    final bmi = _calcBmi(weightKg);
+    final bmr = _calcBmr(weightKg);
+
+    final bodyMeasurement = BodyMeasurement(
+      id: MemberService.generateId(),
+      memberId: _activeMember!.id,
+      timestamp: DateTime.now(),
+      weightKg: weightKg,
+      bmi: bmi > 0 ? bmi : null,
+      bmr: bmr > 0 ? bmr : null,
+      // BIA-based fields left null — require smart scale
+    );
+
+    await _memberService.addMeasurement(bodyMeasurement);
+
+    final measurements =
+        await _memberService.getMeasurements(_activeMember!.id, limit: 2);
+    if (mounted && measurements.isNotEmpty) {
+      setState(() {
+        _latestMeasurement =
+            WeightMeasurement.fromBodyMeasurement(measurements.first);
+        if (measurements.length > 1) {
+          _compareMeasurement =
+              WeightMeasurement.fromBodyMeasurement(measurements[1]);
+        }
+      });
+    }
   }
 
   void _showMemberSelector() {
@@ -791,12 +913,38 @@ class _MeasurementScreenState extends State<MeasurementScreen> {
               : 'Step on the scale to measure',
           style: AppTheme.bodyMD,
         ),
-        if (_latestMeasurement?.hasBodyComposition == true) ...[
+        const SizedBox(height: 12),
+        GestureDetector(
+          onTap: _showManualEntryDialog,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+            decoration: BoxDecoration(
+              color: AppTheme.surface3,
+              borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+              border: Border.all(color: Colors.white.withOpacity(0.1)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.edit_outlined,
+                    size: 14, color: AppTheme.textSecondary),
+                const SizedBox(width: 6),
+                Text('Log manually',
+                    style: AppTheme.labelMD.copyWith(
+                        color: AppTheme.textSecondary)),
+              ],
+            ),
+          ),
+        ),
+        if (_latestMeasurement != null && weight > 0) ...[
           const SizedBox(height: 16),
-          // Quick metrics strip
+          // Quick metrics strip — always show if we have a measurement
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
+              _quickStat('BMI',
+                  _latestMeasurement!.bmi?.toStringAsFixed(1), '',
+                  AppTheme.lime),
               _quickStat('Body Fat',
                   _latestMeasurement!.bodyFat?.toStringAsFixed(1), '%',
                   const Color(0xFFFF8C42)),
@@ -806,9 +954,6 @@ class _MeasurementScreenState extends State<MeasurementScreen> {
               _quickStat('Water',
                   _latestMeasurement!.water?.toStringAsFixed(1), '%',
                   const Color(0xFF3B9EFF)),
-              _quickStat('BMI',
-                  _latestMeasurement!.bmi?.toStringAsFixed(1), '',
-                  AppTheme.lime),
             ],
           ),
         ],

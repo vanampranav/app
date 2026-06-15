@@ -5,13 +5,14 @@ import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/food_models.dart';
+import '../config/secrets.dart';
 
 /// Service for FatSecret API integration
 /// Handles food search and nutrition calculation directly from Flutter
 class NutritionService {
   // FatSecret API credentials
-  static const String _consumerKey = 'e34aca171b2345e4bc3ef171ce2dd8f1';
-  static const String _consumerSecret = 'b096e2108d51498cb9c99792b52db841';
+  static const String _consumerKey = Secrets.fatSecretConsumerKey;
+  static const String _consumerSecret = Secrets.fatSecretConsumerSecret;
   
   // FatSecret API endpoints
   static const String _baseUrl = 'https://platform.fatsecret.com/rest/server.api';
@@ -91,48 +92,45 @@ class NutritionService {
   /// Search for foods by query
   Future<List<FoodItem>> searchFood(String query) async {
     if (query.trim().isEmpty) return [];
-    
+
     try {
       final response = await _makeRequest({
-        'method': 'foods.search',
+        'method': 'foods.search.v3',
         'search_expression': query,
         'max_results': '20',
+        'include_food_images': '1',
       });
-      
-      final foods = response['foods']?['food'];
+
+      // v3 uses foods_search.results.food (different from v1 foods.food)
+      final foods = response['foods_search']?['results']?['food'];
       if (foods == null) return [];
-      
+
       // Handle single result (FatSecret returns object instead of array)
       final foodList = foods is List ? foods : [foods];
-      
+
       return foodList.map<FoodItem>((food) {
-        // Parse calories from food_description
         double caloriesPer100g = 0;
         String servingSize = '100g';
-        
+
         final description = food['food_description'] as String? ?? '';
-        // Example: "Per 100g - Calories: 52kcal | Fat: 0.17g | Carbs: 13.81g | Protein: 0.26g"
         final calorieMatch = RegExp(r'Calories:\s*(\d+(?:\.\d+)?)\s*kcal').firstMatch(description);
         if (calorieMatch != null) {
           caloriesPer100g = double.tryParse(calorieMatch.group(1) ?? '0') ?? 0;
         }
-        
-        // Extract serving info
+
         final servingMatch = RegExp(r'Per\s+(.+?)\s*-').firstMatch(description);
         if (servingMatch != null) {
           servingSize = servingMatch.group(1) ?? '100g';
         }
-        
+
         final foodItem = FoodItem(
           fdcId: food['food_id'].toString(),
           name: food['food_name'] ?? 'Unknown Food',
           caloriesPer100g: caloriesPer100g,
           servingSize: servingSize,
         );
-        
-        // Cache the food item
+
         _foodCache[foodItem.fdcId] = foodItem;
-        
         return foodItem;
       }).toList();
     } catch (e) {
@@ -224,6 +222,95 @@ class NutritionService {
     }
   }
   
+  /// Autocomplete suggestions for a partial query (Premier feature)
+  Future<List<String>> searchAutocomplete(String query) async {
+    if (query.trim().length < 2) return [];
+    try {
+      final response = await _makeRequest({
+        'method': 'foods.autocomplete',
+        'expression': query.trim(),
+        'max_results': '6',
+      });
+      final suggestions = response['suggestions']?['suggestion'];
+      if (suggestions == null) return [];
+      if (suggestions is List) return suggestions.cast<String>();
+      return [suggestions.toString()];
+    } catch (e) {
+      debugPrint('Autocomplete error: $e');
+      return [];
+    }
+  }
+
+  /// Look up a food by barcode (Premier feature)
+  Future<FoodItem?> searchByBarcode(String barcode) async {
+    try {
+      final idResponse = await _makeRequest({
+        'method': 'food.find_id_for_barcode',
+        'barcode': barcode,
+      });
+      final foodId = idResponse['food_id']?['value']?.toString();
+      if (foodId == null) return null;
+
+      final detailResponse = await _makeRequest({
+        'method': 'food.get.v4',
+        'food_id': foodId,
+      });
+      final food = detailResponse['food'];
+      if (food == null) return null;
+
+      final servingsData = food['servings']?['serving'];
+      final servings = servingsData is List ? servingsData : [servingsData];
+      final serving = servings.firstWhere(
+        (s) => s['metric_serving_unit'] == 'g',
+        orElse: () => servings.first,
+      );
+
+      double calories = 0;
+      String servingSize = '100g';
+      if (serving != null) {
+        calories = double.tryParse(serving['calories']?.toString() ?? '0') ?? 0;
+        final amount = serving['metric_serving_amount']?.toString() ?? '100';
+        final unit = serving['metric_serving_unit']?.toString() ?? 'g';
+        servingSize = '$amount$unit';
+        final metricAmount = double.tryParse(amount) ?? 100;
+        if (metricAmount > 0) calories = calories / metricAmount * 100;
+      }
+
+      // Fetch product image from Open Food Facts (free, great coverage for barcodes)
+      String? imageUrl = await _getOpenFoodFactsImage(barcode);
+
+      final item = FoodItem(
+        fdcId: foodId,
+        name: food['food_name'] ?? 'Unknown Food',
+        caloriesPer100g: calories,
+        servingSize: servingSize,
+        imageUrl: imageUrl,
+      );
+      _foodCache[item.fdcId] = item;
+      return item;
+    } catch (e) {
+      debugPrint('Barcode search error: $e');
+      return null;
+    }
+  }
+
+  /// Fetch product image from Open Food Facts by barcode (free, no API key needed)
+  Future<String?> _getOpenFoodFactsImage(String barcode) async {
+    try {
+      final uri = Uri.parse(
+        'https://world.openfoodfacts.org/api/v0/product/$barcode.json?fields=image_front_small_url',
+      );
+      final res = await http.get(uri).timeout(const Duration(seconds: 4));
+      if (res.statusCode != 200) return null;
+      final data = jsonDecode(res.body);
+      if (data['status'] != 1) return null;
+      final url = data['product']?['image_front_small_url'] as String?;
+      return (url != null && url.isNotEmpty) ? url : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Get recently used foods from local storage
   Future<List<FoodItem>> getRecentlyUsed() async {
     try {

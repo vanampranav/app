@@ -50,3 +50,4 @@ android/app/theelefit.jks
 
 # Secrets — never commit real tokens
 lib/config/shopify_config.dart
+lib/config/secrets.dart

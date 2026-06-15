@@ -166,9 +166,19 @@ class _WebViewCheckoutScreenState extends State<WebViewCheckoutScreen> {
       ..addJavaScriptChannel(
         'FlutterBridge',
         onMessageReceived: (JavaScriptMessage message) {
-          debugPrint('JavaScript message: ${message.message}');
-          if (message.message.contains('shop_pay_callback')) {
-            if (message.message.contains('success')) {
+          final msg = message.message;
+          debugPrint('JavaScript message: $msg');
+
+          // UPI deep-link intercepted from window.open override (iOS fix)
+          if (msg.startsWith('upi_launch:')) {
+            final upiUrl = msg.substring('upi_launch:'.length);
+            debugPrint('UPI launch from JS bridge: $upiUrl');
+            _launchExternalUrl(upiUrl);
+            return;
+          }
+
+          if (msg.contains('shop_pay_callback')) {
+            if (msg.contains('success')) {
               context.read<CartModel>().clearCart();
               Navigator.of(context).pop(true);
               ScaffoldMessenger.of(context).showSnackBar(
@@ -227,6 +237,39 @@ class _WebViewCheckoutScreenState extends State<WebViewCheckoutScreen> {
               return;
             }
             
+            // ── UPI window.open interceptor (ALL pages, including Razorpay) ──────
+            // On iOS, Razorpay triggers UPI app opening via window.open('upi://...')
+            // which bypasses onNavigationRequest entirely. We override window.open
+            // here to catch it and post to FlutterBridge instead.
+            controller.runJavaScript('''
+              (function() {
+                if (window._upiOverride) return;
+                window._upiOverride = true;
+                var UPI_RE = /^(upi|phonepe|tez|googlepay|gpay|paytm|bhim|amazonpay|razorpay|rzp):/i;
+                var _orig = window.open;
+                window.open = function(url, t, f) {
+                  if (url && UPI_RE.test(url)) {
+                    console.log('[EleFit] UPI intercepted via window.open: ' + url);
+                    try { window.FlutterBridge.postMessage('upi_launch:' + url); } catch(e) {}
+                    return { closed: false, close: function(){}, location: { href: '' } };
+                  }
+                  return _orig ? _orig.apply(this, arguments) : null;
+                };
+                document.addEventListener('click', function(e) {
+                  var el = e.target;
+                  for (var i = 0; i < 6 && el; i++, el = el.parentElement) {
+                    if (el.tagName === 'A' && UPI_RE.test(el.href || '')) {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      console.log('[EleFit] UPI intercepted via anchor: ' + el.href);
+                      try { window.FlutterBridge.postMessage('upi_launch:' + el.href); } catch(e2) {}
+                      return;
+                    }
+                  }
+                }, true);
+              })();
+            ''').catchError((_) {});
+
             // Only inject Shopify-specific scripts on Shopify / theelefit.com pages.
             // Razorpay's hosted checkout (api.razorpay.com / checkout.razorpay.com)
             // is cross-origin; running our DOM scripts there causes DOMExceptions
@@ -720,16 +763,20 @@ class _WebViewCheckoutScreenState extends State<WebViewCheckoutScreen> {
     try {
       final Uri uri = Uri.parse(url);
       if (Platform.isIOS) {
-        // On iOS, canLaunchUrl requires LSApplicationQueriesSchemes (registered in
-        // Info.plist). If the app is installed canLaunchUrl returns true; if not,
-        // it returns false. Try launching directly — iOS handles the "not installed"
-        // case with its own system prompt.
-        if (await canLaunchUrl(uri)) {
+        // On iOS, skip canLaunchUrl — it can return false even when the app IS
+        // installed if the user gesture window has expired. Try launching directly
+        // instead; iOS will show its own "app not installed" prompt if needed.
+        try {
           await launchUrl(uri, mode: LaunchMode.externalApplication);
           return;
-        }
-        // App not installed — show App Store options.
-        await _showUPIAppOptions();
+        } catch (_) {}
+        // Fallback: try without specifying a mode
+        try {
+          await launchUrl(uri);
+          return;
+        } catch (_) {}
+        // App genuinely not installed — show App Store options.
+        if (mounted) await _showUPIAppOptions();
         return;
       }
 

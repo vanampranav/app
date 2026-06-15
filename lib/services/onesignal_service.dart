@@ -1,9 +1,10 @@
 import 'package:onesignal_flutter/onesignal_flutter.dart';
 import 'package:flutter/foundation.dart';
+import '../config/secrets.dart';
 import 'navigation_service.dart';
 
 class OneSignalService {
-  static const String appId = "f7c2b47d-4672-469d-b624-b1e1eba3339d";
+  static const String appId = Secrets.oneSignalAppId;
 
   static Future<void> initialize() async {
     try {

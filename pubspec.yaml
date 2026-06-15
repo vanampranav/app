@@ -50,6 +50,9 @@ dependencies:
   # Charts for weight trend graph
   fl_chart: ^0.69.0
 
+  # Barcode scanning for nutrition food lookup
+  mobile_scanner: ^6.0.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

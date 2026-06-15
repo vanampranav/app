@@ -3,12 +3,13 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/ai_coach_models.dart';
+import '../config/secrets.dart';
 import 'ai_coach_parser.dart';
 
 /// Firebase REST API Service — avoids SDK version conflicts entirely.
 /// Uses identitytoolkit.googleapis.com for Auth and firestore.googleapis.com for Firestore.
 class FirebaseRestService {
-  static const String _apiKey = 'AIzaSyA2zu144EAVw0j7lC9uTyjPfBmSW7jHEbU';
+  static const String _apiKey = Secrets.firebaseApiKey;
   static const String _projectId = 'getfit-with-elefit';
   static const String _authUrl    = 'https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=$_apiKey';
   static const String _signUpUrl  = 'https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=$_apiKey';

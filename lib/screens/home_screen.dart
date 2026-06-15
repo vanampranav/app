@@ -379,11 +379,19 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     final memberService = MemberService();
     final member = await memberService.ensureMemberExists();
 
+    // Calculate BMI and BMR from member profile (no BIA required)
+    final heightM = member.heightCm / 100.0;
+    final bmi = heightM > 0 ? weightKg / (heightM * heightM) : null;
+    final base = (10 * weightKg) + (6.25 * member.heightCm) - (5 * member.age.toDouble());
+    final bmr = (member.gender == Gender.male ? base + 5 : base - 161).round();
+
     await memberService.addMeasurement(BodyMeasurement(
       id: MemberService.generateId(),
       memberId: member.id,
       timestamp: DateTime.now(),
       weightKg: weightKg,
+      bmi: bmi,
+      bmr: bmr > 0 ? bmr : null,
     ));
 
     final prefs = await SharedPreferences.getInstance();

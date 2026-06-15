@@ -36,6 +36,7 @@ class _FoodDetailModalState extends State<FoodDetailModal> {
 
   late TextEditingController _weightCtrl;
   StreamSubscription?        _weightSub;
+  Timer?                     _weightDebounce;
 
   // ── Unit conversion helpers ──────────────────────────────────────────────
   static const _units = ['g', 'oz', 'ml', 'lb'];
@@ -87,6 +88,7 @@ class _FoodDetailModalState extends State<FoodDetailModal> {
 
   @override
   void dispose() {
+    _weightDebounce?.cancel();
     _weightSub?.cancel();
     _weightCtrl.dispose();
     super.dispose();
@@ -437,7 +439,11 @@ class _FoodDetailModalState extends State<FoodDetailModal> {
             ),
             onChanged: (v) {
               if (v.isNotEmpty && double.tryParse(v) != null) {
-                _calculateNutrition();
+                _weightDebounce?.cancel();
+                _weightDebounce = Timer(
+                  const Duration(milliseconds: 600),
+                  _calculateNutrition,
+                );
               }
             },
           ),

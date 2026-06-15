@@ -43,6 +43,8 @@
 	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>EleFit uses your camera to scan food barcodes for quick nutrition lookup.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>We need Bluetooth access to connect to your smart scale and receive weight data.</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
