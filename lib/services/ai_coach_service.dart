@@ -175,42 +175,39 @@ class AiCoachService {
   // --- Fallback calculations (used when backend is unreachable) ---
 
   AiCoachTarget _localFallbackTargets(AiCoachProfile profile, AiCoachPreferences preferences) {
+    // Mifflin-St Jeor BMR — matches onboarding formula exactly
     double bmr;
+    final w = profile.currentWeight;
+    final h = profile.height;
+    final a = profile.age.toDouble();
     if (profile.gender == 'male') {
-      bmr = 88.362 + (13.397 * profile.currentWeight) + (4.799 * profile.height) - (5.677 * profile.age);
+      bmr = (10 * w) + (6.25 * h) - (5 * a) + 5;
     } else if (profile.gender == 'female') {
-      bmr = 447.593 + (9.247 * profile.currentWeight) + (3.098 * profile.height) - (4.33 * profile.age);
+      bmr = (10 * w) + (6.25 * h) - (5 * a) - 161;
     } else {
-      double mBmr = 88.362 + (13.397 * profile.currentWeight) + (4.799 * profile.height) - (5.677 * profile.age);
-      double fBmr = 447.593 + (9.247 * profile.currentWeight) + (3.098 * profile.height) - (4.33 * profile.age);
-      bmr = (mBmr + fBmr) / 2;
+      bmr = (10 * w) + (6.25 * h) - (5 * a) - 78; // average of +5 and -161
     }
 
-    Map<String, double> activityMultipliers = {
-      'sedentary': 1.2, 'light': 1.375, 'moderate': 1.55, 'active': 1.725, 'extra': 1.9,
+    const activityMultipliers = {
+      'sedentary': 1.2, 'light': 1.375, 'moderate': 1.55,
+      'active': 1.725, 'very_active': 1.9, 'extra': 1.9,
     };
-    double multiplier = activityMultipliers[preferences.activityLevel] ?? 1.55;
-    int tdee = (bmr * multiplier).round();
+    final multiplier = activityMultipliers[preferences.activityLevel] ?? 1.55;
+    final tdee = (bmr * multiplier).round();
 
-    double weightDiff = (profile.currentWeight - profile.targetWeight).abs();
-    double weeklyChange = profile.timelineWeeks > 0 ? weightDiff / profile.timelineWeeks : 0;
-    double calorieAdjustment = weeklyChange * 500;
+    // Calorie target = pure TDEE (matches new onboarding — no goal adjustment)
+    final calories = tdee.clamp(1200, 4000);
 
-    int adjustedCalories;
-    if (profile.currentWeight > profile.targetWeight) {
-      adjustedCalories = (tdee - calorieAdjustment).round();
-    } else {
-      adjustedCalories = (tdee + calorieAdjustment).round();
-    }
+    // Macros: protein 1.8g/kg, fat 28% of kcal, carbs remainder
+    final protein = (w * 1.8).round();
+    final fatCals = (calories * 0.28).round();
+    final fat     = (fatCals / 9).round();
+    final carbs   = ((calories - protein * 4 - fatCals) / 4).round().clamp(0, 500);
 
     return AiCoachTarget(
       tdee: tdee,
-      dailyCalories: adjustedCalories,
-      macros: {
-        'protein': ((adjustedCalories * 0.3) / 4).round(),
-        'carbs': ((adjustedCalories * 0.4) / 4).round(),
-        'fat': ((adjustedCalories * 0.3) / 9).round(),
-      },
+      dailyCalories: calories,
+      macros: {'protein': protein, 'carbs': carbs, 'fat': fat},
     );
   }
 

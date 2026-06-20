@@ -11,17 +11,14 @@ import '../home_screen.dart';
 // Step map
 //   0  : Welcome         (full-screen, no progress bar)
 //   1  : Auth            (sign-up / sign-in, no progress bar)
-//   2-8: Data collection (progress 1/9 … 7/9)
-//   9  : Health Connect  (progress 8/9, skippable)
-//   10 : Complete        (progress 9/9)
+//   2-8: Data collection (progress 1/7 … 7/7)
 //   2  : Name
 //   3  : Gender
 //   4  : Birthdate
 //   5  : Height & Weight
-//   6  : Goal
-//   7  : Target Weight
-//   8  : Activity Level
-//   9  : Complete
+//   6  : Activity Level
+//   7  : Health Connect  (skippable)
+//   8  : Complete
 // ─────────────────────────────────────────────────────────────────────────────
 
 class OnboardingScreen extends StatefulWidget {
@@ -62,9 +59,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   int    _heightIn      = 7;
   double _weightKg      = 70.0;
   double _weightLbs     = 154.0;
-  String _goal          = '';
-  double _targetWeightKg  = 65.0;
-  double _targetWeightLbs = 143.0;
   String _activityLevel = '';
 
   // ── Health Connect step ────────────────────────────────────────────────────
@@ -86,8 +80,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   late FixedExtentScrollController _heightInCtrl;
   late FixedExtentScrollController _weightKgCtrl;
   late FixedExtentScrollController _weightLbsCtrl;
-  late FixedExtentScrollController _targetKgCtrl;
-  late FixedExtentScrollController _targetLbsCtrl;
 
   // ── Static lists ───────────────────────────────────────────────────────────
   static const _monthNames = [
@@ -119,8 +111,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     _heightInCtrl  = FixedExtentScrollController(initialItem: 7);
     _weightKgCtrl  = FixedExtentScrollController(initialItem: 40);
     _weightLbsCtrl = FixedExtentScrollController(initialItem: 88);
-    _targetKgCtrl  = FixedExtentScrollController(initialItem: 35);
-    _targetLbsCtrl = FixedExtentScrollController(initialItem: 77);
   }
 
   @override
@@ -129,14 +119,13 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     _monthCtrl.dispose();   _dayCtrl.dispose();      _yearCtrl.dispose();
     _heightCmCtrl.dispose();_heightFtCtrl.dispose(); _heightInCtrl.dispose();
     _weightKgCtrl.dispose();_weightLbsCtrl.dispose();
-    _targetKgCtrl.dispose();_targetLbsCtrl.dispose();
     super.dispose();
   }
 
   // ── Navigation ─────────────────────────────────────────────────────────────
   void _next() {
     if (_step == 1) { _handleAuth(); return; }
-    if (_step < 10) setState(() { _goingForward = true; _step++; });
+    if (_step < 8) setState(() { _goingForward = true; _step++; });
   }
 
   void _back() {
@@ -152,9 +141,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         return validEmail && validPassword && validName;
       case 2: return _name.trim().isNotEmpty;
       case 3: return _gender.isNotEmpty;
-      case 6: return _goal.isNotEmpty;
-      case 8: return _activityLevel.isNotEmpty;
-      case 9: return true; // Health Connect is always skippable
+      case 6: return _activityLevel.isNotEmpty;
+      case 7: return true; // Health Connect is always skippable
       default: return true;
     }
   }
@@ -247,8 +235,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     if (p['birthDay']      != null) _birthDay       = (p['birthDay']      as num).toInt();
     if (p['heightCm']      != null) _heightCm       = (p['heightCm']      as num).toInt();
     if (p['weightKg']      != null) _weightKg       = (p['weightKg']      as num).toDouble();
-    if (p['targetWeightKg']!= null) _targetWeightKg = (p['targetWeightKg']as num).toDouble();
-    if (p['goal']          != null) _goal           = p['goal'].toString();
     if (p['activityLevel'] != null) _activityLevel  = p['activityLevel'].toString();
   }
 
@@ -277,9 +263,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       'sedentary': 1.2, 'light': 1.375, 'moderate': 1.55,
       'active': 1.725,  'very_active': 1.9,
     };
-    double tdee = bmr * (mult[_activityLevel] ?? 1.55);
-    if (_goal == 'lose') tdee -= 500;
-    if (_goal == 'gain') tdee += 300;
+    final tdee = bmr * (mult[_activityLevel] ?? 1.55);
     return tdee.round().clamp(1200, 4000);
   }
 
@@ -294,7 +278,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
   double get _resolvedWeightKg  => _isMetric ? _weightKg      : _weightLbs / 2.205;
   double get _resolvedHeightCm  => _isMetric ? _heightCm.toDouble() : (_heightFt * 30.48 + _heightIn * 2.54);
-  double get _resolvedTargetKg  => _isMetric ? _targetWeightKg : _targetWeightLbs / 2.205;
 
   // ── Save helpers ────────────────────────────────────────────────────────────
   Future<void> _saveLocalPrefs() async {
@@ -307,11 +290,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     await prefs.setInt('user_birth_year',  _birthYear);
     await prefs.setInt('user_birth_month', _birthMonth);
     await prefs.setInt('user_birth_day',   _birthDay);
-    await prefs.setDouble('user_weight_kg',        _resolvedWeightKg);
-    await prefs.setDouble('user_height_cm',        _resolvedHeightCm);
-    await prefs.setDouble('user_target_weight_kg', _resolvedTargetKg);
-    await prefs.setString('user_goal',     _goal);
-    await prefs.setString('user_activity', _activityLevel);
+    await prefs.setDouble('user_weight_kg', _resolvedWeightKg);
+    await prefs.setDouble('user_height_cm', _resolvedHeightCm);
+    await prefs.setString('user_activity',  _activityLevel);
 
     // Write under both key names so every screen reads the right value
     await prefs.setInt('user_daily_calories', kcal);
@@ -340,8 +321,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         'age':              _calcAge(),
         'heightCm':         _resolvedHeightCm,
         'weightKg':         _resolvedWeightKg,
-        'targetWeightKg':   _resolvedTargetKg,
-        'goal':             _goal,
         'activityLevel':    _activityLevel,
         'dailyCalorieTarget': kcal,
         'macroProtein':     macros['protein'] ?? 0,
@@ -453,7 +432,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               ),
               const Spacer(),
               if (showProgress)
-                Text('$dataStep / 9',
+                Text('$dataStep / 7',
                     style: AppTheme.labelMD.copyWith(color: AppTheme.textTertiary)),
             ],
           ),
@@ -462,7 +441,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
             ClipRRect(
               borderRadius: BorderRadius.circular(3),
               child: TweenAnimationBuilder<double>(
-                tween: Tween(end: dataStep / 9),
+                tween: Tween(end: dataStep / 7),
                 duration: const Duration(milliseconds: 400),
                 curve: Curves.easeOutCubic,
                 builder: (_, v, __) => LinearProgressIndicator(
@@ -532,9 +511,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     }
 
     String label;
-    if (_step == 10)                     label = "Let's Go! 🚀";
-    else if (_step == 9 && _healthConnected) label = 'Continue ✓';
-    else if (_step == 9)                 label = 'Skip for now';
+    if (_step == 8)                      label = "Let's Go! 🚀";
+    else if (_step == 7 && _healthConnected) label = 'Continue ✓';
+    else if (_step == 7)                 label = 'Skip for now';
     else if (_step == 1 && _isSignUp)    label = 'Create Account';
     else if (_step == 1 && !_isSignUp)   label = 'Sign In';
     else                                 label = 'Continue';
@@ -544,7 +523,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       child: _EFButton(
         label: label,
         enabled: _canContinue,
-        onTap: _step == 10 ? _complete : _next,
+        onTap: _step == 8 ? _complete : _next,
       ),
     );
   }
@@ -557,11 +536,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       case 3: return _buildGenderStep();
       case 4: return _buildBirthdateStep();
       case 5: return _buildHeightWeightStep();
-      case 6: return _buildGoalStep();
-      case 7: return _buildTargetWeightStep();
-      case 8: return _buildActivityStep();
-      case 9: return _buildHealthConnectStep();
-      case 10: return _buildCompleteStep();
+      case 6: return _buildActivityStep();
+      case 7: return _buildHealthConnectStep();
+      case 8: return _buildCompleteStep();
       default: return const SizedBox.shrink();
     }
   }
@@ -1048,108 +1025,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // STEP 6 — Goal
-  // ═══════════════════════════════════════════════════════════════════════════
-  Widget _buildGoalStep() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const _StepHeader(
-          title: 'What is\nyour goal?',
-          subtitle: 'This helps generate a plan for\nyour calorie intake.',
-        ),
-        const SizedBox(height: 36),
-        _SelectTile(label: 'Lose weight', emoji: '🔥',
-            subtitle: 'Reduce body fat with a calorie deficit',
-            selected: _goal == 'lose',
-            onTap: () => setState(() => _goal = 'lose')),
-        const SizedBox(height: 12),
-        _SelectTile(label: 'Maintain', emoji: '⚖️',
-            subtitle: 'Stay at current weight, build habits',
-            selected: _goal == 'maintain',
-            onTap: () => setState(() => _goal = 'maintain')),
-        const SizedBox(height: 12),
-        _SelectTile(label: 'Gain weight', emoji: '💪',
-            subtitle: 'Build muscle and increase strength',
-            selected: _goal == 'gain',
-            onTap: () => setState(() => _goal = 'gain')),
-        const SizedBox(height: 24),
-      ],
-    );
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // STEP 7 — Target Weight
-  // ═══════════════════════════════════════════════════════════════════════════
-  Widget _buildTargetWeightStep() {
-    final currentStr = _isMetric
-        ? '${_weightKg.round()} kg'
-        : '${_weightLbs.round()} lbs';
-    final targetStr = _isMetric
-        ? '${_targetWeightKg.round()} kg'
-        : '${_targetWeightLbs.round()} lbs';
-    final diff = _isMetric
-        ? (_targetWeightKg - _weightKg).round()
-        : (_targetWeightLbs - _weightLbs).round();
-    final unit = _isMetric ? 'kg' : 'lbs';
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _StepHeader(
-          title: 'What is your\ndesired weight?',
-          subtitle: 'Your current weight is $currentStr',
-        ),
-        const SizedBox(height: 28),
-        Center(
-          child: Text(targetStr,
-              style: AppTheme.numericXL.copyWith(fontSize: 60, letterSpacing: -2)),
-        ),
-        const SizedBox(height: 20),
-        Container(
-          decoration: BoxDecoration(
-            color: AppTheme.surface1,
-            borderRadius: BorderRadius.circular(AppTheme.radiusXxl),
-            border: Border.all(color: Colors.white.withOpacity(0.05)),
-          ),
-          child: _DrumPicker(
-            items: _isMetric ? _wtKgItems : _wtLbItems,
-            controller: _isMetric ? _targetKgCtrl : _targetLbsCtrl,
-            containerColor: AppTheme.surface1,
-            onChanged: (i) => setState(() {
-              if (_isMetric) _targetWeightKg  = 30.0 + i;
-              else           _targetWeightLbs = 66.0 + i;
-            }),
-          ),
-        ),
-        const SizedBox(height: 20),
-        if (diff != 0)
-          Center(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-              decoration: BoxDecoration(
-                color: AppTheme.surface2,
-                borderRadius: BorderRadius.circular(AppTheme.radiusPill),
-                border: Border.all(color: Colors.white.withOpacity(0.06)),
-              ),
-              child: Text.rich(TextSpan(children: [
-                TextSpan(text: diff > 0 ? 'Gaining ' : 'Losing ',
-                    style: AppTheme.bodyLG.copyWith(fontWeight: FontWeight.w500)),
-                TextSpan(text: '${diff.abs()} $unit',
-                    style: AppTheme.bodyLG.copyWith(
-                        color: AppTheme.lime, fontWeight: FontWeight.w900)),
-                TextSpan(text: ' is a realistic target.',
-                    style: AppTheme.bodyLG.copyWith(fontWeight: FontWeight.w500)),
-              ])),
-            ),
-          ),
-        const SizedBox(height: 24),
-      ],
-    );
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // STEP 8 — Activity
+  // STEP 6 — Activity
   // ═══════════════════════════════════════════════════════════════════════════
   Widget _buildActivityStep() {
     final items = [
@@ -1373,8 +1249,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     final kcal   = _calculateCalories();
     final macros = _calcMacros(kcal);
     final first  = _name.trim().isEmpty ? 'You' : _name.trim().split(' ').first;
-    final diffKg = (_resolvedTargetKg - _resolvedWeightKg).abs();
-    final weeksToGoal = _goal == 'maintain' ? 0 : (diffKg / 0.5).ceil();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1438,11 +1312,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
             const Text('💡', style: TextStyle(fontSize: 18)),
             const SizedBox(width: 12),
             Expanded(child: Text(
-              _goal == 'lose'
-                  ? 'At a healthy pace you\'ll reach your goal in ~$weeksToGoal weeks.'
-                  : _goal == 'gain'
-                  ? 'With a moderate surplus you\'ll gain ${diffKg.toStringAsFixed(1)} kg in ~$weeksToGoal weeks.'
-                  : 'Maintaining at $kcal kcal/day keeps your energy stable all day.',
+              'Hitting $kcal kcal/day consistently will keep your energy stable and support your fitness goals.',
               style: AppTheme.bodyMD.copyWith(height: 1.55),
             )),
           ]),

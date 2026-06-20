@@ -245,8 +245,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  void _showFitnessDataSheet() {
+  String _activityLabel(String? id) {
+    const map = {
+      'sedentary':   'Sedentary',
+      'light':       'Lightly Active',
+      'moderate':    'Moderately Active',
+      'active':      'Active',
+      'very_active': 'Very Active',
+    };
+    return map[id] ?? (id ?? '—');
+  }
+
+  void _showPersonalDataSheet() {
+    if (_profile == null) return;
     final p = _profile!;
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -261,15 +274,313 @@ class _ProfileScreenState extends State<ProfileScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(2)))),
+            Center(child: Container(width: 40, height: 4,
+              decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(2)))),
             const SizedBox(height: 20),
-            _sectionHeader('FITNESS DATA'),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Personal Data', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900)),
+                GestureDetector(
+                  onTap: () {
+                    Navigator.pop(context);
+                    _showEditPersonalDataSheet();
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: AppTheme.accentColor.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: AppTheme.accentColor.withOpacity(0.3)),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.edit_outlined, color: AppTheme.accentColor, size: 13),
+                        SizedBox(width: 5),
+                        Text('Edit', style: TextStyle(color: AppTheme.accentColor, fontSize: 12, fontWeight: FontWeight.w700)),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            Row(children: [
+              Expanded(child: _dataCard('👤', 'Name', p['firstName']?.toString().isNotEmpty == true ? p['firstName'].toString() : '—')),
+              const SizedBox(width: 12),
+              Expanded(child: _dataCard('🚻', 'Gender', _genderLabel(p['gender']?.toString()))),
+            ]),
             const SizedBox(height: 12),
-            _fitnessDataCards(p),
+            Row(children: [
+              Expanded(child: _dataCard('🎂', 'Age', p['age'] != null ? '${p['age']} yrs' : '—')),
+              const SizedBox(width: 12),
+              Expanded(child: _dataCard('📏', 'Height', p['height'] != null ? '${(p['height'] as num).toStringAsFixed(0)} cm' : '—')),
+            ]),
+            const SizedBox(height: 12),
+            Row(children: [
+              Expanded(child: _dataCard('⚖️', 'Weight', p['weight'] != null ? '${(p['weight'] as num).toStringAsFixed(1)} kg' : '—')),
+              const SizedBox(width: 12),
+              Expanded(child: _dataCard('🏃', 'Activity', _activityLabel(p['activityLevel']?.toString()))),
+            ]),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity, height: 52,
+              child: ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  _showEditPersonalDataSheet();
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.accentColor, foregroundColor: Colors.black,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)), elevation: 0,
+                ),
+                child: const Text('Edit Personal Data', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15)),
+              ),
+            ),
           ],
         ),
       ),
     );
+  }
+
+  String _genderLabel(String? g) {
+    if (g == 'male') return 'Male';
+    if (g == 'female') return 'Female';
+    if (g == 'other') return 'Other';
+    return g?.isNotEmpty == true ? g! : '—';
+  }
+
+  void _showEditPersonalDataSheet() {
+    if (_profile == null) return;
+    final p = _profile!;
+    final nameCtrl = TextEditingController(text: p['firstName']?.toString() ?? '');
+    final heightCtrl = TextEditingController(
+        text: p['height'] != null ? (p['height'] as num).toStringAsFixed(0) : '');
+    final weightCtrl = TextEditingController(
+        text: p['weight'] != null ? (p['weight'] as num).toStringAsFixed(1) : '');
+    String activityLevel = p['activityLevel']?.toString() ?? '';
+    bool saving = false;
+    String? errorMsg;
+
+    const activities = [
+      {'id': 'sedentary',   'emoji': '🪑', 'label': 'Sedentary',         'desc': 'Little to no exercise'},
+      {'id': 'light',       'emoji': '🚶', 'label': 'Lightly Active',    'desc': '1–3 days/week'},
+      {'id': 'moderate',    'emoji': '🏃', 'label': 'Moderately Active', 'desc': '3–5 days/week'},
+      {'id': 'active',      'emoji': '💪', 'label': 'Active',            'desc': '6–7 days/week'},
+      {'id': 'very_active', 'emoji': '🔥', 'label': 'Very Active',       'desc': 'Physical job or 2× training'},
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => StatefulBuilder(
+        builder: (ctx, setSheet) {
+          Future<void> save() async {
+            setSheet(() { saving = true; errorMsg = null; });
+            try {
+              final heightCm = double.tryParse(heightCtrl.text.trim()) ?? 0;
+              final weightKg = double.tryParse(weightCtrl.text.trim()) ?? 0;
+              if (heightCm < 100 || heightCm > 250) throw Exception('Enter a valid height (100–250 cm)');
+              if (weightKg < 20 || weightKg > 300) throw Exception('Enter a valid weight (20–300 kg)');
+              if (activityLevel.isEmpty) throw Exception('Please select an activity level');
+              await _savePersonalData(
+                name: nameCtrl.text.trim(),
+                heightCm: heightCm,
+                weightKg: weightKg,
+                activityLevel: activityLevel,
+              );
+              if (mounted) Navigator.pop(ctx);
+            } catch (e) {
+              setSheet(() { saving = false; errorMsg = e.toString().replaceAll('Exception: ', ''); });
+            }
+          }
+
+          return Padding(
+            padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+              decoration: const BoxDecoration(
+                color: Color(0xFF111111),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(child: Container(width: 40, height: 4,
+                      decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(2)))),
+                    const SizedBox(height: 20),
+                    const Text('Personal Data', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900)),
+                    const SizedBox(height: 4),
+                    Text('Changes update your calorie targets.', style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 12)),
+                    const SizedBox(height: 24),
+
+                    _sheetLabel('NAME'),
+                    const SizedBox(height: 8),
+                    _sheetTextField(nameCtrl, 'Your name', TextInputType.name),
+                    const SizedBox(height: 16),
+
+                    Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        _sheetLabel('HEIGHT (CM)'),
+                        const SizedBox(height: 8),
+                        _sheetTextField(heightCtrl, '170', TextInputType.number),
+                      ])),
+                      const SizedBox(width: 12),
+                      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        _sheetLabel('WEIGHT (KG)'),
+                        const SizedBox(height: 8),
+                        _sheetTextField(weightCtrl, '70.0', TextInputType.numberWithOptions(decimal: true)),
+                      ])),
+                    ]),
+                    const SizedBox(height: 20),
+
+                    _sheetLabel('ACTIVITY LEVEL'),
+                    const SizedBox(height: 12),
+                    ...activities.map((a) {
+                      final id       = a['id']!;
+                      final emoji    = a['emoji']!;
+                      final label    = a['label']!;
+                      final desc     = a['desc']!;
+                      final selected = activityLevel == id;
+                      return GestureDetector(
+                        onTap: () => setSheet(() => activityLevel = id),
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: selected ? AppTheme.accentColor.withOpacity(0.1) : const Color(0xFF1A1A1A),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: selected ? AppTheme.accentColor.withOpacity(0.5) : Colors.white.withOpacity(0.06)),
+                          ),
+                          child: Row(children: [
+                            Text(emoji, style: const TextStyle(fontSize: 18)),
+                            const SizedBox(width: 12),
+                            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                              Text(label, style: TextStyle(color: selected ? AppTheme.accentColor : Colors.white, fontSize: 13, fontWeight: FontWeight.w700)),
+                              Text(desc, style: TextStyle(color: Colors.white.withOpacity(0.35), fontSize: 11)),
+                            ])),
+                            if (selected) const Icon(Icons.check_circle, color: AppTheme.accentColor, size: 18),
+                          ]),
+                        ),
+                      );
+                    }),
+
+                    if (errorMsg != null) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.red.withOpacity(0.15)),
+                        ),
+                        child: Text(errorMsg!, style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
+                      ),
+                    ],
+
+                    const SizedBox(height: 20),
+                    SizedBox(
+                      width: double.infinity, height: 52,
+                      child: ElevatedButton(
+                        onPressed: saving ? null : save,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.accentColor, foregroundColor: Colors.black,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
+                          elevation: 0,
+                          disabledBackgroundColor: AppTheme.accentColor.withOpacity(0.4),
+                        ),
+                        child: saving
+                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2))
+                          : const Text('Save Changes', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _sheetLabel(String text) => Text(text,
+    style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 2));
+
+  Widget _sheetTextField(TextEditingController ctrl, String hint, TextInputType type) {
+    return TextField(
+      controller: ctrl,
+      keyboardType: type,
+      style: const TextStyle(color: Colors.white, fontSize: 14),
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: TextStyle(color: Colors.white.withOpacity(0.2)),
+        filled: true,
+        fillColor: const Color(0xFF1A1A1A),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: Colors.white.withOpacity(0.05))),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: AppTheme.accentColor.withOpacity(0.5))),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      ),
+    );
+  }
+
+  Future<void> _savePersonalData({
+    required String name,
+    required double heightCm,
+    required double weightKg,
+    required String activityLevel,
+  }) async {
+    final p = _profile!;
+    final gender = p['gender']?.toString() ?? 'male';
+    final age = (p['age'] as num?)?.toInt() ?? 25;
+
+    // Mifflin-St Jeor BMR → TDEE
+    final double bmr = gender == 'female'
+        ? 10 * weightKg + 6.25 * heightCm - 5 * age - 161
+        : 10 * weightKg + 6.25 * heightCm - 5 * age + 5;
+    const mult = {'sedentary': 1.2, 'light': 1.375, 'moderate': 1.55, 'active': 1.725, 'very_active': 1.9};
+    final tdee = (bmr * (mult[activityLevel] ?? 1.55)).round().clamp(1200, 4000);
+    final protein = (weightKg * 1.8).round();
+    final fatCals = (tdee * 0.28).round();
+    final fat    = (fatCals / 9).round();
+    final carbs  = ((tdee - protein * 4 - fatCals) / 4).round().clamp(0, 500);
+
+    // Write to profiles/{uid} (also syncs users/{uid})
+    await _fbService.saveOnboardingProfile({
+      'firstName':          name.isNotEmpty ? name : (p['firstName'] ?? ''),
+      'gender':             gender,
+      'birthYear':          (p['birthYear'] as num?)?.toInt() ?? 1990,
+      'birthMonth':         (p['birthMonth'] as num?)?.toInt() ?? 1,
+      'birthDay':           (p['birthDay']  as num?)?.toInt() ?? 1,
+      'age':                age,
+      'heightCm':           heightCm,
+      'weightKg':           weightKg,
+      'activityLevel':      activityLevel,
+      'dailyCalorieTarget': tdee,
+      'macroProtein':       protein,
+      'macroCarbs':         carbs,
+      'macroFat':           fat,
+    });
+
+    // Update SharedPreferences so home/nutrition screens pick up new targets
+    final prefs = await SharedPreferences.getInstance();
+    if (name.isNotEmpty) await prefs.setString('user_name', name);
+    await prefs.setDouble('user_height_cm', heightCm);
+    await prefs.setDouble('user_weight_kg', weightKg);
+    await prefs.setString('user_activity', activityLevel);
+    await prefs.setInt('user_daily_calories', tdee);
+    await prefs.setInt('cal_goal',     tdee);
+    await prefs.setInt('protein_goal', protein);
+    await prefs.setInt('carbs_goal',   carbs);
+    await prefs.setInt('fat_goal',     fat);
+
+    // Refresh profile card
+    await _fetchProfile(background: false);
   }
 
   Widget _fitnessDataCards(Map<String, dynamic> p) {
@@ -278,20 +589,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
         Row(children: [
           Expanded(child: _dataCard('⚖️', 'Weight', p['weight'] != null ? '${p['weight']} kg' : '—')),
           const SizedBox(width: 12),
-          Expanded(child: _dataCard('🎯', 'Target', p['targetWeight'] != null ? '${p['targetWeight']} kg' : '—')),
-        ]),
-        const SizedBox(height: 12),
-        Row(children: [
           Expanded(child: _dataCard('📏', 'Height', p['height'] != null ? '${p['height']} cm' : '—')),
-          const SizedBox(width: 12),
-          Expanded(child: _dataCard('🎂', 'Age', p['age'] != null ? '${p['age']} yrs' : '—')),
         ]),
         const SizedBox(height: 12),
         Row(children: [
-          Expanded(child: _dataCard('🚻', 'Gender', (p['gender'] ?? '—').toString().toUpperCase())),
+          Expanded(child: _dataCard('🎂', 'Age', p['age'] != null ? '${p['age']} yrs' : '—')),
           const SizedBox(width: 12),
-          Expanded(child: _dataCard('🏃', 'Activity', (p['activityLevel'] ?? '—').toString().toUpperCase())),
+          Expanded(child: _dataCard('🚻', 'Gender', (p['gender'] ?? '—').toString().toUpperCase())),
         ]),
+        const SizedBox(height: 12),
+        _dataCard('🏃', 'Activity', _activityLabel(p['activityLevel']?.toString())),
         if (p['dietaryRestrictions'] != null && p['dietaryRestrictions'].toString().isNotEmpty) ...[
           const SizedBox(height: 12),
           _dataCard('🥗', 'Dietary', p['dietaryRestrictions'].toString()),
@@ -344,7 +651,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
         // FITNESS DATA: inline cards for AI Coach, menu tile for main nav
         if (widget.showAiCoachNav) ...[
-          _sectionHeader('FITNESS DATA'),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _sectionHeader('FITNESS DATA'),
+              GestureDetector(
+                onTap: _showEditPersonalDataSheet,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppTheme.accentColor.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: AppTheme.accentColor.withOpacity(0.3)),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.edit_outlined, color: AppTheme.accentColor, size: 12),
+                      SizedBox(width: 4),
+                      Text('Edit', style: TextStyle(color: AppTheme.accentColor, fontSize: 11, fontWeight: FontWeight.w700)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 12),
           _fitnessDataCards(p),
           const SizedBox(height: 32),
@@ -353,7 +684,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _sectionHeader('SETTINGS'),
         const SizedBox(height: 12),
         if (!widget.showAiCoachNav)
-          _settingsTile(Icons.monitor_heart_outlined, 'Fitness Data', _showFitnessDataSheet),
+          _settingsTile(Icons.person_outline, 'Personal Data', _showPersonalDataSheet),
         _settingsTile(Icons.shopping_bag_outlined, 'My Orders', () => Navigator.push(context, MaterialPageRoute(builder: (_) => const OrdersScreen()))),
         _settingsTile(Icons.favorite_border, 'Wishlist', () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WishlistScreen()))),
         _settingsTile(Icons.location_on_outlined, 'Addresses', () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AddressScreen()))),

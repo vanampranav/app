@@ -137,6 +137,17 @@ class _NutritionLogScreenState extends State<NutritionLogScreen> {
     await prefs.setInt('protein_$k',      _summary.totalProtein.round());
     await prefs.setInt('carbs_$k',        _summary.totalCarbs.round());
     await prefs.setInt('fat_$k',          _summary.totalFat.round());
+
+    // Update streak — only increment once per day
+    final todayKey   = _dateKey(d);
+    final lastLogged = prefs.getString('streak_last_date') ?? '';
+    if (lastLogged != todayKey) {
+      final yesterday    = _dateKey(d.subtract(const Duration(days: 1)));
+      final currentStreak = prefs.getInt('streak') ?? 0;
+      final newStreak    = lastLogged == yesterday ? currentStreak + 1 : 1;
+      await prefs.setInt('streak', newStreak);
+      await prefs.setString('streak_last_date', todayKey);
+    }
   }
 
   bool _isToday(DateTime d) {

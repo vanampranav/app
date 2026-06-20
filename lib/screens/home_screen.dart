@@ -45,9 +45,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   int _fatGoal         = 65;
   double? _latestWeight;
   int _streak          = 0;
+  int _waterMl         = 0;
   String _userName     = '';
   int    _stepsToday   = 0;
   int    _burnedToday  = 0;
+
+  static const int _waterGoalMl = 2500;
 
   late final AnimationController _headerAnim;
   late final Animation<double> _headerFade;
@@ -117,6 +120,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         _fatGoal          = prefs.getInt('fat_goal') ?? 65;
         _latestWeight     = prefs.getDouble('latest_weight');
         _streak           = prefs.getInt('streak') ?? 0;
+        _waterMl          = prefs.getInt('water_ml_${_todayKey()}') ?? 0;
         _userName         = prefs.getString('user_name') ?? '';
       });
     }
@@ -853,6 +857,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   // ─── Stats row ────────────────────────────────────────────────────────────────
 
+  String get _waterDisplay {
+    if (_waterMl >= 1000) return (_waterMl / 1000).toStringAsFixed(1);
+    return '$_waterMl';
+  }
+
+  String get _waterUnit => _waterMl >= 1000 ? 'L' : 'ml';
+
   Widget _buildStatsRow() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppTheme.md),
@@ -861,48 +872,152 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         children: [
           const EFSectionHeader(title: 'Today\'s Stats'),
           const SizedBox(height: AppTheme.md),
-          Row(
+          Row(children: [
+            Expanded(
+              child: EFStatTile(
+                label: 'Weight',
+                value: _latestWeight != null ? _latestWeight!.toStringAsFixed(1) : '--',
+                unit: 'kg',
+                icon: const Icon(Icons.monitor_weight_outlined),
+                valueColor: AppTheme.lime,
+                onTap: () => Navigator.push(context, EFPageRoute(page: const DevicesScreen())),
+              ),
+            ),
+            const SizedBox(width: AppTheme.sm),
+            Expanded(
+              child: EFStatTile(
+                label: 'Steps',
+                value: _stepsToday > 0
+                    ? _stepsToday >= 1000 ? '${(_stepsToday / 1000).toStringAsFixed(1)}k' : '$_stepsToday'
+                    : '--',
+                unit: _stepsToday > 0 ? 'steps' : '',
+                icon: const Icon(Icons.directions_walk_outlined),
+                valueColor: const Color(0xFF3B9EFF),
+              ),
+            ),
+          ]),
+          const SizedBox(height: AppTheme.sm),
+          Row(children: [
+            Expanded(
+              child: EFStatTile(
+                label: 'Streak',
+                value: '$_streak',
+                unit: 'days',
+                icon: const Text('🔥', style: TextStyle(fontSize: 14)),
+                valueColor: const Color(0xFFFF6B35),
+              ),
+            ),
+            const SizedBox(width: AppTheme.sm),
+            Expanded(
+              child: EFStatTile(
+                label: 'Water',
+                value: _waterDisplay,
+                unit: _waterUnit,
+                icon: const Icon(Icons.water_drop_outlined),
+                valueColor: const Color(0xFF3B9EFF),
+                onTap: _showWaterSheet,
+              ),
+            ),
+          ]),
+        ],
+      ),
+    );
+  }
+
+  // ─── Water sheet ──────────────────────────────────────────────────────────────
+
+  Future<void> _addWater(int ml) async {
+    final prefs = await SharedPreferences.getInstance();
+    final newTotal = _waterMl + ml;
+    await prefs.setInt('water_ml_${_todayKey()}', newTotal);
+    if (mounted) setState(() => _waterMl = newTotal);
+  }
+
+  void _showWaterSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => StatefulBuilder(
+        builder: (ctx, setSheet) => Container(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
+          decoration: const BoxDecoration(
+            color: AppTheme.surface1,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: EFStatTile(
-                  label: 'Weight',
-                  value: _latestWeight != null
-                      ? _latestWeight!.toStringAsFixed(1)
-                      : '--',
-                  unit: 'kg',
-                  icon: const Icon(Icons.monitor_weight_outlined),
-                  valueColor: AppTheme.lime,
-                  onTap: () => Navigator.push(
-                      context, EFPageRoute(page: const DevicesScreen())),
+              Center(child: Container(width: 40, height: 4,
+                decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(2)))),
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Water Intake', style: AppTheme.headingSM),
+                  Text('$_waterMl / $_waterGoalMl ml',
+                      style: AppTheme.bodyMD.copyWith(color: AppTheme.textSecondary)),
+                ],
+              ),
+              const SizedBox(height: 8),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: (_waterMl / _waterGoalMl).clamp(0.0, 1.0),
+                  backgroundColor: AppTheme.surface3,
+                  valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF3B9EFF)),
+                  minHeight: 6,
                 ),
               ),
-              const SizedBox(width: AppTheme.sm),
-              Expanded(
-                child: EFStatTile(
-                  label: 'Steps',
-                  value: _stepsToday > 0
-                      ? _stepsToday >= 1000
-                          ? '${(_stepsToday / 1000).toStringAsFixed(1)}k'
-                          : '$_stepsToday'
-                      : '--',
-                  unit: _stepsToday > 0 ? 'steps' : '',
-                  icon: const Icon(Icons.directions_walk_outlined),
-                  valueColor: const Color(0xFF3B9EFF),
+              const SizedBox(height: 24),
+              Text('QUICK ADD', style: AppTheme.labelSM),
+              const SizedBox(height: 12),
+              Row(children: [
+                _waterChip(ctx, setSheet, 150, '150 ml'),
+                const SizedBox(width: 10),
+                _waterChip(ctx, setSheet, 200, '200 ml'),
+                const SizedBox(width: 10),
+                _waterChip(ctx, setSheet, 350, '350 ml'),
+                const SizedBox(width: 10),
+                _waterChip(ctx, setSheet, 500, '500 ml'),
+              ]),
+              const SizedBox(height: 16),
+              if (_waterMl > 0)
+                GestureDetector(
+                  onTap: () async {
+                    final prefs = await SharedPreferences.getInstance();
+                    await prefs.setInt('water_ml_${_todayKey()}', 0);
+                    if (mounted) setState(() => _waterMl = 0);
+                    setSheet(() {});
+                  },
+                  child: Text('Reset today\'s intake',
+                      style: AppTheme.bodySM.copyWith(color: AppTheme.textTertiary)),
                 ),
-              ),
-              const SizedBox(width: AppTheme.sm),
-              Expanded(
-                child: EFStatTile(
-                  label: 'Streak',
-                  value: '$_streak',
-                  unit: 'days',
-                  icon: const Text('🔥', style: TextStyle(fontSize: 14)),
-                  valueColor: const Color(0xFFFF6B35),
-                ),
-              ),
             ],
           ),
-        ],
+        ),
+      ),
+    );
+  }
+
+  Widget _waterChip(BuildContext ctx, StateSetter setSheet, int ml, String label) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: () async {
+          await _addWater(ml);
+          setSheet(() {});
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          decoration: BoxDecoration(
+            color: const Color(0xFF3B9EFF).withOpacity(0.12),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFF3B9EFF).withOpacity(0.3)),
+          ),
+          child: Text(label,
+              textAlign: TextAlign.center,
+              style: AppTheme.labelMD.copyWith(color: const Color(0xFF3B9EFF))),
+        ),
       ),
     );
   }

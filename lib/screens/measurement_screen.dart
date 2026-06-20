@@ -808,7 +808,6 @@ class _MeasurementScreenState extends State<MeasurementScreen> {
                     _buildDisclaimerSection(),
                     _buildTrendSection(),
                     // _buildBabyPetModeCard() removed
-                    _buildTargetCard(),
                     const SizedBox(height: 20),
                   ],
                 ),
