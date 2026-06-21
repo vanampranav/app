@@ -2118,7 +2118,7 @@ async def analyze_meal(image: UploadFile = File(...)):
                     "content": [
                         {
                             "type": "text",
-                            "text": "Identify each food item in this image. For each, estimate weight in grams and provide nutrition (calories, protein, carbs, fat, fiber, sugar, sodium). Return a JSON object with a 'foods' key containing an array of items. Use realistic estimates based on standard portions."
+                            "text": "Identify each food item in this image. For each, estimate weight in grams and provide nutrition (calories, protein, carbs, fat, fiber, sugar, sodium). \n\nIMPORTANT: You must return a JSON object with a 'foods' key containing an array. Each object in that array MUST use these exact keys: 'foodName', 'weight', 'nutrition'. Inside 'nutrition', use keys: 'calories', 'protein', 'carbs', 'fat', 'fiber', 'sugar', 'sodium'.\n\nExample structure: {\"foods\": [{\"foodName\": \"Apple\", \"weight\": 150, \"nutrition\": {\"calories\": 95, \"protein\": 0.5...}}]}"
                         },
                         {
                             "type": "image_url",
