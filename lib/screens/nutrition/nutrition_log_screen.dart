@@ -1,9 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/food_models.dart';
 import '../../services/nutrition_service.dart';
+import '../../services/meal_vision_service.dart';
 import '../../services/fitdays_service.dart';
 import '../../models/device_model.dart';
 import '../../utils/food_emoji_helper.dart';
@@ -27,7 +30,9 @@ class NutritionLogScreen extends StatefulWidget {
 
 class _NutritionLogScreenState extends State<NutritionLogScreen> {
   final NutritionService _nutritionService = NutritionService();
+  final MealVisionService _visionService = MealVisionService();
   final FitDaysService   _fitDays          = FitDaysService();
+  final ImagePicker      _picker           = ImagePicker();
 
   DateTime     _selectedDate    = DateTime.now();
   DailySummary _summary         = DailySummary(date: DateTime.now(), entries: []);
@@ -172,6 +177,113 @@ class _NutritionLogScreenState extends State<NutritionLogScreen> {
     // Push each new entry to Apple Health / Health Connect (silent)
     for (final e in entries) {
       HealthService().syncMealEntry(e);
+    }
+  }
+
+  // ── AI Image Analysis ──────────────────────────────────────────────────────
+  Future<void> _pickAndAnalyzeImage(MealType meal) async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: AppTheme.surface1,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppTheme.radiusXxl)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 12),
+            Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
+            ListTile(
+              leading: const Icon(Icons.camera_alt_rounded, color: AppTheme.lime),
+              title: const Text('Take Photo', style: AppTheme.bodyLG),
+              onTap: () => Navigator.pop(ctx, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_rounded, color: AppTheme.lime),
+              title: const Text('Choose from Gallery', style: AppTheme.bodyLG),
+              onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+            ),
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
+    );
+
+    if (source == null) return;
+
+    final XFile? image = await _picker.pickImage(
+      source: source,
+      imageQuality: 80,
+      maxWidth: 1024,
+    );
+    if (image == null) return;
+
+    // Show loading overlay
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => Center(
+        child: Container(
+          padding: const EdgeInsets.all(32),
+          decoration: BoxDecoration(color: AppTheme.surface1, borderRadius: BorderRadius.circular(24)),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(color: AppTheme.lime),
+              const SizedBox(height: 24),
+              Text('Analyzing meal...', style: AppTheme.headingSM),
+              const SizedBox(height: 8),
+              Text('AI is identifying your food', style: AppTheme.bodySM),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    try {
+      final results = await _visionService.analyzeMealImage(File(image.path));
+      if (!mounted) return;
+      Navigator.pop(context); // Close loading
+
+      if (results.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not identify food in image.')));
+        return;
+      }
+
+      // Convert results to MealEntries
+      final newEntries = results.map((res) {
+        return MealEntry(
+          id: DateTime.now().millisecondsSinceEpoch.toString() + res['foodName'],
+          foodName: res['foodName'],
+          fdcId: 'ai_vision',
+          weight: (res['weight'] ?? 100.0).toDouble(),
+          nutrition: NutritionData.fromJson(res['nutrition']),
+          meal: meal,
+          timestamp: DateTime.now(),
+          imageUrl: image.path,
+        );
+      }).toList();
+
+      setState(() {
+        for (final e in newEntries) _summary.entries.add(e);
+      });
+      await _save();
+
+      for (final e in newEntries) {
+        HealthService().syncMealEntry(e);
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Logged ${newEntries.length} items from image 🎉'),
+        backgroundColor: AppTheme.lime,
+      ));
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // Close loading
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.error));
+      }
     }
   }
 
@@ -484,6 +596,20 @@ class _NutritionLogScreenState extends State<NutritionLogScreen> {
                         color: AppTheme.textTertiary),
                   ),
                 const SizedBox(width: 10),
+                // AI Image logging button
+                GestureDetector(
+                  onTap: () => _pickAndAnalyzeImage(meal),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: AppTheme.surface3,
+                      borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+                      border: Border.all(color: Colors.white.withOpacity(0.1)),
+                    ),
+                    child: const Icon(Icons.camera_alt_outlined, size: 16, color: AppTheme.textSecondary),
+                  ),
+                ),
+                const SizedBox(width: 8),
                 GestureDetector(
                   onTap: () => _addFood(meal),
                   child: Container(
@@ -549,6 +675,13 @@ class _NutritionLogScreenState extends State<NutritionLogScreen> {
             Text(
               'Log your ${mealLabel.toLowerCase()}',
               style: AppTheme.bodyMD,
+            ),
+            const Spacer(),
+            IconButton(
+              onPressed: () => _pickAndAnalyzeImage(meal),
+              icon: const Icon(Icons.camera_alt_outlined, color: AppTheme.textTertiary, size: 20),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
             ),
           ],
         ),

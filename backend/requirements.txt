@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+gunicorn
+python-dotenv
+groq
+
+pdf2image
+pillow
+numpy
+langdetect
+python-multipart
