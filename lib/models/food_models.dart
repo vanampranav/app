@@ -86,35 +86,52 @@ class NutritionData {
   });
 
   factory NutritionData.fromJson(Map<String, dynamic> json) {
-    // Helper to extract amount from nested structure or direct value
+    // Helper to extract amount from nested structure, direct value, or string with units
     double extractAmount(dynamic value) {
       if (value == null) return 0;
       if (value is num) return value.toDouble();
       if (value is Map) return (value['amount'] ?? 0).toDouble();
+      if (value is String) {
+        // Handle "20g", "150 kcal", etc.
+        final numericPart = RegExp(r'(\d+\.?\d*)').firstMatch(value)?.group(1);
+        return double.tryParse(numericPart ?? '0') ?? 0;
+      }
       return 0;
     }
 
+    // OpenAI sometimes returns different key names
+    dynamic getVal(List<String> keys) {
+      for (var k in keys) {
+        if (json.containsKey(k)) return json[k];
+        // Check case-insensitive
+        for (var existingKey in json.keys) {
+          if (existingKey.toLowerCase() == k.toLowerCase()) return json[existingKey];
+        }
+      }
+      return null;
+    }
+
     return NutritionData(
-      calories: extractAmount(json['Calories'] ?? json['calories']),
-      fat: extractAmount(json['Fat'] ?? json['fat']),
-      carbs: extractAmount(json['Carbs'] ?? json['carbs']),
-      protein: extractAmount(json['Protein'] ?? json['protein']),
-      fiber: extractAmount(json['Dietary Fiber'] ?? json['fiber']),
-      sugar: extractAmount(json['sugar']),
-      vitaminA: json['vitaminA'] != null ? extractAmount(json['vitaminA']) : null,
-      vitaminB1: json['vitaminB1'] != null ? extractAmount(json['vitaminB1']) : null,
-      vitaminB2: json['vitaminB2'] != null ? extractAmount(json['vitaminB2']) : null,
-      vitaminC: json['vitaminC'] != null ? extractAmount(json['vitaminC']) : null,
-      vitaminE: json['vitaminE'] != null ? extractAmount(json['vitaminE']) : null,
-      calcium: json['Ca'] != null ? extractAmount(json['Ca']) : (json['calcium'] != null ? extractAmount(json['calcium']) : null),
-      iron: json['Fe'] != null ? extractAmount(json['Fe']) : (json['iron'] != null ? extractAmount(json['iron']) : null),
-      magnesium: json['magnesium'] != null ? extractAmount(json['magnesium']) : null,
-      potassium: json['potassium'] != null ? extractAmount(json['potassium']) : null,
-      sodium: json['Na'] != null ? extractAmount(json['Na']) : (json['sodium'] != null ? extractAmount(json['sodium']) : null),
-      zinc: json['zinc'] != null ? extractAmount(json['zinc']) : null,
-      cholesterol: json['Cholesterol'] != null ? extractAmount(json['Cholesterol']) : (json['cholesterol'] != null ? extractAmount(json['cholesterol']) : null),
-      carotene: json['carotene'] != null ? extractAmount(json['carotene']) : null,
-      retinol: json['retinol'] != null ? extractAmount(json['retinol']) : null,
+      calories: extractAmount(getVal(['calories', 'kcal', 'energy', 'Calories'])),
+      fat: extractAmount(getVal(['fat', 'total_fat', 'fats', 'Fat'])),
+      carbs: extractAmount(getVal(['carbohydrate', 'carbs', 'carbohydrates', 'Carbs'])),
+      protein: extractAmount(getVal(['protein', 'proteins', 'Protein'])),
+      fiber: extractAmount(getVal(['dietary_fiber', 'fiber', 'fibers', 'Dietary Fiber'])),
+      sugar: extractAmount(getVal(['sugar', 'sugars', 'total_sugar'])),
+      vitaminA: extractAmount(getVal(['vitamin_a', 'vit_a'])),
+      vitaminB1: extractAmount(getVal(['vitamin_b1', 'thiamin'])),
+      vitaminB2: extractAmount(getVal(['vitamin_b2', 'riboflavin'])),
+      vitaminC: extractAmount(getVal(['vitamin_c', 'ascorbic_acid'])),
+      vitaminE: extractAmount(getVal(['vitamin_e', 'tocopherol'])),
+      calcium: extractAmount(getVal(['calcium', 'ca'])),
+      iron: extractAmount(getVal(['iron', 'fe'])),
+      magnesium: extractAmount(getVal(['magnesium', 'mg'])),
+      potassium: extractAmount(getVal(['potassium', 'k'])),
+      sodium: extractAmount(getVal(['sodium', 'na'])),
+      zinc: extractAmount(getVal(['zinc', 'zn'])),
+      cholesterol: extractAmount(getVal(['cholesterol'])),
+      carotene: extractAmount(getVal(['carotene'])),
+      retinol: extractAmount(getVal(['retinol'])),
     );
   }
 

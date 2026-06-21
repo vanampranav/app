@@ -5,7 +5,7 @@ import '../models/food_models.dart';
 import 'package:flutter/foundation.dart';
 
 class MealVisionService {
-  static const String _baseUrl = 'https://yantraprise.com'; // Same host as AI Coach
+  static const String _baseUrl = 'https://elefit-app.onrender.com';
 
   /// Analyzes a meal image and returns nutritional information.
   /// This calls the backend which is expected to use a Vision model (like Gemini)
@@ -15,12 +15,15 @@ class MealVisionService {
       final request = http.MultipartRequest('POST', Uri.parse('$_baseUrl/analyze-meal'));
       request.headers['X-API-Key'] = 'elefit_flutter_secure_key_2025';
 
-      request.files.add(await http.MultipartFile.fromPath(
+      // Use bytes instead of path to avoid iOS permission issues during multi-process handoff
+      final bytes = await imageFile.readAsBytes();
+      request.files.add(http.MultipartFile.fromBytes(
         'image',
-        imageFile.path,
+        bytes,
+        filename: 'meal_image.jpg',
       ));
 
-      final streamedResponse = await request.send();
+      final streamedResponse = await request.send().timeout(const Duration(seconds: 60));
       final response = await http.Response.fromStream(streamedResponse);
 
       if (response.statusCode == 200) {
