@@ -10,3 +10,5 @@ numpy
 langdetect
 python-multipart
 openai
+pydantic
+uvloop
