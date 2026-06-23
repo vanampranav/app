@@ -1,9 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/food_models.dart';
 import '../../services/nutrition_service.dart';
+import '../../services/meal_vision_service.dart';
+import '../../services/firebase_rest_service.dart';
 import '../../services/fitdays_service.dart';
 import '../../models/device_model.dart';
 import '../../utils/food_emoji_helper.dart';
@@ -27,7 +31,9 @@ class NutritionLogScreen extends StatefulWidget {
 
 class _NutritionLogScreenState extends State<NutritionLogScreen> {
   final NutritionService _nutritionService = NutritionService();
+  final MealVisionService _visionService = MealVisionService();
   final FitDaysService   _fitDays          = FitDaysService();
+  final ImagePicker      _picker           = ImagePicker();
 
   DateTime     _selectedDate    = DateTime.now();
   DailySummary _summary         = DailySummary(date: DateTime.now(), entries: []);
@@ -183,6 +189,145 @@ class _NutritionLogScreenState extends State<NutritionLogScreen> {
     // Push each new entry to Apple Health / Health Connect (silent)
     for (final e in entries) {
       HealthService().syncMealEntry(e);
+    }
+  }
+
+  // ── AI Image Analysis ──────────────────────────────────────────────────────
+  Future<void> _pickAndAnalyzeImage(MealType meal) async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: AppTheme.surface1,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppTheme.radiusXxl)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 12),
+            Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
+            ListTile(
+              leading: const Icon(Icons.camera_alt_rounded, color: AppTheme.lime),
+              title: const Text('Take Photo', style: AppTheme.bodyLG),
+              onTap: () => Navigator.pop(ctx, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_rounded, color: AppTheme.lime),
+              title: const Text('Choose from Gallery', style: AppTheme.bodyLG),
+              onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+            ),
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
+    );
+
+    if (source == null) return;
+
+    final XFile? image = await _picker.pickImage(
+      source: source,
+      imageQuality: 80,
+      maxWidth: 1024,
+    );
+    if (image == null) return;
+
+    final imageFile = File(image.path);
+
+    // Give iOS time to fully clean up the picker scene before showing dialogs,
+    // otherwise the loading overlay can fail to present on top.
+    await Future.delayed(const Duration(milliseconds: 800));
+    if (!mounted) return;
+
+    // Show loading overlay (dismissed via the root navigator below).
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => Center(
+        child: Container(
+          padding: const EdgeInsets.all(32),
+          decoration: BoxDecoration(color: AppTheme.surface1, borderRadius: BorderRadius.circular(24)),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(color: AppTheme.lime),
+              const SizedBox(height: 24),
+              Text('Analyzing meal...', style: AppTheme.headingSM),
+              const SizedBox(height: 8),
+              Text('AI is identifying your food', style: AppTheme.bodySM),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    try {
+      // Pass the Firebase UID so the backend can apply a per-user daily quota.
+      final fb = FirebaseRestService();
+      await fb.init();
+      final results = await _visionService.analyzeMealImage(imageFile, userId: fb.uid);
+      if (!mounted) return;
+
+      Navigator.of(context, rootNavigator: true).pop(); // Close loading
+      // Let the pop animation finish before showing the next sheet.
+      await Future.delayed(const Duration(milliseconds: 300));
+
+      if (results.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not identify food in image.')));
+        return;
+      }
+
+      // Convert results to MealEntries with safe key parsing (LLMs vary keys).
+      final List<MealEntry> initialEntries = [];
+      for (final res in results) {
+        try {
+          final name = res['foodName'] ?? res['name'] ?? res['food'] ?? res['item'] ?? 'Unknown Food';
+          final weight = (res['weight'] ?? res['quantity'] ?? 100.0).toDouble();
+          initialEntries.add(MealEntry(
+            id: '${DateTime.now().millisecondsSinceEpoch}_$name',
+            foodName: name,
+            fdcId: 'ai_vision',
+            weight: weight,
+            nutrition: NutritionData.fromJson(res['nutrition'] ?? {}),
+            meal: meal,
+            timestamp: DateTime.now(),
+            imageUrl: image.path,
+          ));
+        } catch (e) {
+          debugPrint('MealVision: Error parsing item: $e');
+        }
+      }
+
+      if (!mounted || initialEntries.isEmpty) return;
+
+      // Let the user review/edit detected items before logging.
+      final confirmedEntries = await showModalBottomSheet<List<MealEntry>>(
+        context: context,
+        isScrollControlled: true,
+        useRootNavigator: true,
+        backgroundColor: Colors.transparent,
+        builder: (_) => _MealVisionConfirmSheet(initialEntries: initialEntries),
+      );
+
+      if (confirmedEntries == null || confirmedEntries.isEmpty) return;
+
+      setState(() {
+        for (final e in confirmedEntries) _summary.entries.add(e);
+      });
+      await _save();
+
+      for (final e in confirmedEntries) {
+        HealthService().syncMealEntry(e);
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Logged ${confirmedEntries.length} items from image 🎉'),
+        backgroundColor: AppTheme.lime,
+      ));
+    } catch (e) {
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop(); // Close loading
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.error));
+      }
     }
   }
 
@@ -495,6 +640,20 @@ class _NutritionLogScreenState extends State<NutritionLogScreen> {
                         color: AppTheme.textTertiary),
                   ),
                 const SizedBox(width: 10),
+                // AI Image logging button
+                GestureDetector(
+                  onTap: () => _pickAndAnalyzeImage(meal),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: AppTheme.surface3,
+                      borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+                      border: Border.all(color: Colors.white.withOpacity(0.1)),
+                    ),
+                    child: const Icon(Icons.camera_alt_outlined, size: 16, color: AppTheme.textSecondary),
+                  ),
+                ),
+                const SizedBox(width: 8),
                 GestureDetector(
                   onTap: () => _addFood(meal),
                   child: Container(
@@ -560,6 +719,13 @@ class _NutritionLogScreenState extends State<NutritionLogScreen> {
             Text(
               'Log your ${mealLabel.toLowerCase()}',
               style: AppTheme.bodyMD,
+            ),
+            const Spacer(),
+            IconButton(
+              onPressed: () => _pickAndAnalyzeImage(meal),
+              icon: const Icon(Icons.camera_alt_outlined, color: AppTheme.textTertiary, size: 20),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
             ),
           ],
         ),
@@ -1017,4 +1183,278 @@ class _FoodEntryDetailSheet extends StatelessWidget {
     ]);
   }
 
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AI Meal-Vision confirmation sheet — review/edit detected foods before logging
+// ─────────────────────────────────────────────────────────────────────────────
+class _MealVisionConfirmSheet extends StatefulWidget {
+  final List<MealEntry> initialEntries;
+  const _MealVisionConfirmSheet({required this.initialEntries});
+
+  @override
+  State<_MealVisionConfirmSheet> createState() => _MealVisionConfirmSheetState();
+}
+
+class _MealVisionConfirmSheetState extends State<_MealVisionConfirmSheet> {
+  late List<MealEntry> _entries;
+
+  @override
+  void initState() {
+    super.initState();
+    _entries = List.from(widget.initialEntries);
+  }
+
+  void _updateEntry(int index, MealEntry newEntry) {
+    setState(() => _entries[index] = newEntry);
+  }
+
+  void _removeEntry(int index) {
+    setState(() => _entries.removeAt(index));
+    if (_entries.isEmpty) Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.85,
+      decoration: const BoxDecoration(
+        color: AppTheme.bg,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppTheme.radiusXxl)),
+      ),
+      child: Column(children: [
+        // Handle
+        Center(
+          child: Container(
+            margin: const EdgeInsets.only(top: 12),
+            width: 40, height: 4,
+            decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(20),
+          child: Row(children: [
+            const Text('Confirm Meal', style: AppTheme.headingMD),
+            const Spacer(),
+            Text('${_entries.length} items identified', style: AppTheme.bodySM.copyWith(color: AppTheme.textTertiary)),
+          ]),
+        ),
+        const Divider(height: 1),
+        Expanded(
+          child: ListView.separated(
+            padding: const EdgeInsets.all(20),
+            itemCount: _entries.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 16),
+            itemBuilder: (ctx, i) => _ConfirmFoodItem(
+              entry: _entries[i],
+              onChanged: (e) => _updateEntry(i, e),
+              onRemoved: () => _removeEntry(i),
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
+          child: EFButton(
+            label: 'Log Meal',
+            onTap: () => Navigator.pop(context, _entries),
+          ),
+        ),
+      ]),
+    );
+  }
+}
+
+class _ConfirmFoodItem extends StatelessWidget {
+  final MealEntry entry;
+  final Function(MealEntry) onChanged;
+  final VoidCallback onRemoved;
+
+  const _ConfirmFoodItem({
+    required this.entry,
+    required this.onChanged,
+    required this.onRemoved,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.surface1,
+        borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Column(children: [
+        Row(children: [
+          Container(
+            width: 40, height: 40,
+            decoration: BoxDecoration(color: AppTheme.surface2, borderRadius: BorderRadius.circular(10)),
+            child: Center(child: Text(FoodEmojiHelper.get(entry.foodName), style: const TextStyle(fontSize: 22))),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: TextFormField(
+              initialValue: entry.foodName,
+              style: AppTheme.headingSM.copyWith(fontSize: 16),
+              decoration: const InputDecoration(
+                isDense: true,
+                border: InputBorder.none,
+                hintText: 'Food name',
+              ),
+              onChanged: (val) => onChanged(_copyWith(foodName: val)),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.remove_circle_outline_rounded, color: AppTheme.error, size: 20),
+            onPressed: onRemoved,
+          ),
+        ]),
+        const SizedBox(height: 16),
+        Row(children: [
+          Expanded(
+            child: _EditField(
+              label: 'Weight (g)',
+              value: entry.weight.round().toString(),
+              onChanged: (val) {
+                final w = double.tryParse(val) ?? entry.weight;
+                onChanged(_copyWith(weight: w));
+              },
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _EditField(
+              label: 'Calories',
+              value: entry.nutrition.calories.round().toString(),
+              onChanged: (val) {
+                final cal = double.tryParse(val) ?? entry.nutrition.calories;
+                onChanged(_copyWith(calories: cal));
+              },
+            ),
+          ),
+        ]),
+        const SizedBox(height: 12),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            _MacroEdit(
+              label: 'P',
+              value: entry.nutrition.protein.round().toString(),
+              color: const Color(0xFFFF6B6B),
+              onChanged: (val) => onChanged(_copyWith(protein: double.tryParse(val))),
+            ),
+            _MacroEdit(
+              label: 'C',
+              value: entry.nutrition.carbs.round().toString(),
+              color: const Color(0xFF4ECDC4),
+              onChanged: (val) => onChanged(_copyWith(carbs: double.tryParse(val))),
+            ),
+            _MacroEdit(
+              label: 'F',
+              value: entry.nutrition.fat.round().toString(),
+              color: const Color(0xFFFFD93D),
+              onChanged: (val) => onChanged(_copyWith(fat: double.tryParse(val))),
+            ),
+          ],
+        ),
+      ]),
+    );
+  }
+
+  MealEntry _copyWith({
+    String? foodName,
+    double? weight,
+    double? calories,
+    double? protein,
+    double? carbs,
+    double? fat,
+  }) {
+    return MealEntry(
+      id: entry.id,
+      foodName: foodName ?? entry.foodName,
+      fdcId: entry.fdcId,
+      weight: weight ?? entry.weight,
+      meal: entry.meal,
+      timestamp: entry.timestamp,
+      imageUrl: entry.imageUrl,
+      nutrition: NutritionData(
+        calories: calories ?? entry.nutrition.calories,
+        protein: protein ?? entry.nutrition.protein,
+        carbs: carbs ?? entry.nutrition.carbs,
+        fat: fat ?? entry.nutrition.fat,
+        fiber: entry.nutrition.fiber,
+        sugar: entry.nutrition.sugar,
+        sodium: entry.nutrition.sodium,
+      ),
+    );
+  }
+}
+
+class _EditField extends StatelessWidget {
+  final String label;
+  final String value;
+  final Function(String) onChanged;
+
+  const _EditField({required this.label, required this.value, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(label, style: AppTheme.labelSM.copyWith(color: AppTheme.textTertiary)),
+      const SizedBox(height: 4),
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(color: AppTheme.surface2, borderRadius: BorderRadius.circular(8)),
+        child: TextFormField(
+          initialValue: value,
+          keyboardType: TextInputType.number,
+          style: AppTheme.numericMD.copyWith(fontSize: 16),
+          decoration: const InputDecoration(isDense: true, border: InputBorder.none),
+          onChanged: onChanged,
+        ),
+      ),
+    ]);
+  }
+}
+
+class _MacroEdit extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color color;
+  final Function(String) onChanged;
+
+  const _MacroEdit({required this.label, required this.value, required this.color, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w900, fontSize: 11)),
+        const SizedBox(height: 4),
+        Container(
+          width: 54,
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+          decoration: BoxDecoration(
+            color: AppTheme.surface2,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.white.withOpacity(0.05)),
+          ),
+          child: TextFormField(
+            key: ValueKey(value),
+            initialValue: value,
+            keyboardType: TextInputType.number,
+            textAlign: TextAlign.center,
+            style: AppTheme.numericMD.copyWith(fontSize: 14, color: Colors.white),
+            decoration: const InputDecoration(
+              isDense: true,
+              border: InputBorder.none,
+              contentPadding: EdgeInsets.zero,
+            ),
+            onChanged: onChanged,
+          ),
+        ),
+      ],
+    );
+  }
 }

@@ -1,14 +1,15 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, File, UploadFile
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import traceback
 from groq import AsyncGroq
+from openai import AsyncOpenAI
 import json
 import os
+import base64
 from dotenv import load_dotenv
 import traceback
 import time
@@ -19,6 +20,7 @@ from concurrent.futures import ThreadPoolExecutor
 import asyncio
 from concurrent.futures import ThreadPoolExecutor      
 from logger_setup import mealplan_logger, workoutplan_logger,user_logger, error_logger
+from rate_limit import enforce, require_api_key
 #from utils2 import chat_mimic
 import random
 
@@ -91,6 +93,10 @@ if not groq_api_key:
     raise RuntimeError("GROQ_API_KEY environment variable is not set.")
 client = AsyncGroq(api_key=groq_api_key)
 
+# Initialize OpenAI client for Vision
+openai_api_key = os.getenv("OPENAI_API_KEY")
+openai_client = AsyncOpenAI(api_key=openai_api_key) if openai_api_key else None
+
 class ChatRequest(BaseModel):
     message: str
 
@@ -100,9 +106,10 @@ async def index():
 
 
 @app.post("/chat")
-async def chat(req: ChatRequest):
+async def chat(req: ChatRequest, request: Request):
     """Handle fitness chatbot requests (fully async)"""
     try:
+        enforce(request, "chat")
         user_message = req.message.strip()
 
         if not user_message:
@@ -172,6 +179,7 @@ REQUIRED_FIELDS = ["age", "weight", "height", "gender", "activityLevel"]
 @app.post("/user")
 async def user_endpoint(request: Request):
     try:
+        enforce(request, "user")
         data = await request.json() if hasattr(request, "json") else request.body()
         if isinstance(data, bytes):
             data = json.loads(data)
@@ -1175,6 +1183,7 @@ END with: END-OF-PLAN-SUGGESTION: [tip]"""
 
 @app.post("/mealplan")
 async def meal_plan(request: Request):
+    enforce(request, "mealplan")
     data = await request.json()
     full_t_start = time.perf_counter()
     
@@ -1937,6 +1946,7 @@ Then add: END-OF-PLAN-SUGGESTION: [2-line suggestion for user's {target_weight}k
 
 @app.post("/workoutplan")
 async def workout_plan(request: Request):
+    enforce(request, "workoutplan")
     data = await request.json()
     workoutplan_logger.info("=== /workoutplan endpoint called ===")
     workoutplan_logger.info("Received data: %s", json.dumps(data, indent=2))
@@ -2070,6 +2080,78 @@ At the end of the response, include a closing recommendation tailored to the use
 def health():
     return {"status": "ok"}
 
+@app.post("/analyze-meal")
+async def analyze_meal(request: Request, image: UploadFile = File(...)):
+    """
+    Analyze a meal image using OpenAI Vision.
+    Returns estimated food items and their nutrition.
+    """
+    # Flutter-only endpoint: require the shared API key + rate limit (paid OpenAI call).
+    require_api_key(request)
+    enforce(request, "analyze-meal")
+
+    if not openai_client:
+        # Fallback if API key is missing
+        return JSONResponse(
+            content={"foods": [
+                {
+                    "foodName": "Grilled Chicken Salad (Demo)",
+                    "weight": 350.0,
+                    "nutrition": {
+                        "calories": 420.0,
+                        "protein": 35.0,
+                        "carbs": 12.0,
+                        "fat": 24.0,
+                        "fiber": 6.0,
+                        "sugar": 4.0,
+                        "sodium": 580.0
+                    }
+                }
+            ]},
+            status_code=200
+        )
+
+    try:
+        contents = await image.read()
+        base64_image = base64.b64encode(contents).decode('utf-8')
+
+        response = await openai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a specialized nutrition assistant that identifies food from images and estimates weight and nutrition accurately."
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "Identify each food item in this image. For each, estimate weight in grams and provide nutrition (calories, protein, carbs, fat, fiber, sugar, sodium). \n\nIMPORTANT: You must return a JSON object with a 'foods' key containing an array. Each object in that array MUST use these exact keys: 'foodName', 'weight', 'nutrition'. Inside 'nutrition', use keys: 'calories', 'protein', 'carbs', 'fat', 'fiber', 'sugar', 'sodium'.\n\nExample structure: {\"foods\": [{\"foodName\": \"Apple\", \"weight\": 150, \"nutrition\": {\"calories\": 95, \"protein\": 0.5...}}]}"
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{base64_image}"
+                            }
+                        }
+                    ]
+                }
+            ],
+            max_tokens=1000,
+            response_format={"type": "json_object"}
+        )
+
+        result = json.loads(response.choices[0].message.content)
+        return JSONResponse(content=result)
+
+    except Exception as e:
+        error_logger.error(f"Error in /analyze-meal: {e}")
+        error_logger.error(traceback.format_exc())
+        return JSONResponse(
+            content={"error": "Failed to analyze image", "details": str(e)},
+            status_code=500
+        )
 
 if __name__ == "__main__":
     import uvicorn

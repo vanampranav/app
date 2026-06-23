@@ -3,7 +3,9 @@ import 'package:health/health.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/device_model.dart';
-import '../models/food_models.dart';
+// Hide food_models' MealType — the health package defines its own MealType
+// (used by writeMeal). We only need MealEntry/NutritionData from food_models here.
+import '../models/food_models.dart' hide MealType;
 
 /// Singleton wrapper around the `health` package.
 /// Handles Apple Health (iOS) and Google Health Connect (Android).
@@ -24,36 +26,65 @@ class HealthService {
   static const String _lastSyncKey   = 'health_last_sync';
 
   // ── Data types ─────────────────────────────────────────────────────────────
+  //
+  // CRITICAL: iOS HealthKit and Android Health Connect support DIFFERENT types.
+  // Passing an Android-unsupported type to requestAuthorization() makes the
+  // WHOLE request throw — which is why "Connect" silently did nothing on Android
+  // while iOS worked. So the read/write lists are built per-platform below.
+  //
+  // Android Health Connect does NOT support:
+  //   - HEART_RATE_VARIABILITY_SDNN  (it uses RMSSD instead)
+  //   - DISTANCE_WALKING_RUNNING     (it uses DISTANCE_DELTA instead)
+  //   - BODY_MASS_INDEX              (no BMI record type at all)
+  //   - DIETARY_* individual nutrients (it uses a single NUTRITION record)
 
-  static const _readTypes = [
-    HealthDataType.STEPS,
-    HealthDataType.ACTIVE_ENERGY_BURNED,
-    HealthDataType.BASAL_ENERGY_BURNED,
-    HealthDataType.HEART_RATE,
-    HealthDataType.RESTING_HEART_RATE,
-    HealthDataType.HEART_RATE_VARIABILITY_SDNN,
-    HealthDataType.SLEEP_ASLEEP,
-    HealthDataType.SLEEP_AWAKE,
-    HealthDataType.SLEEP_DEEP,
-    HealthDataType.SLEEP_REM,
-    HealthDataType.SLEEP_LIGHT,
-    HealthDataType.WEIGHT,
-    HealthDataType.WATER,
-    HealthDataType.DISTANCE_WALKING_RUNNING,
-    HealthDataType.WORKOUT,
-  ];
+  bool get _isAndroid => defaultTargetPlatform == TargetPlatform.android;
 
-  static const _writeTypes = [
-    HealthDataType.WEIGHT,
-    HealthDataType.BODY_FAT_PERCENTAGE,
-    HealthDataType.BODY_MASS_INDEX,
-    HealthDataType.DIETARY_ENERGY_CONSUMED,
-    HealthDataType.DIETARY_PROTEIN_CONSUMED,
-    HealthDataType.DIETARY_CARBS_CONSUMED,
-    HealthDataType.DIETARY_FATS_CONSUMED,
-    HealthDataType.DIETARY_FIBER,
-    HealthDataType.DIETARY_SODIUM,
-  ];
+  /// HRV type differs by platform (SDNN on iOS, RMSSD on Android).
+  HealthDataType get _hrvType => _isAndroid
+      ? HealthDataType.HEART_RATE_VARIABILITY_RMSSD
+      : HealthDataType.HEART_RATE_VARIABILITY_SDNN;
+
+  /// Walking/running distance type differs by platform.
+  HealthDataType get _distanceType => _isAndroid
+      ? HealthDataType.DISTANCE_DELTA
+      : HealthDataType.DISTANCE_WALKING_RUNNING;
+
+  List<HealthDataType> get _readTypes => [
+        HealthDataType.STEPS,
+        HealthDataType.ACTIVE_ENERGY_BURNED,
+        HealthDataType.BASAL_ENERGY_BURNED,
+        HealthDataType.HEART_RATE,
+        HealthDataType.RESTING_HEART_RATE,
+        _hrvType,
+        HealthDataType.SLEEP_ASLEEP,
+        HealthDataType.SLEEP_AWAKE,
+        HealthDataType.SLEEP_DEEP,
+        HealthDataType.SLEEP_REM,
+        HealthDataType.SLEEP_LIGHT,
+        HealthDataType.WEIGHT,
+        HealthDataType.WATER,
+        _distanceType,
+        HealthDataType.WORKOUT,
+      ];
+
+  List<HealthDataType> get _writeTypes => [
+        HealthDataType.WEIGHT,
+        HealthDataType.BODY_FAT_PERCENTAGE,
+        if (!_isAndroid) HealthDataType.BODY_MASS_INDEX,
+        // Nutrition: Android uses one NUTRITION record (written via writeMeal);
+        // iOS uses individual DIETARY_* types.
+        if (_isAndroid)
+          HealthDataType.NUTRITION
+        else ...[
+          HealthDataType.DIETARY_ENERGY_CONSUMED,
+          HealthDataType.DIETARY_PROTEIN_CONSUMED,
+          HealthDataType.DIETARY_CARBS_CONSUMED,
+          HealthDataType.DIETARY_FATS_CONSUMED,
+          HealthDataType.DIETARY_FIBER,
+          HealthDataType.DIETARY_SODIUM,
+        ],
+      ];
 
   // ── Init ───────────────────────────────────────────────────────────────────
 
@@ -231,27 +262,36 @@ class HealthService {
     if (m.bodyFat != null) {
       await _safeWrite(m.bodyFat!, HealthDataType.BODY_FAT_PERCENTAGE, now, HealthDataUnit.PERCENT);
     }
-    if (m.bmi != null) {
+    // BMI only exists on iOS HealthKit — Health Connect has no BMI record.
+    if (m.bmi != null && !_isAndroid) {
       await _safeWrite(m.bmi!, HealthDataType.BODY_MASS_INDEX, now, HealthDataUnit.NO_UNIT);
     }
     await _updateLastSync();
   }
 
   /// Pushes a logged meal's nutrition to Apple Health / Health Connect.
+  /// Uses writeMeal() which is cross-platform: it maps to a single NUTRITION
+  /// record on Android Health Connect and to DIETARY_* types on iOS HealthKit.
   Future<void> syncMealEntry(MealEntry entry) async {
     if (!await _ensurePermsLoaded()) return;
     final now = DateTime.now();
-    await _safeWrite(entry.nutrition.calories, HealthDataType.DIETARY_ENERGY_CONSUMED, now, HealthDataUnit.KILOCALORIE);
-    await _safeWrite(entry.nutrition.protein,  HealthDataType.DIETARY_PROTEIN_CONSUMED, now, HealthDataUnit.GRAM);
-    await _safeWrite(entry.nutrition.carbs,    HealthDataType.DIETARY_CARBS_CONSUMED,   now, HealthDataUnit.GRAM);
-    await _safeWrite(entry.nutrition.fat,      HealthDataType.DIETARY_FATS_CONSUMED,    now, HealthDataUnit.GRAM);
-    if (entry.nutrition.fiber > 0) {
-      await _safeWrite(entry.nutrition.fiber, HealthDataType.DIETARY_FIBER, now, HealthDataUnit.GRAM);
+    try {
+      await _health.writeMeal(
+        mealType: MealType.UNKNOWN,
+        startTime: now.subtract(const Duration(minutes: 1)),
+        endTime: now,
+        name: entry.foodName,
+        caloriesConsumed: entry.nutrition.calories,
+        protein: entry.nutrition.protein,
+        carbohydrates: entry.nutrition.carbs,
+        fatTotal: entry.nutrition.fat,
+        fiber: entry.nutrition.fiber > 0 ? entry.nutrition.fiber : null,
+        sodium: (entry.nutrition.sodium ?? 0) > 0 ? entry.nutrition.sodium : null,
+      );
+      await _updateLastSync();
+    } catch (e) {
+      debugPrint('HealthService writeMeal error: $e');
     }
-    if ((entry.nutrition.sodium ?? 0) > 0) {
-      await _safeWrite(entry.nutrition.sodium!, HealthDataType.DIETARY_SODIUM, now, HealthDataUnit.GRAM);
-    }
-    await _updateLastSync();
   }
 
   Future<void> _safeWrite(
@@ -362,7 +402,7 @@ class HealthService {
         final data = await _health.getHealthDataFromTypes(
           startTime: start,
           endTime:   end.isBefore(cap) ? end : cap,
-          types:     [HealthDataType.HEART_RATE_VARIABILITY_SDNN],
+          types:     [_hrvType],
         );
         if (data.isEmpty) { results.add(null); continue; }
         final avg = data
@@ -429,7 +469,7 @@ class HealthService {
       final end      = date != null ? midnight.add(const Duration(days: 1)) : DateTime.now();
       final data = await _health.getHealthDataFromTypes(
         startTime: midnight, endTime: end,
-        types: [HealthDataType.DISTANCE_WALKING_RUNNING],
+        types: [_distanceType],
       );
       if (data.isEmpty) return null;
       double total = 0;

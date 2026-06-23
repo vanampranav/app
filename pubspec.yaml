@@ -53,6 +53,9 @@ dependencies:
   # Barcode scanning for nutrition food lookup
   mobile_scanner: ^6.0.0
 
+  # Image picking for food logging
+  image_picker: ^1.1.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

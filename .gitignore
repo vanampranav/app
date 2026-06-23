@@ -51,3 +51,10 @@ android/app/theelefit.jks
 # Secrets — never commit real tokens
 lib/config/shopify_config.dart
 lib/config/secrets.dart
+# Python backend virtualenv & caches
+backend/myenv/
+backend/venv/
+backend/.venv/
+**/__pycache__/
+*.pyc
+backend/.env
