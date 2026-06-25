@@ -2,15 +2,29 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:elefit_app/features/challenge/data/models/challenge_submission.dart';
 import 'package:elefit_app/features/challenge/data/repositories/challenge_submission_repository.dart';
+import 'package:elefit_app/features/challenge/data/repositories/challenge_participant_repository.dart';
+import 'package:elefit_app/features/challenge/data/repositories/user_repository.dart';
 import 'package:elefit_app/features/challenge/domain/services/submission_review_service.dart';
 import 'package:elefit_app/features/challenge/data/constants/firestore_collections.dart';
+
+class SubmissionViewModel {
+  final ChallengeSubmission submission;
+  final String displayName;
+
+  SubmissionViewModel({
+    required this.submission,
+    required this.displayName,
+  });
+}
 
 class AdminSubmissionsProvider with ChangeNotifier {
   final String challengeId;
   final ChallengeSubmissionRepository _submissionRepository;
+  final ChallengeParticipantRepository _participantRepository;
+  final UserRepository _userRepository;
   final SubmissionReviewService _submissionService;
 
-  List<ChallengeSubmission> _allSubmissions = [];
+  List<SubmissionViewModel> _allSubmissions = [];
   bool _isLoading = true;
   bool _isActionInProgress = false;
   String? _errorMessage;
@@ -19,27 +33,27 @@ class AdminSubmissionsProvider with ChangeNotifier {
   String _currentStatusFilter = 'All';
   String _currentTypeFilter = 'All Types';
 
-  List<ChallengeSubmission> get submissions {
+  List<SubmissionViewModel> get submissions {
     var filtered = _allSubmissions;
     
     // Status Filter
     if (_currentStatusFilter == 'Pending Review') {
-      filtered = filtered.where((s) => s.reviewStatus == ReviewStatus.submitted).toList();
+      filtered = filtered.where((s) => s.submission.reviewStatus == ReviewStatus.submitted).toList();
     } else if (_currentStatusFilter == 'Approved') {
-      filtered = filtered.where((s) => s.reviewStatus == ReviewStatus.approved).toList();
+      filtered = filtered.where((s) => s.submission.reviewStatus == ReviewStatus.approved).toList();
     } else if (_currentStatusFilter == 'Rejected') {
-      filtered = filtered.where((s) => s.reviewStatus == ReviewStatus.rejected).toList();
+      filtered = filtered.where((s) => s.submission.reviewStatus == ReviewStatus.rejected).toList();
     } else if (_currentStatusFilter == 'Resubmission Required') {
-      filtered = filtered.where((s) => s.reviewStatus == ReviewStatus.needsClarification).toList();
+      filtered = filtered.where((s) => s.submission.reviewStatus == ReviewStatus.needsClarification).toList();
     }
 
     // Type Filter
     if (_currentTypeFilter == 'Baseline') {
-      filtered = filtered.where((s) => s.type == SubmissionType.baseline).toList();
+      filtered = filtered.where((s) => s.submission.type == SubmissionType.baseline).toList();
     } else if (_currentTypeFilter == 'Weekly') {
-      filtered = filtered.where((s) => s.type == SubmissionType.weeklyCheckIn).toList();
+      filtered = filtered.where((s) => s.submission.type == SubmissionType.weeklyCheckIn).toList();
     } else if (_currentTypeFilter == 'Final') {
-      filtered = filtered.where((s) => s.type == SubmissionType.finalSubmission).toList();
+      filtered = filtered.where((s) => s.submission.type == SubmissionType.finalSubmission).toList();
     }
 
     return filtered;
@@ -54,8 +68,12 @@ class AdminSubmissionsProvider with ChangeNotifier {
   AdminSubmissionsProvider({
     required this.challengeId,
     required ChallengeSubmissionRepository submissionRepository,
+    required ChallengeParticipantRepository participantRepository,
+    required UserRepository userRepository,
     required SubmissionReviewService submissionService,
   })  : _submissionRepository = submissionRepository,
+        _participantRepository = participantRepository,
+        _userRepository = userRepository,
         _submissionService = submissionService {
     _listenToSubmissions();
   }
@@ -66,8 +84,27 @@ class AdminSubmissionsProvider with ChangeNotifier {
     notifyListeners();
 
     _subscription = _submissionRepository.streamSubmissionsByChallenge(challengeId).listen(
-      (data) {
-        _allSubmissions = data;
+      (data) async {
+        final userIds = data.map((s) => s.userId).toList();
+        final users = await _userRepository.getUsersByIds(userIds);
+        final userMap = {for (var u in users) u.id: u};
+
+        final participants = await _participantRepository.streamParticipantsByChallenge(challengeId).first;
+        final participantMap = {for (var p in participants) p.userId: p};
+
+        _allSubmissions = data.map((s) {
+          final participant = participantMap[s.userId];
+          return SubmissionViewModel(
+            submission: s,
+            displayName: UserRepository.formatName(
+              userMap[s.userId], 
+              adminView: true, 
+              fallbackId: s.userId,
+              leaderboardDisplayName: participant?.leaderboardDisplayName,
+            ),
+          );
+        }).toList();
+
         _isLoading = false;
         _errorMessage = null;
         notifyListeners();

@@ -86,14 +86,18 @@ class ParticipantChallengeDetailProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> joinChallenge() async {
+  Future<void> joinChallenge({String? nickname}) async {
     if (_isJoining) return;
     _isJoining = true;
     _errorMessage = null;
     notifyListeners();
 
     try {
-      await _enrollmentService.joinChallenge(userId, challengeId);
+      await _enrollmentService.joinChallenge(
+        userId: userId, 
+        challengeId: challengeId,
+        leaderboardDisplayName: nickname,
+      );
     } catch (e) {
       _errorMessage = e.toString();
     } finally {

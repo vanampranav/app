@@ -44,6 +44,13 @@ class _ChallengeDetailContent extends StatefulWidget {
 
 class _ChallengeDetailContentState extends State<_ChallengeDetailContent> {
   bool _agreedToRules = false;
+  final _nicknameController = TextEditingController();
+
+  @override
+  void dispose() {
+    _nicknameController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -252,7 +259,35 @@ class _ChallengeDetailContentState extends State<_ChallengeDetailContent> {
     }
 
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Text('REGISTRATION', style: AppTheme.labelMD.copyWith(letterSpacing: 2.0)),
+        const SizedBox(height: 12),
+        EFCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('LEADERBOARD NICKNAME', style: AppTheme.labelSM.copyWith(color: AppTheme.textSecondary)),
+              const SizedBox(height: 4),
+              const Text('This is how others will see you on the challenge leaderboard.', style: TextStyle(fontSize: 10, color: AppTheme.textTertiary)),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _nicknameController,
+                style: const TextStyle(color: Colors.white),
+                maxLength: 20,
+                decoration: InputDecoration(
+                  hintText: 'Enter a fun nickname',
+                  hintStyle: const TextStyle(color: Colors.white24),
+                  filled: true,
+                  fillColor: AppTheme.surface2,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                  counterStyle: const TextStyle(color: AppTheme.textTertiary, fontSize: 10),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 24),
         GestureDetector(
           onTap: () => setState(() => _agreedToRules = !_agreedToRules),
           child: Row(
@@ -283,7 +318,37 @@ class _ChallengeDetailContentState extends State<_ChallengeDetailContent> {
   }
 
   Future<void> _handleJoin(BuildContext context, ParticipantChallengeDetailProvider provider) async {
-    await provider.joinChallenge();
+    final nickname = _nicknameController.text.trim();
+    
+    // Validation
+    if (nickname.isEmpty) {
+      _showErrorSnackBar('Nickname is required.');
+      return;
+    }
+    if (nickname.length < 2 || nickname.length > 20) {
+      _showErrorSnackBar('Nickname must be between 2 and 20 characters.');
+      return;
+    }
+    
+    // Letters, numbers, spaces only
+    if (!RegExp(r'^[a-zA-Z0-9\s]+$').hasMatch(nickname)) {
+      _showErrorSnackBar('Only letters, numbers, and spaces are allowed in nicknames.');
+      return;
+    }
+
+    // No emails (simple check for @)
+    if (nickname.contains('@')) {
+      _showErrorSnackBar('Email addresses are not allowed as nicknames.');
+      return;
+    }
+
+    // No phone numbers (simple check for too many digits)
+    if (RegExp(r'\d{7,}').hasMatch(nickname.replaceAll(RegExp(r'[\s\-\(\)]'), ''))) {
+      _showErrorSnackBar('Phone numbers are not allowed as nicknames.');
+      return;
+    }
+
+    await provider.joinChallenge(nickname: nickname);
     if (context.mounted) {
       if (provider.errorMessage != null) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(provider.errorMessage!), backgroundColor: AppTheme.error));
@@ -295,6 +360,10 @@ class _ChallengeDetailContentState extends State<_ChallengeDetailContent> {
         );
       }
     }
+  }
+
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), backgroundColor: AppTheme.error));
   }
 
   Widget _buildErrorState(String msg) {

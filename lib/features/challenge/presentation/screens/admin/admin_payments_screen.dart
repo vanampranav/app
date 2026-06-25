@@ -6,10 +6,13 @@ import 'package:elefit_app/widgets/ef_components.dart';
 import 'package:elefit_app/features/challenge/data/constants/firestore_collections.dart';
 import 'package:elefit_app/features/challenge/data/models/payment_record.dart';
 import 'package:elefit_app/features/challenge/data/repositories/payment_record_repository.dart';
+import 'package:elefit_app/features/challenge/data/repositories/challenge_participant_repository.dart';
+import 'package:elefit_app/features/challenge/data/repositories/user_repository.dart';
 import 'package:elefit_app/features/challenge/domain/services/payment_approval_service.dart';
 import 'package:elefit_app/features/challenge/domain/services/auth_service.dart';
 import 'package:elefit_app/features/challenge/presentation/widgets/admin/admin_guard.dart';
 import 'package:elefit_app/features/challenge/presentation/providers/admin_payments_provider.dart';
+import 'package:elefit_app/features/challenge/presentation/screens/admin/admin_participant_detail_screen.dart';
 
 class AdminPaymentsScreen extends StatelessWidget {
   final String challengeId;
@@ -23,6 +26,8 @@ class AdminPaymentsScreen extends StatelessWidget {
         create: (ctx) => AdminPaymentsProvider(
           challengeId: challengeId,
           paymentRepository: ctx.read<PaymentRecordRepository>(),
+          participantRepository: ctx.read<ChallengeParticipantRepository>(),
+          userRepository: ctx.read<UserRepository>(),
           paymentService: ctx.read<PaymentApprovalService>(),
         ),
         child: const _AdminPaymentsContent(),
@@ -114,8 +119,8 @@ class _AdminPaymentsContent extends StatelessWidget {
       itemCount: provider.payments.length,
       separatorBuilder: (_, __) => const SizedBox(height: 16),
       itemBuilder: (ctx, i) {
-        final payment = provider.payments[i];
-        return _PaymentCard(payment: payment);
+        final viewModel = provider.payments[i];
+        return _PaymentCard(viewModel: viewModel);
       },
     );
   }
@@ -144,17 +149,25 @@ class _AdminPaymentsContent extends StatelessWidget {
 }
 
 class _PaymentCard extends StatelessWidget {
-  final PaymentRecord payment;
+  final PaymentViewModel viewModel;
 
-  const _PaymentCard({Key? key, required this.payment}) : super(key: key);
+  const _PaymentCard({Key? key, required this.viewModel}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
+    final payment = viewModel.payment;
     final dateFormat = DateFormat('MMM dd, yyyy • HH:mm');
     final provider = context.read<AdminPaymentsProvider>();
     final adminId = context.read<AuthService>().currentUser?.id ?? '';
 
     return EFCard(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => AdminParticipantDetailScreen(
+          userId: payment.userId,
+          challengeId: payment.challengeId,
+        )),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -164,7 +177,7 @@ class _PaymentCard extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('User: ${payment.userId.substring(0, 8)}...', style: AppTheme.headingSM),
+                  Text(viewModel.displayName, style: AppTheme.headingSM),
                   const SizedBox(height: 4),
                   Text(
                     'Submitted: ${payment.createdAt != null ? dateFormat.format(payment.createdAt!) : 'N/A'}',
@@ -182,6 +195,8 @@ class _PaymentCard extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Text('USER ID: ${payment.userId.substring(0, 8)}...', style: AppTheme.labelSM.copyWith(fontSize: 8, color: AppTheme.textTertiary)),
+                  const SizedBox(height: 4),
                   Text('AMOUNT', style: AppTheme.labelSM.copyWith(fontSize: 9)),
                   const SizedBox(height: 4),
                   Text(

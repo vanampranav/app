@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:elefit_app/theme/app_theme.dart';
 import 'package:elefit_app/widgets/ef_components.dart';
 import 'package:elefit_app/features/challenge/data/models/admin_audit_log.dart';
+import 'package:elefit_app/features/challenge/data/repositories/user_repository.dart';
 import 'package:elefit_app/features/challenge/domain/services/admin_audit_service.dart';
 import 'package:elefit_app/features/challenge/presentation/widgets/admin/admin_guard.dart';
 import 'package:elefit_app/features/challenge/presentation/providers/admin_audit_logs_provider.dart';
@@ -20,6 +21,7 @@ class AdminAuditLogsScreen extends StatelessWidget {
         create: (ctx) => AdminAuditLogsProvider(
           challengeId: challengeId,
           auditService: ctx.read<AdminAuditService>(),
+          userRepository: ctx.read<UserRepository>(),
         ),
         child: const _AdminAuditLogsContent(),
       ),
@@ -110,8 +112,8 @@ class _AdminAuditLogsContent extends StatelessWidget {
       itemCount: provider.logs.length,
       separatorBuilder: (_, __) => const SizedBox(height: 12),
       itemBuilder: (ctx, i) {
-        final log = provider.logs[i];
-        return _AuditLogCard(log: log);
+        final viewModel = provider.logs[i];
+        return _AuditLogCard(viewModel: viewModel);
       },
     );
   }
@@ -140,12 +142,13 @@ class _AdminAuditLogsContent extends StatelessWidget {
 }
 
 class _AuditLogCard extends StatelessWidget {
-  final AdminAuditLog log;
+  final AuditLogViewModel viewModel;
 
-  const _AuditLogCard({Key? key, required this.log}) : super(key: key);
+  const _AuditLogCard({Key? key, required this.viewModel}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
+    final log = viewModel.log;
     final dateFormat = DateFormat('MMM dd, yyyy • HH:mm:ss');
     
     return EFCard(
@@ -167,7 +170,7 @@ class _AuditLogCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          Text('Admin ID: ${log.adminId}', style: AppTheme.bodySM.copyWith(color: AppTheme.textSecondary)),
+          Text('Admin: ${viewModel.adminName}', style: AppTheme.bodySM.copyWith(color: AppTheme.textSecondary)),
           const SizedBox(height: 4),
           Text('Target: ${log.targetCollection} (${log.targetId})', style: AppTheme.bodySM.copyWith(color: AppTheme.textTertiary, fontSize: 11)),
           

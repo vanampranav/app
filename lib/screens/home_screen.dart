@@ -25,6 +25,8 @@ import 'package:elefit_app/features/challenge/presentation/screens/participant/c
 import 'package:elefit_app/features/challenge/presentation/screens/participant/participant_challenge_dashboard_screen.dart';
 import 'package:elefit_app/features/challenge/presentation/providers/home_challenge_entry_provider.dart';
 
+import 'package:elefit_app/features/challenge/presentation/widgets/notification_bell_icon.dart';
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
 
@@ -533,6 +535,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         ),
       ),
       actions: [
+        const NotificationBellIcon(),
+        const SizedBox(width: 8),
         Consumer<CartModel>(
           builder: (_, cart, __) => GestureDetector(
             onTap: () => Navigator.push(context,

@@ -3,11 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:elefit_app/features/challenge/data/models/challenge.dart';
 import 'package:elefit_app/features/challenge/data/repositories/challenge_repository.dart';
 import 'package:elefit_app/features/challenge/domain/services/challenge_service.dart';
+import 'package:elefit_app/features/challenge/domain/services/challenge_notification_service.dart';
 
 class AdminChallengeDetailProvider with ChangeNotifier {
   final String challengeId;
   final ChallengeRepository _challengeRepository;
   final ChallengeService _challengeService;
+  final ChallengeNotificationService _notificationService;
 
   Challenge? _challenge;
   bool _isLoading = true;
@@ -24,8 +26,10 @@ class AdminChallengeDetailProvider with ChangeNotifier {
     required this.challengeId,
     required ChallengeRepository challengeRepository,
     required ChallengeService challengeService,
+    required ChallengeNotificationService notificationService,
   })  : _challengeRepository = challengeRepository,
-        _challengeService = challengeService {
+        _challengeService = challengeService,
+        _notificationService = notificationService {
     _listenToChallenge();
   }
 
@@ -47,6 +51,70 @@ class AdminChallengeDetailProvider with ChangeNotifier {
         notifyListeners();
       },
     );
+  }
+
+  Future<void> triggerWeeklyCheckInOpen(int weekNumber) async {
+    if (_challenge == null) return;
+    _isActionInProgress = true;
+    notifyListeners();
+
+    try {
+      await _notificationService.createWeeklyCheckInOpenNotifications(challengeId, weekNumber, _challenge!.title);
+      _errorMessage = null;
+    } catch (e) {
+      _errorMessage = e.toString();
+    } finally {
+      _isActionInProgress = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> triggerWeeklyCheckInDueReminders(int weekNumber) async {
+    if (_challenge == null) return;
+    _isActionInProgress = true;
+    notifyListeners();
+
+    try {
+      await _notificationService.createWeeklyCheckInDueReminders(challengeId, weekNumber, _challenge!.title);
+      _errorMessage = null;
+    } catch (e) {
+      _errorMessage = e.toString();
+    } finally {
+      _isActionInProgress = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> triggerFinalSubmissionOpen() async {
+    if (_challenge == null) return;
+    _isActionInProgress = true;
+    notifyListeners();
+
+    try {
+      await _notificationService.createFinalSubmissionOpenNotifications(challengeId, _challenge!.title);
+      _errorMessage = null;
+    } catch (e) {
+      _errorMessage = e.toString();
+    } finally {
+      _isActionInProgress = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> triggerFinalSubmissionDueReminders() async {
+    if (_challenge == null) return;
+    _isActionInProgress = true;
+    notifyListeners();
+
+    try {
+      await _notificationService.createFinalSubmissionDueReminders(challengeId, _challenge!.title);
+      _errorMessage = null;
+    } catch (e) {
+      _errorMessage = e.toString();
+    } finally {
+      _isActionInProgress = false;
+      notifyListeners();
+    }
   }
 
   Future<void> activateChallenge(String adminId) async {

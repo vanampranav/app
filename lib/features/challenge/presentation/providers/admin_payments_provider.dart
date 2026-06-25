@@ -2,31 +2,45 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:elefit_app/features/challenge/data/models/payment_record.dart';
 import 'package:elefit_app/features/challenge/data/repositories/payment_record_repository.dart';
+import 'package:elefit_app/features/challenge/data/repositories/challenge_participant_repository.dart';
+import 'package:elefit_app/features/challenge/data/repositories/user_repository.dart';
 import 'package:elefit_app/features/challenge/domain/services/payment_approval_service.dart';
 import 'package:elefit_app/features/challenge/data/constants/firestore_collections.dart';
+
+class PaymentViewModel {
+  final PaymentRecord payment;
+  final String displayName;
+
+  PaymentViewModel({
+    required this.payment,
+    required this.displayName,
+  });
+}
 
 class AdminPaymentsProvider with ChangeNotifier {
   final String challengeId;
   final PaymentRecordRepository _paymentRepository;
+  final ChallengeParticipantRepository _participantRepository;
+  final UserRepository _userRepository;
   final PaymentApprovalService _paymentService;
 
-  List<PaymentRecord> _allPayments = [];
+  List<PaymentViewModel> _allPayments = [];
   bool _isLoading = true;
   bool _isActionInProgress = false;
   String? _errorMessage;
   StreamSubscription? _subscription;
   String _currentFilter = 'All';
 
-  List<PaymentRecord> get payments {
+  List<PaymentViewModel> get payments {
     if (_currentFilter == 'All') return _allPayments;
     if (_currentFilter == 'Pending') {
-      return _allPayments.where((p) => p.status == PaymentStatus.pending).toList();
+      return _allPayments.where((p) => p.payment.status == PaymentStatus.pending).toList();
     }
     if (_currentFilter == 'Approved/Paid') {
-      return _allPayments.where((p) => p.status == PaymentStatus.paid).toList();
+      return _allPayments.where((p) => p.payment.status == PaymentStatus.paid).toList();
     }
     if (_currentFilter == 'Rejected') {
-      return _allPayments.where((p) => p.status == PaymentStatus.rejected).toList();
+      return _allPayments.where((p) => p.payment.status == PaymentStatus.rejected).toList();
     }
     return _allPayments;
   }
@@ -39,8 +53,12 @@ class AdminPaymentsProvider with ChangeNotifier {
   AdminPaymentsProvider({
     required this.challengeId,
     required PaymentRecordRepository paymentRepository,
+    required ChallengeParticipantRepository participantRepository,
+    required UserRepository userRepository,
     required PaymentApprovalService paymentService,
   })  : _paymentRepository = paymentRepository,
+        _participantRepository = participantRepository,
+        _userRepository = userRepository,
         _paymentService = paymentService {
     _listenToPayments();
   }
@@ -51,8 +69,27 @@ class AdminPaymentsProvider with ChangeNotifier {
     notifyListeners();
 
     _subscription = _paymentRepository.streamPaymentsByChallenge(challengeId).listen(
-      (data) {
-        _allPayments = data;
+      (data) async {
+        final userIds = data.map((p) => p.userId).toList();
+        final users = await _userRepository.getUsersByIds(userIds);
+        final userMap = {for (var u in users) u.id: u};
+
+        final participants = await _participantRepository.streamParticipantsByChallenge(challengeId).first;
+        final participantMap = {for (var p in participants) p.userId: p};
+
+        _allPayments = data.map((p) {
+          final participant = participantMap[p.userId];
+          return PaymentViewModel(
+            payment: p,
+            displayName: UserRepository.formatName(
+              userMap[p.userId], 
+              adminView: true, 
+              fallbackId: p.userId,
+              leaderboardDisplayName: participant?.leaderboardDisplayName,
+            ),
+          );
+        }).toList();
+
         _isLoading = false;
         _errorMessage = null;
         notifyListeners();

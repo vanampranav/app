@@ -87,7 +87,7 @@ class PaymentApprovalService {
 
     final challenge = await _challengeRepository.getChallengeById(payment.challengeId);
     if (challenge != null) {
-      await _notificationService.notifyPaymentApproved(payment.userId, challenge.title);
+      await _notificationService.notifyPaymentApproved(payment.userId, challenge.title, challenge.id);
     }
   }
 

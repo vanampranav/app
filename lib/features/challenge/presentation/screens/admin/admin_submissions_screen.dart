@@ -6,10 +6,13 @@ import 'package:elefit_app/widgets/ef_components.dart';
 import 'package:elefit_app/features/challenge/data/constants/firestore_collections.dart';
 import 'package:elefit_app/features/challenge/data/models/challenge_submission.dart';
 import 'package:elefit_app/features/challenge/data/repositories/challenge_submission_repository.dart';
+import 'package:elefit_app/features/challenge/data/repositories/challenge_participant_repository.dart';
+import 'package:elefit_app/features/challenge/data/repositories/user_repository.dart';
 import 'package:elefit_app/features/challenge/domain/services/submission_review_service.dart';
 import 'package:elefit_app/features/challenge/domain/services/auth_service.dart';
 import 'package:elefit_app/features/challenge/presentation/widgets/admin/admin_guard.dart';
 import 'package:elefit_app/features/challenge/presentation/providers/admin_submissions_provider.dart';
+import 'package:elefit_app/features/challenge/presentation/screens/admin/admin_participant_detail_screen.dart';
 
 class AdminSubmissionsScreen extends StatelessWidget {
   final String challengeId;
@@ -23,6 +26,8 @@ class AdminSubmissionsScreen extends StatelessWidget {
         create: (ctx) => AdminSubmissionsProvider(
           challengeId: challengeId,
           submissionRepository: ctx.read<ChallengeSubmissionRepository>(),
+          participantRepository: ctx.read<ChallengeParticipantRepository>(),
+          userRepository: ctx.read<UserRepository>(),
           submissionService: ctx.read<SubmissionReviewService>(),
         ),
         child: const _AdminSubmissionsContent(),
@@ -135,8 +140,8 @@ class _AdminSubmissionsContent extends StatelessWidget {
       itemCount: provider.submissions.length,
       separatorBuilder: (_, __) => const SizedBox(height: 16),
       itemBuilder: (ctx, i) {
-        final submission = provider.submissions[i];
-        return _SubmissionCard(submission: submission);
+        final viewModel = provider.submissions[i];
+        return _SubmissionCard(viewModel: viewModel);
       },
     );
   }
@@ -165,12 +170,13 @@ class _AdminSubmissionsContent extends StatelessWidget {
 }
 
 class _SubmissionCard extends StatelessWidget {
-  final ChallengeSubmission submission;
+  final SubmissionViewModel viewModel;
 
-  const _SubmissionCard({Key? key, required this.submission}) : super(key: key);
+  const _SubmissionCard({Key? key, required this.viewModel}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
+    final submission = viewModel.submission;
     final dateFormat = DateFormat('MMM dd, yyyy • HH:mm');
     final provider = context.read<AdminSubmissionsProvider>();
     final adminId = context.read<AuthService>().currentUser?.id ?? '';
@@ -181,6 +187,13 @@ class _SubmissionCard extends StatelessWidget {
     final List<dynamic> photoUrls = submission.data['photos'] ?? [];
 
     return EFCard(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => AdminParticipantDetailScreen(
+          userId: submission.userId,
+          challengeId: submission.challengeId,
+        )),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -192,7 +205,7 @@ class _SubmissionCard extends StatelessWidget {
                 children: [
                   Text(submission.type.toUpperCase(), style: AppTheme.labelSM.copyWith(color: AppTheme.lime, letterSpacing: 1.2)),
                   const SizedBox(height: 4),
-                  Text('User: ${submission.userId.substring(0, 8)}...', style: AppTheme.headingSM),
+                  Text(viewModel.displayName, style: AppTheme.headingSM),
                 ],
               ),
               _StatusBadge(status: submission.reviewStatus),
@@ -212,6 +225,8 @@ class _SubmissionCard extends StatelessWidget {
                 const SizedBox(width: 32),
                 _SubmissionMetric(label: 'BODY FAT', value: '$bodyFat%'),
               ],
+              const Spacer(),
+              Text('USER ID: ${submission.userId.substring(0, 8)}...', style: AppTheme.labelSM.copyWith(fontSize: 8, color: AppTheme.textTertiary)),
             ],
           ),
           

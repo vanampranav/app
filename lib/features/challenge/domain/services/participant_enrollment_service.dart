@@ -21,7 +21,11 @@ class ParticipantEnrollmentService {
         _auditService = auditService,
         _notificationService = notificationService;
 
-  Future<void> joinChallenge(String userId, String challengeId) async {
+  Future<void> joinChallenge({
+    required String userId,
+    required String challengeId,
+    String? leaderboardDisplayName,
+  }) async {
     // Check if already joined
     final existing = await _participantRepository.getParticipantByUserAndChallenge(userId, challengeId);
     if (existing != null) {
@@ -44,12 +48,13 @@ class ParticipantEnrollmentService {
       userId: userId,
       status: ParticipantStatus.joined,
       paymentStatus: PaymentStatus.pending,
+      leaderboardDisplayName: leaderboardDisplayName,
       joinedAt: DateTime.now(),
       createdAt: DateTime.now(),
     );
 
     await _participantRepository.joinChallenge(participant);
-    await _notificationService.notifyParticipantJoined(userId, challenge.title);
+    await _notificationService.notifyParticipantJoined(userId, challenge.title, challengeId);
   }
 
   Future<void> cancelParticipation(String userId, String challengeId) async {
@@ -93,7 +98,7 @@ class ParticipantEnrollmentService {
     
     final challenge = await _challengeRepository.getChallengeById(participant.challengeId);
     if (challenge != null) {
-      await _notificationService.notifyPaymentApproved(participant.userId, challenge.title);
+      await _notificationService.notifyPaymentApproved(participant.userId, challenge.title, challenge.id);
     }
   }
 

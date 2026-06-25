@@ -105,7 +105,7 @@ class SubmissionReviewService {
 
     final challenge = await _challengeRepository.getChallengeById(submission.challengeId);
     if (challenge != null) {
-      await _notificationService.notifySubmissionApproved(submission.userId, challenge.title, submission.type);
+      await _notificationService.notifySubmissionApproved(submission.userId, challenge.title, submission.type, submission.challengeId);
     }
   }
 
@@ -135,6 +135,11 @@ class SubmissionReviewService {
       newData: updatedSubmission.toMap(),
       reason: reason,
     );
+
+    final challenge = await _challengeRepository.getChallengeById(submission.challengeId);
+    if (challenge != null) {
+      await _notificationService.notifySubmissionRejected(submission.userId, challenge.title, submission.type, submission.challengeId);
+    }
   }
 
   Future<void> requestResubmission(String submissionId, String adminId, String reason) async {
@@ -163,5 +168,10 @@ class SubmissionReviewService {
       newData: updatedSubmission.toMap(),
       reason: reason,
     );
+
+    final challenge = await _challengeRepository.getChallengeById(submission.challengeId);
+    if (challenge != null) {
+      await _notificationService.notifyResubmissionRequested(submission.userId, challenge.title, submission.type, submission.challengeId);
+    }
   }
 }

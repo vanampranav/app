@@ -7,7 +7,6 @@ import 'package:elefit_app/features/challenge/presentation/widgets/admin/admin_g
 import 'package:elefit_app/features/challenge/presentation/providers/admin_challenge_list_provider.dart';
 import 'package:elefit_app/features/challenge/data/repositories/challenge_repository.dart';
 import 'package:elefit_app/features/challenge/data/models/challenge.dart';
-import 'package:elefit_app/features/challenge/data/constants/firestore_collections.dart';
 import 'package:elefit_app/features/challenge/presentation/screens/admin/admin_challenge_detail_screen.dart';
 import 'package:elefit_app/features/challenge/presentation/screens/admin/admin_create_edit_challenge_screen.dart';
 

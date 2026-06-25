@@ -25,6 +25,7 @@ import 'package:elefit_app/features/challenge/data/repositories/challenge_submis
 import 'package:elefit_app/features/challenge/data/repositories/payment_record_repository.dart';
 import 'package:elefit_app/features/challenge/data/repositories/challenge_notification_repository.dart';
 import 'package:elefit_app/features/challenge/data/repositories/admin_audit_log_repository.dart';
+import 'package:elefit_app/features/challenge/data/repositories/user_repository.dart';
 import 'package:elefit_app/features/challenge/domain/services/admin_audit_service.dart';
 import 'package:elefit_app/features/challenge/domain/services/challenge_notification_service.dart';
 import 'package:elefit_app/features/challenge/domain/services/challenge_service.dart';
@@ -33,6 +34,7 @@ import 'package:elefit_app/features/challenge/domain/services/payment_approval_s
 import 'package:elefit_app/features/challenge/domain/services/submission_review_service.dart';
 import 'package:elefit_app/features/challenge/domain/services/auth_service.dart';
 import 'package:elefit_app/features/challenge/presentation/providers/home_challenge_entry_provider.dart';
+import 'package:elefit_app/features/challenge/presentation/providers/notification_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -92,13 +94,22 @@ void main() async {
         Provider(create: (_) => PaymentRecordRepository()),
         Provider(create: (_) => ChallengeNotificationRepository()),
         Provider(create: (_) => AdminAuditLogRepository()),
+        Provider(create: (_) => UserRepository()),
 
         // Services
         ProxyProvider<AdminAuditLogRepository, AdminAuditService>(
           update: (_, repo, __) => AdminAuditService(auditLogRepository: repo),
         ),
-        ProxyProvider<ChallengeNotificationRepository, ChallengeNotificationService>(
-          update: (_, repo, __) => ChallengeNotificationService(notificationRepository: repo),
+        ProxyProvider3<
+            ChallengeNotificationRepository,
+            ChallengeParticipantRepository,
+            ChallengeSubmissionRepository,
+            ChallengeNotificationService>(
+          update: (_, repoN, repoP, repoS, __) => ChallengeNotificationService(
+            notificationRepository: repoN,
+            participantRepository: repoP,
+            submissionRepository: repoS,
+          ),
         ),
         ProxyProvider2<ChallengeRepository, AdminAuditService, ChallengeService>(
           update: (_, repo, auditS, __) => ChallengeService(
@@ -161,6 +172,19 @@ void main() async {
             return HomeChallengeEntryProvider(
               userId: auth.currentUser?.id ?? '',
               participantRepository: ctx.read<ChallengeParticipantRepository>(),
+            );
+          },
+        ),
+        ChangeNotifierProxyProvider<AuthService, NotificationProvider>(
+          create: (ctx) => NotificationProvider(
+            userId: ctx.read<AuthService>().currentUser?.id ?? '',
+            notificationService: ctx.read<ChallengeNotificationService>(),
+          ),
+          update: (ctx, auth, previous) {
+            if (previous?.userId == auth.currentUser?.id) return previous!;
+            return NotificationProvider(
+              userId: auth.currentUser?.id ?? '',
+              notificationService: ctx.read<ChallengeNotificationService>(),
             );
           },
         ),

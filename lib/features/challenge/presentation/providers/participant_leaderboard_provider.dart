@@ -6,25 +6,35 @@ import 'package:elefit_app/features/challenge/data/models/challenge_submission.d
 import 'package:elefit_app/features/challenge/data/repositories/challenge_repository.dart';
 import 'package:elefit_app/features/challenge/data/repositories/challenge_participant_repository.dart';
 import 'package:elefit_app/features/challenge/data/repositories/challenge_submission_repository.dart';
+import 'package:elefit_app/features/challenge/data/repositories/user_repository.dart';
 import 'package:elefit_app/features/challenge/data/constants/firestore_collections.dart';
+import 'package:elefit_app/features/challenge/domain/services/challenge_scoring_service.dart';
 
 class LeaderboardEntry {
   final String userId;
+  final String displayName;
   final double startingWeight;
   final double latestWeight;
   final double weightLost;
   final double weightLossPercentage;
+  final double bodyFatLossPoints;
   final String latestSubmissionType;
   final DateTime lastUpdated;
+  final double motivationalScore;
+  final OfficialWinnerData officialData;
 
   LeaderboardEntry({
     required this.userId,
+    required this.displayName,
     required this.startingWeight,
     required this.latestWeight,
     required this.weightLost,
     required this.weightLossPercentage,
+    required this.bodyFatLossPoints,
     required this.latestSubmissionType,
     required this.lastUpdated,
+    required this.motivationalScore,
+    required this.officialData,
   });
 }
 
@@ -33,6 +43,8 @@ class ParticipantLeaderboardProvider with ChangeNotifier {
   final ChallengeRepository _challengeRepository;
   final ChallengeParticipantRepository _participantRepository;
   final ChallengeSubmissionRepository _submissionRepository;
+  final UserRepository _userRepository;
+  final ChallengeScoringService _scoringService = ChallengeScoringService();
 
   Challenge? _challenge;
   List<LeaderboardEntry> _leaderboard = [];
@@ -53,9 +65,11 @@ class ParticipantLeaderboardProvider with ChangeNotifier {
     required ChallengeRepository challengeRepository,
     required ChallengeParticipantRepository participantRepository,
     required ChallengeSubmissionRepository submissionRepository,
+    required UserRepository userRepository,
   })  : _challengeRepository = challengeRepository,
         _participantRepository = participantRepository,
-        _submissionRepository = submissionRepository {
+        _submissionRepository = submissionRepository,
+        _userRepository = userRepository {
     _init();
   }
 
@@ -82,25 +96,34 @@ class ParticipantLeaderboardProvider with ChangeNotifier {
         _submissionRepository.streamSubmissionsByChallenge(challengeId);
 
     // Combine streams to rebuild leaderboard
-    _participantSub = participantsStream.listen((participants) {
-      submissionsStream.first.then((submissions) {
-        _buildLeaderboard(participants, submissions);
-      });
+    _participantSub = participantsStream.listen((participants) async {
+      final submissions = await submissionsStream.first;
+      await _buildLeaderboard(participants, submissions);
     }, onError: (err) => _handleError(err.toString()));
 
-    _submissionSub = submissionsStream.listen((submissions) {
-      _participantRepository.streamParticipantsByChallenge(challengeId).first.then((participants) {
-        _buildLeaderboard(participants, submissions);
-      });
+    _submissionSub = submissionsStream.listen((submissions) async {
+      final participants = await _participantRepository.streamParticipantsByChallenge(challengeId).first;
+      await _buildLeaderboard(participants, submissions);
     }, onError: (err) => _handleError(err.toString()));
   }
 
-  void _buildLeaderboard(List<ChallengeParticipant> participants, List<ChallengeSubmission> submissions) {
+  Future<void> _buildLeaderboard(List<ChallengeParticipant> participants, List<ChallengeSubmission> submissions) async {
     try {
-      final activeUserIds = participants
-          .where((p) => p.status == ParticipantStatus.active)
-          .map((p) => p.userId)
-          .toSet();
+      final activeParticipants = participants
+          .where((p) => p.status != ParticipantStatus.withdrawn)
+          .toList();
+      final activeUserIds = activeParticipants.map((p) => p.userId).toList();
+
+      if (activeUserIds.isEmpty) {
+        _leaderboard = [];
+        _isLoading = false;
+        notifyListeners();
+        return;
+      }
+
+      // Fetch user profiles for all active participants
+      final users = await _userRepository.getUsersByIds(activeUserIds);
+      final userMap = {for (var u in users) u.id: u};
 
       final approvedSubmissions = submissions
           .where((s) => s.reviewStatus == ReviewStatus.approved)
@@ -114,9 +137,11 @@ class ParticipantLeaderboardProvider with ChangeNotifier {
       }
 
       List<LeaderboardEntry> entries = [];
+      final bool isChallengeCompleted = _challenge?.status == ChallengeStatus.completed;
 
       userSubs.forEach((userId, subs) {
         try {
+          final participant = activeParticipants.firstWhere((p) => p.userId == userId);
           final baseline = subs.firstWhere((s) => s.type == SubmissionType.baseline);
           
           // Sort subs by date to find latest
@@ -125,8 +150,28 @@ class ParticipantLeaderboardProvider with ChangeNotifier {
 
           final double startW = (baseline.data['weight'] as num).toDouble();
           final double latestW = (latest.data['weight'] as num).toDouble();
-          final double lost = startW - latestW;
-          final double pct = startW > 0 ? (lost / startW) * 100 : 0.0;
+          final double lostW = startW - latestW;
+          final double pctW = _scoringService.calculateWeightLossPercent(startW, latestW);
+
+          final double? startBF = baseline.data['bodyFat'] != null ? (baseline.data['bodyFat'] as num).toDouble() : null;
+          final double? latestBF = latest.data['bodyFat'] != null ? (latest.data['bodyFat'] as num).toDouble() : null;
+          final double lostBF = _scoringService.calculateBodyFatLossPoints(startBF, latestBF);
+
+          // 1. Motivational Score
+          final double consistency = _scoringService.calculateConsistencyScore(subs.length);
+          final double motivationalScore = _scoringService.calculateMotivationalLeaderboardScore(
+            weightLossPercent: pctW,
+            bodyFatLossPoints: lostBF,
+            consistencyScore: consistency,
+          );
+
+          // 2. Official Winner Score
+          final officialData = _scoringService.calculateOfficialWinnerScore(
+            participant: participant,
+            baseline: baseline,
+            latestProgress: latest,
+            isChallengeCompleted: isChallengeCompleted,
+          );
 
           String latestLabel = latest.type;
           if (latest.type == SubmissionType.weeklyCheckIn) {
@@ -137,22 +182,34 @@ class ParticipantLeaderboardProvider with ChangeNotifier {
             latestLabel = 'Baseline';
           }
 
+          // Privacy: format name
+          final userProfile = userMap[userId];
+          final String displayName = UserRepository.formatName(
+            userProfile, 
+            fallbackId: userId,
+            leaderboardDisplayName: participant.leaderboardDisplayName,
+          );
+
           entries.add(LeaderboardEntry(
             userId: userId,
+            displayName: displayName,
             startingWeight: startW,
             latestWeight: latestW,
-            weightLost: lost,
-            weightLossPercentage: pct,
+            weightLost: lostW,
+            weightLossPercentage: pctW,
+            bodyFatLossPoints: lostBF,
             latestSubmissionType: latestLabel,
             lastUpdated: latest.createdAt ?? DateTime.now(),
+            motivationalScore: motivationalScore,
+            officialData: officialData,
           ));
         } catch (_) {
-          // Skip users without baseline
+          // Skip users without baseline or participants matching issues
         }
       });
 
-      // Sort by weight loss percentage descending
-      entries.sort((a, b) => b.weightLossPercentage.compareTo(a.weightLossPercentage));
+      // Sort by motivational score descending for primary view
+      entries.sort((a, b) => b.motivationalScore.compareTo(a.motivationalScore));
       
       _leaderboard = entries;
       _isLoading = false;

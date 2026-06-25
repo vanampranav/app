@@ -35,6 +35,26 @@ class ChallengeNotificationRepository {
     }
   }
 
+  Future<void> markAllAsRead(String userId) async {
+    try {
+      final snapshot = await _collection
+          .where('recipientUserId', isEqualTo: userId)
+          .where('isRead', isEqualTo: false)
+          .get();
+
+      final batch = _firestore.batch();
+      for (var doc in snapshot.docs) {
+        batch.update(doc.reference, {
+          'isRead': true,
+          'readAt': FieldValue.serverTimestamp(),
+        });
+      }
+      await batch.commit();
+    } catch (e) {
+      throw Exception('Failed to mark all notifications as read: $e');
+    }
+  }
+
   Stream<List<ChallengeNotification>> streamNotificationsForUser(
       String userId) {
     return _collection

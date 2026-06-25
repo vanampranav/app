@@ -16,6 +16,8 @@ import 'package:elefit_app/features/challenge/presentation/screens/admin/admin_p
 import 'package:elefit_app/features/challenge/presentation/screens/admin/admin_submissions_screen.dart';
 import 'package:elefit_app/features/challenge/presentation/screens/admin/admin_audit_logs_screen.dart';
 
+import 'package:elefit_app/features/challenge/domain/services/challenge_notification_service.dart';
+
 class AdminChallengeDetailScreen extends StatelessWidget {
   final String challengeId;
 
@@ -29,6 +31,7 @@ class AdminChallengeDetailScreen extends StatelessWidget {
           challengeId: challengeId,
           challengeRepository: ctx.read<ChallengeRepository>(),
           challengeService: ctx.read<ChallengeService>(),
+          notificationService: ctx.read<ChallengeNotificationService>(),
         ),
         child: const _AdminChallengeDetailContent(),
       ),
@@ -104,6 +107,8 @@ class _AdminChallengeDetailContent extends StatelessWidget {
                               const SizedBox(height: 40),
                               _buildManagementActions(context, challenge),
                               const SizedBox(height: 40),
+                              _buildUtilityActions(context, provider, challenge),
+                              const SizedBox(height: 40),
                               _buildLifecycleActions(context, provider, challenge),
                               const SizedBox(height: 60),
                             ],
@@ -129,9 +134,9 @@ class _AdminChallengeDetailContent extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -181,7 +186,7 @@ class _AdminChallengeDetailContent extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppTheme.surface1,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withOpacity(0.05)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -246,6 +251,144 @@ class _AdminChallengeDetailContent extends StatelessWidget {
         ),
       ],
     );
+  }
+
+  Widget _buildUtilityActions(BuildContext context, AdminChallengeDetailProvider provider, Challenge challenge) {
+    if (challenge.status != 'active' && challenge.status != 'registrationOpen') return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionTitle('UTILITIES (TESTING)'),
+        const SizedBox(height: 12),
+        _buildActionButton(
+          context,
+          icon: Icons.notifications_active_outlined,
+          label: 'Send Check-in Open Notification',
+          onTap: () => _showReminderDialog(context, provider, 'open'),
+        ),
+        const SizedBox(height: 12),
+        _buildActionButton(
+          context,
+          icon: Icons.notification_important_outlined,
+          label: 'Send Due Date Reminders',
+          onTap: () => _showReminderDialog(context, provider, 'due'),
+        ),
+        const SizedBox(height: 12),
+        _buildActionButton(
+          context,
+          icon: Icons.assignment_turned_in_outlined,
+          label: 'Send Final Submission Open',
+          onTap: () => _showFinalReminderDialog(context, provider, 'open'),
+        ),
+        const SizedBox(height: 12),
+        _buildActionButton(
+          context,
+          icon: Icons.announcement_outlined,
+          label: 'Send Final Due Reminders',
+          onTap: () => _showFinalReminderDialog(context, provider, 'due'),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _showFinalReminderDialog(BuildContext context, AdminChallengeDetailProvider provider, String type) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surface1,
+        title: Text(type == 'open' ? 'Send Final Open Notification' : 'Send Final Due Reminders', style: AppTheme.headingSM),
+        content: Text(type == 'open' 
+          ? 'This will notify all active participants that final submission is now open.' 
+          : 'This will remind all active participants who haven\'t submitted their final data.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.lime, foregroundColor: Colors.black),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Send'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      if (type == 'open') {
+        await provider.triggerFinalSubmissionOpen();
+      } else {
+        await provider.triggerFinalSubmissionDueReminders();
+      }
+      
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Notifications triggered successfully'), backgroundColor: AppTheme.lime),
+        );
+      }
+    }
+  }
+
+  Future<void> _showReminderDialog(BuildContext context, AdminChallengeDetailProvider provider, String type) async {
+    final controller = TextEditingController(text: '1');
+    final formKey = GlobalKey<FormState>();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surface1,
+        title: Text(type == 'open' ? 'Send "Week Open" Notifications' : 'Send "Check-in Due" Reminders', style: AppTheme.headingSM),
+        content: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Target week number:', style: AppTheme.bodySM),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: controller,
+                keyboardType: TextInputType.number,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(
+                  filled: true,
+                  fillColor: AppTheme.surface2,
+                ),
+                validator: (v) {
+                  if (v == null || v.isEmpty) return 'Required';
+                  if (int.tryParse(v) == null) return 'Invalid number';
+                  return null;
+                },
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.lime, foregroundColor: Colors.black),
+            onPressed: () {
+              if (formKey.currentState!.validate()) {
+                Navigator.pop(ctx, true);
+              }
+            },
+            child: const Text('Send'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      final week = int.parse(controller.text);
+      if (type == 'open') {
+        await provider.triggerWeeklyCheckInOpen(week);
+      } else {
+        await provider.triggerWeeklyCheckInDueReminders(week);
+      }
+      
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Notifications triggered successfully'), backgroundColor: AppTheme.lime),
+        );
+      }
+    }
   }
 
   Widget _buildActionButton(BuildContext context, {required IconData icon, required String label, required VoidCallback onTap}) {

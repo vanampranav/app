@@ -6,6 +6,7 @@ class ChallengeParticipant {
   final String userId;
   final String status; // ParticipantStatus
   final String paymentStatus; // PaymentStatus
+  final String? leaderboardDisplayName;
   final String? paymentRecordId;
   final DateTime? joinedAt;
   final DateTime? createdAt;
@@ -23,6 +24,7 @@ class ChallengeParticipant {
     required this.userId,
     required this.status,
     required this.paymentStatus,
+    this.leaderboardDisplayName,
     this.paymentRecordId,
     this.joinedAt,
     this.createdAt,
@@ -39,6 +41,7 @@ class ChallengeParticipant {
     String? userId,
     String? status,
     String? paymentStatus,
+    String? leaderboardDisplayName,
     String? paymentRecordId,
     DateTime? joinedAt,
     DateTime? createdAt,
@@ -54,6 +57,7 @@ class ChallengeParticipant {
       userId: userId ?? this.userId,
       status: status ?? this.status,
       paymentStatus: paymentStatus ?? this.paymentStatus,
+      leaderboardDisplayName: leaderboardDisplayName ?? this.leaderboardDisplayName,
       paymentRecordId: paymentRecordId ?? this.paymentRecordId,
       joinedAt: joinedAt ?? this.joinedAt,
       createdAt: createdAt ?? this.createdAt,
@@ -71,6 +75,7 @@ class ChallengeParticipant {
       'userId': userId,
       'status': status,
       'paymentStatus': paymentStatus,
+      'leaderboardDisplayName': leaderboardDisplayName,
       'paymentRecordId': paymentRecordId,
       'joinedAt': joinedAt != null ? Timestamp.fromDate(joinedAt!) : null,
       'createdAt': createdAt != null ? Timestamp.fromDate(createdAt!) : FieldValue.serverTimestamp(),
@@ -89,6 +94,7 @@ class ChallengeParticipant {
       userId: map['userId'] ?? '',
       status: map['status'] ?? 'invited',
       paymentStatus: map['paymentStatus'] ?? 'pending',
+      leaderboardDisplayName: map['leaderboardDisplayName'],
       paymentRecordId: map['paymentRecordId'],
       joinedAt: (map['joinedAt'] as Timestamp?)?.toDate(),
       createdAt: (map['createdAt'] as Timestamp?)?.toDate(),

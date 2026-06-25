@@ -386,12 +386,12 @@ class _AdminCreateEditChallengeScreenState extends State<AdminCreateEditChalleng
                           label: 'Activate Challenge',
                           variant: EFButtonVariant.secondary,
                           onTap: _isSaving ? null : () async {
+                            final navigator = Navigator.of(context);
                             // First save any pending changes, then navigate to details to activate
                             await _saveChallenge(shouldPop: false);
                             if (mounted && _challenge != null) {
                                // After saving, go to details where activation is handled
-                               Navigator.pushReplacement(
-                                 context,
+                               navigator.pushReplacement(
                                  MaterialPageRoute(builder: (_) => AdminChallengeDetailScreen(challengeId: _challenge!.id)),
                                );
                             }

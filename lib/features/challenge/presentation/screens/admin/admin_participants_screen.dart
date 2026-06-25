@@ -6,6 +6,7 @@ import 'package:elefit_app/widgets/ef_components.dart';
 import 'package:elefit_app/features/challenge/data/constants/firestore_collections.dart';
 import 'package:elefit_app/features/challenge/data/models/challenge_participant.dart';
 import 'package:elefit_app/features/challenge/data/repositories/challenge_participant_repository.dart';
+import 'package:elefit_app/features/challenge/data/repositories/user_repository.dart';
 import 'package:elefit_app/features/challenge/domain/services/participant_enrollment_service.dart';
 import 'package:elefit_app/features/challenge/domain/services/auth_service.dart';
 import 'package:elefit_app/features/challenge/presentation/widgets/admin/admin_guard.dart';
@@ -24,6 +25,7 @@ class AdminParticipantsScreen extends StatelessWidget {
         create: (ctx) => AdminParticipantsProvider(
           challengeId: challengeId,
           participantRepository: ctx.read<ChallengeParticipantRepository>(),
+          userRepository: ctx.read<UserRepository>(),
           enrollmentService: ctx.read<ParticipantEnrollmentService>(),
         ),
         child: const _AdminParticipantsContent(),
@@ -115,8 +117,8 @@ class _AdminParticipantsContent extends StatelessWidget {
       itemCount: provider.participants.length,
       separatorBuilder: (_, __) => const SizedBox(height: 16),
       itemBuilder: (ctx, i) {
-        final participant = provider.participants[i];
-        return _ParticipantCard(participant: participant);
+        final viewModel = provider.participants[i];
+        return _ParticipantCard(viewModel: viewModel);
       },
     );
   }
@@ -145,12 +147,13 @@ class _AdminParticipantsContent extends StatelessWidget {
 }
 
 class _ParticipantCard extends StatelessWidget {
-  final ChallengeParticipant participant;
+  final ParticipantViewModel viewModel;
 
-  const _ParticipantCard({Key? key, required this.participant}) : super(key: key);
+  const _ParticipantCard({Key? key, required this.viewModel}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
+    final participant = viewModel.participant;
     final dateFormat = DateFormat('MMM dd, yyyy');
     final provider = context.read<AdminParticipantsProvider>();
     final adminId = context.read<AuthService>().currentUser?.id ?? '';
@@ -158,7 +161,10 @@ class _ParticipantCard extends StatelessWidget {
     return EFCard(
       onTap: () => Navigator.push(
         context,
-        MaterialPageRoute(builder: (_) => AdminParticipantDetailScreen(participantId: participant.id)),
+        MaterialPageRoute(builder: (_) => AdminParticipantDetailScreen(
+          userId: participant.userId,
+          challengeId: participant.challengeId,
+        )),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -169,7 +175,7 @@ class _ParticipantCard extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('ID: ${participant.userId.substring(0, 8)}...', style: AppTheme.headingSM),
+                  Text(viewModel.displayName, style: AppTheme.headingSM),
                   const SizedBox(height: 4),
                   Text(
                     'Joined: ${participant.joinedAt != null ? dateFormat.format(participant.joinedAt!) : 'N/A'}',
@@ -187,6 +193,8 @@ class _ParticipantCard extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Text('USER ID: ${participant.userId.substring(0, 8)}...', style: AppTheme.labelSM.copyWith(fontSize: 8, color: AppTheme.textTertiary)),
+                  const SizedBox(height: 4),
                   Text('PAYMENT STATUS', style: AppTheme.labelSM.copyWith(fontSize: 9)),
                   const SizedBox(height: 4),
                   _StatusBadge(status: participant.paymentStatus, type: 'payment'),
