@@ -6,7 +6,6 @@ import 'models/wishlist_model.dart';
 import 'models/address_model.dart';
 import 'providers/theme_provider.dart';
 import 'screens/home_screen.dart';
-import 'screens/auth_screen.dart';
 import 'screens/product_details_screen.dart';
 import 'screens/onboarding/onboarding_screen.dart';
 import 'theme/app_theme.dart';
@@ -17,19 +16,36 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/services.dart';
 import 'providers/location_provider.dart';
 import 'widgets/main_layout.dart';
-import 'screens/OrdersScreen.dart';
-import 'screens/HelpScreen.dart';
+import 'firebase_options.dart';
+
+// Challenge MVP Imports
+import 'package:elefit_app/features/challenge/data/repositories/challenge_repository.dart';
+import 'package:elefit_app/features/challenge/data/repositories/challenge_participant_repository.dart';
+import 'package:elefit_app/features/challenge/data/repositories/challenge_submission_repository.dart';
+import 'package:elefit_app/features/challenge/data/repositories/payment_record_repository.dart';
+import 'package:elefit_app/features/challenge/data/repositories/challenge_notification_repository.dart';
+import 'package:elefit_app/features/challenge/data/repositories/admin_audit_log_repository.dart';
+import 'package:elefit_app/features/challenge/domain/services/admin_audit_service.dart';
+import 'package:elefit_app/features/challenge/domain/services/challenge_notification_service.dart';
+import 'package:elefit_app/features/challenge/domain/services/challenge_service.dart';
+import 'package:elefit_app/features/challenge/domain/services/participant_enrollment_service.dart';
+import 'package:elefit_app/features/challenge/domain/services/payment_approval_service.dart';
+import 'package:elefit_app/features/challenge/domain/services/submission_review_service.dart';
+import 'package:elefit_app/features/challenge/domain/services/auth_service.dart';
+import 'package:elefit_app/features/challenge/presentation/providers/home_challenge_entry_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Firebase (optional - only if GoogleService-Info.plist is configured)
+  // Initialize Firebase
   try {
-    await Firebase.initializeApp();
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
     debugPrint('Firebase initialized successfully');
   } catch (e) {
-    debugPrint('Firebase initialization skipped: $e');
-    // Continue without Firebase - OneSignal handles notifications
+    debugPrint('Firebase initialization failed: $e');
+    // If initialization fails, following providers that use Firebase will throw exceptions.
   }
   
   // Initialize OneSignal for notifications and in-app messages
@@ -59,11 +75,93 @@ void main() async {
         ChangeNotifierProvider(create: (ctx) => AddressModel()),
         ChangeNotifierProvider(create: (ctx) => ThemeProvider()),
         ChangeNotifierProvider(create: (ctx) => LocationProvider()),
+        ChangeNotifierProvider(create: (ctx) => AuthService()),
         ChangeNotifierProxyProvider<LocationProvider, ShopifyService>(
           create: (_) => ShopifyService(),
           update: (_, locationProvider, shopifyService) {
             shopifyService!.setIndiaMode(locationProvider.isInIndia);
             return shopifyService;
+          },
+        ),
+
+        // Challenge MVP Providers
+        // Repositories
+        Provider(create: (_) => ChallengeRepository()),
+        Provider(create: (_) => ChallengeParticipantRepository()),
+        Provider(create: (_) => ChallengeSubmissionRepository()),
+        Provider(create: (_) => PaymentRecordRepository()),
+        Provider(create: (_) => ChallengeNotificationRepository()),
+        Provider(create: (_) => AdminAuditLogRepository()),
+
+        // Services
+        ProxyProvider<AdminAuditLogRepository, AdminAuditService>(
+          update: (_, repo, __) => AdminAuditService(auditLogRepository: repo),
+        ),
+        ProxyProvider<ChallengeNotificationRepository, ChallengeNotificationService>(
+          update: (_, repo, __) => ChallengeNotificationService(notificationRepository: repo),
+        ),
+        ProxyProvider2<ChallengeRepository, AdminAuditService, ChallengeService>(
+          update: (_, repo, auditS, __) => ChallengeService(
+            challengeRepository: repo,
+            auditService: auditS,
+          ),
+        ),
+        ProxyProvider4<
+            ChallengeParticipantRepository,
+            ChallengeRepository,
+            AdminAuditService,
+            ChallengeNotificationService,
+            ParticipantEnrollmentService>(
+          update: (_, repoP, repoC, auditS, notifyS, __) => ParticipantEnrollmentService(
+            participantRepository: repoP,
+            challengeRepository: repoC,
+            auditService: auditS,
+            notificationService: notifyS,
+          ),
+        ),
+        ProxyProvider5<
+            PaymentRecordRepository,
+            ChallengeParticipantRepository,
+            ChallengeRepository,
+            AdminAuditService,
+            ChallengeNotificationService,
+            PaymentApprovalService>(
+          update: (_, repoPay, repoP, repoC, auditS, notifyS, __) => PaymentApprovalService(
+            paymentRepository: repoPay,
+            participantRepository: repoP,
+            challengeRepository: repoC,
+            auditService: auditS,
+            notificationService: notifyS,
+          ),
+        ),
+        ProxyProvider5<
+            ChallengeSubmissionRepository,
+            ChallengeParticipantRepository,
+            ChallengeRepository,
+            AdminAuditService,
+            ChallengeNotificationService,
+            SubmissionReviewService>(
+          update: (_, repoS, repoP, repoC, auditS, notifyS, __) => SubmissionReviewService(
+            submissionRepository: repoS,
+            participantRepository: repoP,
+            challengeRepository: repoC,
+            auditService: auditS,
+            notificationService: notifyS,
+          ),
+        ),
+        ChangeNotifierProxyProvider<AuthService, HomeChallengeEntryProvider>(
+          create: (ctx) => HomeChallengeEntryProvider(
+            userId: ctx.read<AuthService>().currentUser?.id ?? '',
+            participantRepository: ctx.read<ChallengeParticipantRepository>(),
+          ),
+          update: (ctx, auth, previous) {
+            // Only recreate if userId changed to avoid losing subscription state unnecessarily
+            // but in a typical app, this only happens on login/logout.
+            if (previous?.userId == auth.currentUser?.id) return previous!;
+            return HomeChallengeEntryProvider(
+              userId: auth.currentUser?.id ?? '',
+              participantRepository: ctx.read<ChallengeParticipantRepository>(),
+            );
           },
         ),
       ],

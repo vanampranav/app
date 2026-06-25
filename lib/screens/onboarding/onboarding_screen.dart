@@ -6,6 +6,8 @@ import '../../widgets/main_layout.dart';
 import '../../services/firebase_rest_service.dart';
 import '../../services/health_service.dart';
 import '../home_screen.dart';
+import 'package:elefit_app/features/challenge/domain/services/auth_service.dart';
+import 'package:provider/provider.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Step map
@@ -167,18 +169,35 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   Future<void> _doAuth() async {
     setState(() { _authLoading = true; _authError = null; });
     try {
+      final email = _authEmail.trim();
+      final password = _authPassword;
+
       if (_isSignUp) {
-        await _fb.createAccount(_authEmail.trim(), _authPassword);
+        // 1. Create account in REST service
+        await _fb.createAccount(email, password);
+        
+        // 2. Create account in Firebase SDK
+        if (mounted) {
+          await context.read<AuthService>().signUp(email, password);
+        }
+
         // Seed the users/{uid} record with credits so AI Coach works immediately.
         await _fb.updateUserProfile({
-          'email':     _authEmail.trim(),
+          'email':     email,
           'firstName': _authFirstName.trim(),
           'credits':   5,
         });
         setState(() { _name = _authFirstName.trim(); });
       } else {
         // Sign in
-        await _fb.signIn(_authEmail.trim(), _authPassword);
+        // 1. Sign in to REST service
+        await _fb.signIn(email, password);
+        
+        // 2. Sign in to Firebase SDK
+        if (mounted) {
+          await context.read<AuthService>().signIn(email, password);
+        }
+
         // Check if this user already completed onboarding
         final existing = await _fb.getOnboardingProfile();
         if (existing != null && existing['dailyCalorieTarget'] != null) {

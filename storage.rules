@@ -1,0 +1,38 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.isAdmin == true ||
+        firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role in ['admin', 'superAdmin']
+      );
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Payment Proofs: Owner can upload/read, Admin can read/write
+    match /payment_proofs/{challengeId}/{fileName} {
+      allow read: if isSignedIn() && (fileName.startsWith(request.auth.uid) || isAdmin());
+      allow write: if isSignedIn() && (fileName.startsWith(request.auth.uid) || isAdmin());
+    }
+
+    // Challenge Submissions: Owner can read/write, Admin can read/write
+    match /challenge_submissions/{challengeId}/{userId}/{allPaths=**} {
+      allow read: if isSignedIn() && (isOwner(userId) || isAdmin());
+      allow write: if isSignedIn() && (isOwner(userId) || isAdmin());
+    }
+
+    // Fallback
+    match /{allPaths=**} {
+      allow read, write: if isAdmin();
+    }
+  }
+}

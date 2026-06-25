@@ -3,6 +3,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import '../theme/app_theme.dart';
 import '../services/firebase_rest_service.dart';
+import 'package:elefit_app/features/challenge/domain/services/auth_service.dart';
+import 'package:elefit_app/features/challenge/presentation/screens/participant/challenge_discovery_screen.dart';
+import 'package:elefit_app/features/challenge/presentation/screens/admin/admin_challenge_list_screen.dart';
+import 'package:provider/provider.dart';
 import 'settings_screen.dart';
 import 'OrdersScreen.dart';
 import 'HelpScreen.dart';
@@ -78,7 +82,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     setState(() { _isLoading = true; _error = null; });
     try {
+      // 1. Sign in to REST service (used by legacy components/AI Coach)
       await _fbService.signIn(email, password);
+      
+      // 2. Sign in to Firebase Auth SDK (used by Challenge MVP/Firestore)
+      if (mounted) {
+        await context.read<AuthService>().signIn(email, password);
+      }
+      
       await _fetchProfile();
     } catch (e) {
       setState(() {
@@ -90,6 +101,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _logout() async {
     await _fbService.signOut();
+    if (mounted) {
+      await context.read<AuthService>().signOut();
+    }
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_cacheKey);
     setState(() { _profile = null; });
@@ -349,6 +363,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _fitnessDataCards(p),
           const SizedBox(height: 32),
         ],
+
+        _sectionHeader('CHALLENGES'),
+        const SizedBox(height: 12),
+        _settingsTile(Icons.emoji_events_outlined, 'Find Challenges', () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ChallengeDiscoveryScreen()))),
+        if (p['isAdmin'] == true || p['role'] == 'admin' || p['role'] == 'superAdmin')
+          _settingsTile(Icons.admin_panel_settings_outlined, 'Manage Challenges', () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminChallengeListScreen()))),
+        const SizedBox(height: 32),
 
         _sectionHeader('SETTINGS'),
         const SizedBox(height: 12),

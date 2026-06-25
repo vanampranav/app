@@ -21,6 +21,9 @@ import '../screens/measurement_screen.dart';
 import '../services/member_service.dart';
 import '../models/member_model.dart';
 import '../widgets/device_scan_sheet.dart';
+import 'package:elefit_app/features/challenge/presentation/screens/participant/challenge_discovery_screen.dart';
+import 'package:elefit_app/features/challenge/presentation/screens/participant/participant_challenge_dashboard_screen.dart';
+import 'package:elefit_app/features/challenge/presentation/providers/home_challenge_entry_provider.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -725,6 +728,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   // ─── Quick actions ────────────────────────────────────────────────────────────
 
   Widget _buildQuickActions() {
+    final challengeEntry = context.watch<HomeChallengeEntryProvider>();
+    final hasActive = challengeEntry.hasActiveChallenge;
+    final activeId = challengeEntry.activeParticipation?.challengeId;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppTheme.md),
       child: Column(
@@ -752,6 +759,27 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               const SizedBox(width: AppTheme.sm),
               Expanded(
                 child: EFQuickAction(
+                  icon: hasActive ? Icons.dashboard_customize_rounded : Icons.emoji_events_rounded,
+                  label: hasActive ? 'My\nChallenge' : 'Join\nChallenge',
+                  accentColor: AppTheme.lime,
+                  onTap: () {
+                    if (hasActive && activeId != null) {
+                      Navigator.push(
+                        context,
+                        EFPageRoute(page: ParticipantChallengeDashboardScreen(challengeId: activeId)),
+                      );
+                    } else {
+                      Navigator.push(
+                        context,
+                        EFPageRoute(page: const ChallengeDiscoveryScreen()),
+                      );
+                    }
+                  },
+                ),
+              ),
+              const SizedBox(width: AppTheme.sm),
+              Expanded(
+                child: EFQuickAction(
                   icon: Icons.auto_awesome_rounded,
                   label: 'AI\nCoach',
                   accentColor: AppTheme.lime,
@@ -766,16 +794,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   label: 'Track\nWeight',
                   accentColor: AppTheme.lime,
                   onTap: _onTrackWeightTapped,
-                ),
-              ),
-              const SizedBox(width: AppTheme.sm),
-              Expanded(
-                child: EFQuickAction(
-                  icon: Icons.shopping_bag_outlined,
-                  label: 'Shop\nGear',
-                  accentColor: AppTheme.lime,
-                  onTap: () => Navigator.push(
-                      context, EFPageRoute(page: const ShopScreen())),
                 ),
               ),
             ],
