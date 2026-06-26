@@ -131,6 +131,14 @@ class _DeviceScanSheetState extends State<DeviceScanSheet> {
     _deviceSub = _fitDays.deviceFoundStream.listen((d) {
       if (!mounted || !_passesFilter(d)) return;
       setState(() {
+        // BLE scales rotate their MAC address. A saved (bound) device may have a
+        // STALE MAC — connecting to it "succeeds" at the SDK but never streams
+        // weight. So when a live scan finds the same-named device with a new MAC,
+        // drop the stale entry and keep the live one.
+        if (d.name.isNotEmpty) {
+          _devices.removeWhere(
+              (x) => x.name == d.name && x.macAddress != d.macAddress);
+        }
         if (!_devices.any((x) => x.macAddress == d.macAddress)) {
           _devices.add(d);
         }
@@ -181,10 +189,13 @@ class _DeviceScanSheetState extends State<DeviceScanSheet> {
         list = (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
       } catch (_) {}
     }
-    if (!list.any((m) => m['macAddress'] == device.macAddress)) {
-      list.add(device.toMap());
-      await prefs.setString('bound_devices', jsonEncode(list));
-    }
+    // Drop any stale entry for the same device name (its MAC may have rotated)
+    // so we always store the current, live MAC.
+    list.removeWhere((m) =>
+        (m['name'] == device.name && m['macAddress'] != device.macAddress) ||
+        m['macAddress'] == device.macAddress);
+    list.add(device.toMap());
+    await prefs.setString('bound_devices', jsonEncode(list));
   }
 
   // ── Shared container wrapper ──────────────────────────────────────────────
@@ -347,7 +358,27 @@ class _DeviceScanSheetState extends State<DeviceScanSheet> {
                   style: AppTheme.bodyMD.copyWith(color: AppTheme.lime)),
               const Spacer(),
               GestureDetector(
-                onTap: () => Navigator.pop(context),
+                // Just proceed — the device is already connected. Do NOT call
+                // connectDevice/addDevice again: the FitDays SDK requires a
+                // removeDevice before re-adding, and re-adding an already-added
+                // device corrupts its state and stops ALL measurement delivery.
+                onTap: () {
+                  final mac = alreadyConnectedMac;
+                  final device = _devices.firstWhere(
+                    (d) => d.macAddress == mac,
+                    orElse: () => FitDaysDevice(
+                      macAddress: mac,
+                      name: 'Scale',
+                      rssi: 0,
+                      deviceType: widget.filterType ?? DeviceType.kitchenScale,
+                    ),
+                  );
+                  if (widget.onConnected != null) {
+                    widget.onConnected!(device);
+                  } else {
+                    Navigator.pop(context);
+                  }
+                },
                 child: Container(
                   padding: const EdgeInsets.symmetric(
                       horizontal: 14, vertical: 7),

@@ -16,7 +16,6 @@ import '../screens/nutrition/nutrition_log_screen.dart';
 import '../screens/cart_screen.dart';
 import '../screens/shop_screen.dart';
 import '../widgets/main_layout.dart';
-import '../screens/devices_screen.dart';
 import '../screens/measurement_screen.dart';
 import '../services/member_service.dart';
 import '../models/member_model.dart';
@@ -864,6 +863,28 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   String get _waterUnit => _waterMl >= 1000 ? 'L' : 'ml';
 
+  /// Opens the Measurement screen in view mode so the user can review their
+  /// past weights, trend and body index — NOT to log a new weight. Uses an
+  /// offline ("manual") device so it never triggers a scale scan/connect.
+  Future<void> _openWeightHistory() async {
+    final device = FitDaysDevice(
+      macAddress: 'manual',
+      name: 'Weight History',
+      rssi: 0,
+      deviceType: DeviceType.bodyFatScale,
+    );
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => MeasurementScreen(
+          connectedDevice: device,
+          fitDaysService: FitDaysService(),
+        ),
+      ),
+    );
+    _loadFitnessStats();
+  }
+
   Widget _buildStatsRow() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppTheme.md),
@@ -880,7 +901,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 unit: 'kg',
                 icon: const Icon(Icons.monitor_weight_outlined),
                 valueColor: AppTheme.lime,
-                onTap: () => Navigator.push(context, EFPageRoute(page: const DevicesScreen())),
+                onTap: _openWeightHistory,
               ),
             ),
             const SizedBox(width: AppTheme.sm),

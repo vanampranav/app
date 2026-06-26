@@ -9,9 +9,13 @@ class OneSignalService {
   static Future<void> initialize() async {
     try {
       OneSignal.initialize(appId);
-      await OneSignal.Notifications.requestPermission(true);
+      // Set up listeners immediately so we never miss an event.
       _setupNotificationListeners();
       _setupInAppMessageListeners();
+      // Request notification permission WITHOUT awaiting — the OS dialog must
+      // not block app startup. It now appears over the running UI instead of a
+      // blank splash.
+      OneSignal.Notifications.requestPermission(true);
     } catch (e) {
       debugPrint('OneSignal init error: $e');
     }

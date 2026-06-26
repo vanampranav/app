@@ -112,21 +112,55 @@ class NutritionService {
         double caloriesPer100g = 0;
         String servingSize = '100g';
 
-        final description = food['food_description'] as String? ?? '';
-        final calorieMatch = RegExp(r'Calories:\s*(\d+(?:\.\d+)?)\s*kcal').firstMatch(description);
-        if (calorieMatch != null) {
-          caloriesPer100g = double.tryParse(calorieMatch.group(1) ?? '0') ?? 0;
+        // foods.search.v3 returns STRUCTURED servings — prefer that over text.
+        final servingsData = food['servings']?['serving'];
+        if (servingsData != null) {
+          final servings = servingsData is List ? servingsData : [servingsData];
+          // Prefer a gram/ml metric serving so we can normalise to per-100.
+          Map? chosen;
+          for (final s in servings) {
+            if (s is Map &&
+                (s['metric_serving_unit'] == 'g' || s['metric_serving_unit'] == 'ml')) {
+              chosen = s;
+              break;
+            }
+          }
+          chosen ??= servings.first is Map ? servings.first as Map : null;
+          if (chosen != null) {
+            final cal = double.tryParse(chosen['calories']?.toString() ?? '') ?? 0;
+            final amt = double.tryParse(chosen['metric_serving_amount']?.toString() ?? '') ?? 0;
+            final unit = (chosen['metric_serving_unit'] ?? '').toString();
+            if (cal > 0 && amt > 0 && (unit == 'g' || unit == 'ml')) {
+              caloriesPer100g = (cal / amt * 100);
+              servingSize = '100$unit';
+            } else if (cal > 0) {
+              // Non-metric serving (e.g. branded "1 latte") — show per serving.
+              caloriesPer100g = cal;
+              servingSize = (chosen['serving_description'] ?? '1 serving').toString();
+            }
+          }
         }
 
-        final servingMatch = RegExp(r'Per\s+(.+?)\s*-').firstMatch(description);
-        if (servingMatch != null) {
-          servingSize = servingMatch.group(1) ?? '100g';
+        // Fallback: parse the description text only if structured data missing.
+        if (caloriesPer100g == 0) {
+          final description = food['food_description'] as String? ?? '';
+          final calorieMatch =
+              RegExp(r'Cal(?:ories)?:\s*([\d.,]+)', caseSensitive: false)
+                  .firstMatch(description);
+          if (calorieMatch != null) {
+            final raw = (calorieMatch.group(1) ?? '0').replaceAll(',', '');
+            caloriesPer100g = double.tryParse(raw) ?? 0;
+          }
+          final servingMatch = RegExp(r'Per\s+(.+?)\s*-').firstMatch(description);
+          if (servingMatch != null) {
+            servingSize = servingMatch.group(1) ?? servingSize;
+          }
         }
 
         final foodItem = FoodItem(
           fdcId: food['food_id'].toString(),
           name: food['food_name'] ?? 'Unknown Food',
-          caloriesPer100g: caloriesPer100g,
+          caloriesPer100g: double.parse(caloriesPer100g.toStringAsFixed(0)),
           servingSize: servingSize,
         );
 
@@ -154,6 +188,47 @@ class NutritionService {
     }
   }
   
+  /// Returns all serving options for a food so the UI can let the user log by
+  /// serving (e.g. "1 grande") + quantity, not just grams. Returns
+  /// {foodName, servings: List<FoodServing>}.
+  Future<Map<String, dynamic>> getFoodServings(String foodId) async {
+    final food = await _getFoodDetails(foodId);
+    final foodName = food['food_name'] ?? 'Unknown Food';
+    final servingsData = food['servings']?['serving'];
+    final raw = servingsData == null
+        ? <dynamic>[]
+        : (servingsData is List ? servingsData : [servingsData]);
+
+    final servings = <FoodServing>[];
+    for (final s in raw) {
+      if (s is! Map) continue;
+      double v(String k) => double.tryParse(s[k]?.toString() ?? '0') ?? 0;
+      double? vn(String k) => s[k] == null ? null : double.tryParse(s[k].toString());
+      servings.add(FoodServing(
+        id: s['serving_id']?.toString() ?? '',
+        description: (s['serving_description'] ?? 'serving').toString(),
+        metricAmount: vn('metric_serving_amount'),
+        metricUnit: s['metric_serving_unit']?.toString(),
+        nutrition: NutritionData(
+          calories: v('calories'),
+          fat: v('fat'),
+          carbs: v('carbohydrate'),
+          protein: v('protein'),
+          fiber: v('fiber'),
+          sugar: v('sugar'),
+          cholesterol: vn('cholesterol'),
+          sodium: vn('sodium'),
+          potassium: vn('potassium'),
+          calcium: vn('calcium'),
+          iron: vn('iron'),
+          vitaminA: vn('vitamin_a'),
+          vitaminC: vn('vitamin_c'),
+        ),
+      ));
+    }
+    return {'foodName': foodName, 'servings': servings};
+  }
+
   /// Calculate nutrition for a specific food and weight
   Future<Map<String, dynamic>> calculateNutrition(String foodId, double weightGrams) async {
     try {

@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../models/food_models.dart';
 import '../models/device_model.dart';
 import '../services/nutrition_service.dart';
 import '../services/fitdays_service.dart';
 import '../utils/food_emoji_helper.dart';
 import '../utils/food_icon_helper.dart';
+import '../utils/nutrition_validator.dart';
 import '../theme/app_theme.dart';
 
 class FoodDetailModal extends StatefulWidget {
@@ -31,8 +33,30 @@ class _FoodDetailModalState extends State<FoodDetailModal> {
   String?        _foodName;
   bool           _isLoading   = true;
   String?        _error;
+  String?        _warning;     // non-blocking "numbers look off" notice
   bool           _scaleActive = false;
   String         _displayUnit = 'g';   // g | oz | ml | lb
+
+  // Serving options (branded / non-gram foods log by serving + quantity).
+  List<FoodServing> _servings = [];
+  FoodServing?      _serving;
+  double            _quantity = 1;
+
+  /// True when a FitDays scale is connected for this session. When connected we
+  /// always use the scale's weight (grams) and hide the serving/cup picker.
+  bool get _scaleConnected =>
+      FitDaysService().activeScaleMac != null ||
+      FitDaysService().connectedDeviceMac != null;
+
+  /// MAC to send tare/unit commands to — prefer the device actively streaming
+  /// weight (connectedDeviceMac can be wrongly cleared by a stale bound device).
+  String? get _scaleMac =>
+      FitDaysService().activeScaleMac ?? FitDaysService().connectedDeviceMac;
+
+  /// Weight mode = grams/ml (scale-compatible). Serving mode = pick "1 grande" × qty.
+  /// A connected scale forces weight mode so live readings always apply.
+  bool get _isWeightMode =>
+      _scaleConnected || _serving == null || _serving!.isWeightBased;
 
   late TextEditingController _weightCtrl;
   StreamSubscription?        _weightSub;
@@ -64,26 +88,74 @@ class _FoodDetailModalState extends State<FoodDetailModal> {
     _weightCtrl = TextEditingController(
         text: widget.weight > 0 ? widget.weight.toStringAsFixed(1) : '100.0');
     _calculateNutrition();
+    _loadServings();
     _setupScaleListener();
+  }
+
+  /// Load all serving options. If the food has no gram/ml serving (typical for
+  /// branded foods), default to serving mode so the user logs by serving + qty.
+  Future<void> _loadServings() async {
+    try {
+      final r = await widget.nutritionService.getFoodServings(widget.food.fdcId);
+      final servings = (r['servings'] as List).cast<FoodServing>();
+      if (!mounted || servings.isEmpty) return;
+      // Prefer a weight-based serving (keeps grams default + scale working).
+      FoodServing def = servings.firstWhere(
+        (s) => s.isWeightBased,
+        orElse: () => servings.first,
+      );
+      setState(() {
+        _servings = servings;
+        _serving = def;
+        _foodName = r['foodName'] ?? _foodName;
+        _applyWeightServingDefaults(def);
+      });
+      // Branded food (no weight serving) → compute from the serving immediately.
+      if (def.isWeightBased) {
+        _calculateNutrition();
+      } else {
+        _computeServing();
+      }
+    } catch (e) {
+      debugPrint('FoodDetail: getFoodServings failed: $e'); // keep gram path
+    }
   }
 
   void _setupScaleListener() {
     if (widget.weightStream == null) return;
     _weightSub = widget.weightStream!.listen((m) {
       if (!mounted) return;
-      // Convert scale reading to grams first
-      double grams = m.weight;
-      switch (m.unit.toLowerCase()) {
-        case 'kg': grams *= 1000;    break;
-        case 'lb': grams *= 453.592; break;
-        case 'oz': grams *= 28.3495; break;
-      }
-      // Then convert to the user's chosen display unit
-      final displayVal = _fromGrams(grams);
-      _weightCtrl.text = displayVal.toStringAsFixed(1);
-      setState(() => _scaleActive = true);
-      _calculateNutrition();
+      _applyScaleWeight(m);
     });
+
+    // Seed the current reading: a broadcast stream only delivers events AFTER we
+    // subscribe, so if the scale is idle (no new reading since the sheet opened)
+    // we'd otherwise show "No scale". Replay the last cached reading immediately.
+    final last = FitDaysService().lastWeight;
+    if (last != null && last.source != WeightSource.bodyFatScale) {
+      _applyScaleWeight(last);
+    }
+  }
+
+  void _applyScaleWeight(WeightMeasurement m) {
+    // Ignore the scale entirely when logging by serving — only grams use it.
+    if (!_isWeightMode) return;
+    // Convert scale reading to grams first
+    double grams = m.weight;
+    switch (m.unit.toLowerCase()) {
+      case 'kg': grams *= 1000;    break;
+      case 'lb': grams *= 453.592; break;
+      case 'oz': grams *= 28.3495; break;
+    }
+    final displayVal = _fromGrams(grams);
+    _weightCtrl.text = displayVal.toStringAsFixed(displayVal >= 1 ? 1 : 0);
+    if (grams <= 0) {
+      // Scale connected but empty — show it's live and wait for food (no error).
+      setState(() { _scaleActive = true; _nutrition = null; _error = null; });
+      return;
+    }
+    setState(() => _scaleActive = true);
+    _calculateNutrition();
   }
 
   @override
@@ -95,15 +167,37 @@ class _FoodDetailModalState extends State<FoodDetailModal> {
   }
 
   Future<void> _calculateNutrition() async {
+    // Guard against non-positive weight from ANY source — typed input, paste, or
+    // a negative scale reading after a tare. Negative weight => negative calories.
+    final displayVal = double.tryParse(_weightCtrl.text) ?? 0;
+    if (displayVal <= 0) {
+      // Empty / zero / negative weight: show the gentle inline placeholder and
+      // disable "Add to Log" — NOT the full-screen red error (too jarring while
+      // the user is just clearing the field to type a new number).
+      if (mounted) {
+        setState(() {
+          _error = null;
+          _nutrition = null; // disables the "Add to Log" button + shows placeholder
+          _isLoading = false;
+        });
+      }
+      return;
+    }
     setState(() { _isLoading = true; _error = null; });
     try {
       // Always pass grams to the nutrition service
-      final displayVal = double.tryParse(_weightCtrl.text) ?? 100.0;
       final w = _toGrams(displayVal);
       final r = await widget.nutritionService.calculateNutrition(widget.food.fdcId, w);
+      final nutrition = r['nutrition'] as NutritionData?;
+      // Sanity-check the data (covers FatSecret search AND barcode, since both
+      // flow through this modal). Surface a soft warning if it looks off.
+      final check = nutrition != null
+          ? NutritionValidator.validate(nutrition, w)
+          : const NutritionCheck();
       if (mounted) setState(() {
         _foodName  = r['foodName'];
-        _nutrition = r['nutrition'];
+        _nutrition = nutrition;
+        _warning   = check.warning;
         _isLoading = false;
       });
     } catch (e) {
@@ -111,13 +205,78 @@ class _FoodDetailModalState extends State<FoodDetailModal> {
     }
   }
 
+  /// For a weight-based serving (e.g. "1 cup" = 244 ml), pre-fill the weight
+  /// field with that serving's amount and unit so the input matches the label —
+  /// instead of always defaulting to 100 g. Does not run while the scale drives.
+  void _applyWeightServingDefaults(FoodServing s) {
+    // When the scale is connected, leave the unit/amount alone — the scale
+    // drives the weight in its own unit (grams).
+    if (!s.isWeightBased || _scaleActive || _scaleConnected) return;
+    final unit = s.metricUnit == 'ml' ? 'ml' : 'g';
+    _displayUnit = unit;
+    final amt = s.metricAmount;
+    if (amt != null && amt > 0) {
+      _weightCtrl.text = amt.toStringAsFixed(0);
+    }
+  }
+
+  /// Serving-mode nutrition = chosen serving × quantity (no scale, no grams).
+  void _computeServing() {
+    final s = _serving;
+    if (s == null) return;
+    if (_quantity <= 0) {
+      setState(() {
+        _error = 'Quantity must be greater than 0.';
+        _nutrition = null;
+      });
+      return;
+    }
+    final n = s.nutrition.scale(_quantity);
+    final gramsEq = (s.metricAmount ?? 0) * _quantity;
+    final check = gramsEq > 0
+        ? NutritionValidator.validate(n, gramsEq)
+        : const NutritionCheck();
+    setState(() {
+      _nutrition = n;
+      _warning = check.warning;
+      _error = null;
+      _isLoading = false;
+    });
+  }
+
   void _save() {
-    final displayVal = double.tryParse(_weightCtrl.text);
-    if (_nutrition != null && _foodName != null && displayVal != null) {
-      // Always save weight in grams regardless of display unit
+    if (_nutrition == null || _foodName == null) return;
+
+    if (_isWeightMode) {
+      final displayVal = double.tryParse(_weightCtrl.text);
+      if (displayVal == null || displayVal <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Weight can\'t be negative or zero.'),
+        ));
+        return;
+      }
       Navigator.pop(context, {
         'foodName': _foodName,
-        'weight': _toGrams(displayVal),
+        'weight': _toGrams(displayVal), // always grams
+        'nutrition': _nutrition,
+      });
+    } else {
+      // Serving mode: quantity must be positive; store the grams-equivalent
+      // (metricAmount × qty) when available so totals/display stay consistent.
+      if (_quantity <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Quantity must be greater than 0.'),
+        ));
+        return;
+      }
+      final s = _serving!;
+      final gramsEq = (s.metricAmount ?? 0) * _quantity;
+      final qtyLabel = _quantity == _quantity.roundToDouble()
+          ? _quantity.toInt().toString()
+          : _quantity.toString();
+      Navigator.pop(context, {
+        'foodName': '$_foodName ($qtyLabel × ${s.description})',
+        'weight': gramsEq,
         'nutrition': _nutrition,
       });
     }
@@ -182,7 +341,7 @@ class _FoodDetailModalState extends State<FoodDetailModal> {
                 _calculateNutrition();
 
                 // Send unit change command to the physical scale
-                final mac = FitDaysService().connectedDeviceMac;
+                final mac = _scaleMac;
                 if (mac != null) {
                   FitDaysService().sendUnitChangeCommand(mac, u);
                 }
@@ -196,7 +355,7 @@ class _FoodDetailModalState extends State<FoodDetailModal> {
   }
 
   void _onTareTapped() {
-    final mac = FitDaysService().connectedDeviceMac;
+    final mac = _scaleMac;
     if (mac == null) {
       // No scale connected — explain
       showDialog(
@@ -361,11 +520,62 @@ class _FoodDetailModalState extends State<FoodDetailModal> {
         // Action buttons
         _buildActionButtons(),
         const SizedBox(height: 28),
-        // Calories + macros
-        _buildNutritionSummary(),
-        const SizedBox(height: 20),
-        // Detailed nutrients
-        if (_hasDetailedNutrients()) _buildDetailedNutrients(),
+        // Soft data-quality warning (e.g. calories don't match macros)
+        if (_warning != null) ...[
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: AppTheme.warning.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+              border: Border.all(color: AppTheme.warning.withOpacity(0.3)),
+            ),
+            child: Row(children: [
+              const Icon(Icons.info_outline_rounded, color: AppTheme.warning, size: 16),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(_warning!,
+                    style: AppTheme.bodySM.copyWith(color: AppTheme.warning)),
+              ),
+            ]),
+          ),
+          const SizedBox(height: 16),
+        ],
+        // Calories + macros — only when we have a valid (positive) weight.
+        // For zero/negative scale readings (e.g. right after tare) _nutrition is
+        // null; show a placeholder instead of crashing, and keep Add disabled.
+        if (_nutrition != null) ...[
+          _buildNutritionSummary(),
+          const SizedBox(height: 20),
+          if (_hasDetailedNutrients()) _buildDetailedNutrients(),
+        ] else
+          _buildAwaitingWeightPlaceholder(),
+      ]),
+    );
+  }
+
+  Widget _buildAwaitingWeightPlaceholder() {
+    final val = double.tryParse(_weightCtrl.text) ?? 0;
+    final String msg;
+    if (val < 0) {
+      msg = 'Scale reads a negative value — place the item back on the scale.';
+    } else if (_scaleConnected) {
+      msg = 'Place food on the scale to see nutrition.';
+    } else {
+      msg = 'Enter a weight to see nutrition.';
+    }
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppTheme.surface2,
+        borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
+      ),
+      child: Column(children: [
+        const Icon(Icons.scale_outlined, color: AppTheme.textTertiary, size: 28),
+        const SizedBox(height: 10),
+        Text(msg, textAlign: TextAlign.center, style: AppTheme.bodyMD),
       ]),
     );
   }
@@ -404,6 +614,13 @@ class _FoodDetailModalState extends State<FoodDetailModal> {
 
   Widget _buildWeightSection() {
     return Column(children: [
+      // Serving picker — only when NO scale is connected. With a scale we always
+      // weigh in the scale's unit (no cup/serving options).
+      if (!_scaleConnected && _servings.length > 1) _buildServingDropdown(),
+      // Serving (quantity) mode — no scale, no grams.
+      if (!_isWeightMode) _buildQuantityStepper(),
+      // Weight mode — grams/ml, scale-driven (unchanged behaviour).
+      if (_isWeightMode) ...[
       // Live scale badge
       if (_scaleActive)
         Container(
@@ -423,6 +640,10 @@ class _FoodDetailModalState extends State<FoodDetailModal> {
           child: TextField(
             controller: _weightCtrl,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            // Block negative sign and stray characters — only positive decimals.
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
+            ],
             textAlign: TextAlign.center,
             style: AppTheme.numericXL.copyWith(
                 color: _scaleActive ? AppTheme.lime : AppTheme.textPrimary),
@@ -438,7 +659,8 @@ class _FoodDetailModalState extends State<FoodDetailModal> {
               hintStyle: AppTheme.numericXL.copyWith(color: AppTheme.textTertiary),
             ),
             onChanged: (v) {
-              if (v.isNotEmpty && double.tryParse(v) != null) {
+              final parsed = double.tryParse(v);
+              if (v.isNotEmpty && parsed != null && parsed > 0) {
                 _weightDebounce?.cancel();
                 _weightDebounce = Timer(
                   const Duration(milliseconds: 600),
@@ -452,40 +674,122 @@ class _FoodDetailModalState extends State<FoodDetailModal> {
             style: AppTheme.numericMD.copyWith(
                 color: AppTheme.textSecondary, fontSize: 28)),
       ]),
+      ],
+    ]);
+  }
+
+  Widget _buildServingDropdown() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppTheme.surface2,
+        borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+        border: Border.all(color: Colors.white.withOpacity(0.08)),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<FoodServing>(
+          value: _serving,
+          isExpanded: true,
+          dropdownColor: AppTheme.surface2,
+          icon: const Icon(Icons.keyboard_arrow_down_rounded,
+              color: AppTheme.textSecondary),
+          style: AppTheme.bodyLG.copyWith(color: AppTheme.textPrimary),
+          items: _servings
+              .map((s) => DropdownMenuItem<FoodServing>(
+                    value: s,
+                    child: Text(s.description, overflow: TextOverflow.ellipsis),
+                  ))
+              .toList(),
+          onChanged: (s) {
+            if (s == null) return;
+            setState(() {
+              _serving = s;
+              if (s.isWeightBased) {
+                _applyWeightServingDefaults(s); // prefill amount + unit
+              } else {
+                _quantity = 1; // reset qty when switching to a serving
+              }
+            });
+            if (s.isWeightBased) {
+              _calculateNutrition(); // grams path (scale-compatible)
+            } else {
+              _computeServing();
+            }
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuantityStepper() {
+    Widget btn(IconData icon, VoidCallback onTap) => GestureDetector(
+          onTap: onTap,
+          child: Container(
+            width: 44, height: 44,
+            decoration: BoxDecoration(
+              color: AppTheme.surface2,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.white.withOpacity(0.1)),
+            ),
+            child: Icon(icon, color: AppTheme.lime, size: 22),
+          ),
+        );
+    return Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+      btn(Icons.remove_rounded, () {
+        if (_quantity > 1) { setState(() => _quantity -= 1); _computeServing(); }
+      }),
+      const SizedBox(width: 20),
+      Column(children: [
+        Text(_quantity == _quantity.roundToDouble()
+            ? _quantity.toInt().toString()
+            : _quantity.toString(),
+            style: AppTheme.numericXL),
+        Text('serving${_quantity > 1 ? 's' : ''}', style: AppTheme.labelSM),
+      ]),
+      const SizedBox(width: 20),
+      btn(Icons.add_rounded, () {
+        setState(() => _quantity += 1); _computeServing();
+      }),
     ]);
   }
 
   Widget _buildActionButtons() {
-    return Row(children: [
-      Expanded(
-        child: _outlineBtn('$_displayUnit ▾', _showUnitSelector),
-      ),
-      const SizedBox(width: 10),
-      Expanded(
-        flex: 2,
-        child: GestureDetector(
-          onTap: _nutrition != null ? _save : null,
-          child: Container(
-            height: 50,
-            decoration: BoxDecoration(
-              color: _nutrition != null ? AppTheme.lime : AppTheme.surface3,
-              borderRadius: BorderRadius.circular(AppTheme.radiusPill),
-              boxShadow: _nutrition != null
-                  ? [BoxShadow(color: AppTheme.lime.withOpacity(0.3),
-                        blurRadius: 14, offset: const Offset(0, 5))]
-                  : [],
-            ),
-            child: Center(
-              child: Text('Add to Log',
-                  style: TextStyle(
-                      fontSize: 15, fontWeight: FontWeight.w900,
-                      color: _nutrition != null
-                          ? Colors.black
-                          : AppTheme.textTertiary)),
-            ),
+    final addBtn = Expanded(
+      flex: 2,
+      child: GestureDetector(
+        onTap: _nutrition != null ? _save : null,
+        child: Container(
+          height: 50,
+          decoration: BoxDecoration(
+            color: _nutrition != null ? AppTheme.lime : AppTheme.surface3,
+            borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+            boxShadow: _nutrition != null
+                ? [BoxShadow(color: AppTheme.lime.withOpacity(0.3),
+                      blurRadius: 14, offset: const Offset(0, 5))]
+                : [],
+          ),
+          child: Center(
+            child: Text('Add to Log',
+                style: TextStyle(
+                    fontSize: 15, fontWeight: FontWeight.w900,
+                    color: _nutrition != null
+                        ? Colors.black
+                        : AppTheme.textTertiary)),
           ),
         ),
       ),
+    );
+
+    // Unit toggle + Tare only apply to weight (grams) mode. In serving mode
+    // the dropdown handles units, so just show a full-width Add button.
+    if (!_isWeightMode) {
+      return Row(children: [addBtn]);
+    }
+    return Row(children: [
+      Expanded(child: _outlineBtn('$_displayUnit ▾', _showUnitSelector)),
+      const SizedBox(width: 10),
+      addBtn,
       const SizedBox(width: 10),
       Expanded(child: _outlineBtn('□ Tare', _onTareTapped)),
     ]);

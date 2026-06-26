@@ -319,6 +319,7 @@ public class FitDaysSDKManager implements ICDeviceManagerDelegate, ICScanDeviceD
         weightData.put("weight", data.weight_kg);
         weightData.put("unit", "kg");
         weightData.put("isStabilized", data.isStabilized);
+        if (device != null) weightData.put("macAddress", device.getMacAddr());
         
         // Send ALL weight data, not just stabilized
         // Body composition only available when stabilized AND impedance measured
@@ -450,8 +451,9 @@ public class FitDaysSDKManager implements ICDeviceManagerDelegate, ICScanDeviceD
 
         weightData.put("weight", weight);
         weightData.put("unit", unit);
-        weightData.put("isStabilized", true); 
+        weightData.put("isStabilized", true);
         weightData.put("hasBodyComposition", false);
+        if (device != null) weightData.put("macAddress", device.getMacAddr());
         
         android.util.Log.d("FitDaysSDK", "Emitting weight (Kitchen): " + weight + " " + unit + (isNegative ? " (Negative)" : ""));
         // Use "kitchenScaleData" so Flutter can route this to KitchenScaleScreen only.
@@ -608,56 +610,53 @@ public class FitDaysSDKManager implements ICDeviceManagerDelegate, ICScanDeviceD
             return;
         }
 
-        ICDevice device = new ICDevice();
-        device.setMacAddr(macAddress);
-        
         android.util.Log.d("FitDaysSDK", "Connecting to device: " + macAddress);
-        
-        ICDeviceManager.shared().addDevice(device, 
-            (dev, code) -> {
-                android.util.Log.d("FitDaysSDK", "addDevice callback - code: " + code + ", device: " + (dev != null ? dev.getMacAddr() : "null"));
-                if (code == ICConstant.ICAddDeviceCallBackCode.ICAddDeviceCallBackCodeSuccess) {
-                    // CRITICAL: Use the device object returned by the SDK callback
-                    // This is the properly initialized device object with internal handles
-                    connectedDevice = dev;
-                    
-                    // CRITICAL: Re-send user info upon connection for Body Fat calculation
-                    // Retrieve cached values or use defaults if not set
-                    // Ideally we should store the values passed in initializeSDK to reuse here
-                    // specific to this user session.
-                    // For now, using the last known good values or safe defaults
-                    // Only re-sending if we have initialized sdk properly before
-                    if (isSdkInitialized) {
-                         // We need to get the user info we set during init. 
-                         // Since we didn't store it in a field, we will create a temporary logic
-                         // to use the values from shared preferences passed via MethodChannel if possible
-                         // OR just assume the SDK held onto the last updateUserInfo. 
-                         // BUT the demo explicitly calls updateUserInfo AGAIN here.
-                         ICUserInfo userInfo = new ICUserInfo();
-                         userInfo.age = 25; // TODO: Store these in fields during initializeSDK
-                         userInfo.height = 170;
-                         userInfo.sex = ICConstant.ICSexType.ICSexTypeMale;
-                         userInfo.peopleType = ICConstant.ICPeopleType.ICPeopleTypeNormal;
-                         
-                         // We will rely on the fact that we stored these in initializeSDK
-                         // Let's add fields to the class to store them
-                         if (currentUserInfo != null) {
-                             ICDeviceManager.shared().updateUserInfo(currentUserInfo);
-                             android.util.Log.d("FitDaysSDK", "Re-sent UserInfo to connected device");
-                         }
-                    }
 
-                    Map<String, Object> data = new HashMap<>();
-                    data.put("macAddress", macAddress);
-                    data.put("state", "connected");
-                    sendEvent("connectionStateChanged", data);
-                } else {
-                    Map<String, Object> data = new HashMap<>();
-                    data.put("message", "Connection failed: " + code);
-                    data.put("code", "CONNECTION_ERROR");
-                    sendEvent("error", data);
+        // CRITICAL: Android cannot establish a GATT connection while a BLE scan
+        // is active — addDevice "succeeds" but no real connection forms and no
+        // data streams. Stop scanning, let the BLE stack settle, then add.
+        stopScan();
+        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+            android.util.Log.d("FitDaysSDK", "Scan stopped, now adding device: " + macAddress);
+            tryAddDevice(macAddress, true);
+        }, 500);
+    }
+
+    /** Adds the device; on FailedAndExist removes the stale entry and retries once. */
+    private void tryAddDevice(final String macAddress, final boolean allowRemoveRetry) {
+        final ICDevice device = new ICDevice();
+        device.setMacAddr(macAddress);
+
+        ICDeviceManager.shared().addDevice(device, (dev, code) -> {
+            android.util.Log.d("FitDaysSDK", "addDevice callback - code: " + code + ", device: " + (dev != null ? dev.getMacAddr() : "null"));
+            if (code == ICConstant.ICAddDeviceCallBackCode.ICAddDeviceCallBackCodeSuccess) {
+                connectedDevice = (dev != null) ? dev : device;
+                if (currentUserInfo != null) {
+                    ICDeviceManager.shared().updateUserInfo(currentUserInfo);
+                    android.util.Log.d("FitDaysSDK", "Re-sent UserInfo to connected device");
                 }
-            });
+                Map<String, Object> data = new HashMap<>();
+                data.put("macAddress", macAddress);
+                data.put("state", "connected");
+                sendEvent("connectionStateChanged", data);
+            } else if (code == ICConstant.ICAddDeviceCallBackCode.ICAddDeviceCallBackCodeFailedAndExist
+                    && allowRemoveRetry) {
+                // Device is persisted in the SDK but not actually connected.
+                // Remove it (fresh object), then add it again to force a real connect.
+                android.util.Log.d("FitDaysSDK", "Device already exists — removing and re-adding");
+                final ICDevice toRemove = new ICDevice();
+                toRemove.setMacAddr(macAddress);
+                ICDeviceManager.shared().removeDevice(toRemove, (d, c) -> {
+                    android.util.Log.d("FitDaysSDK", "removeDevice (on-exist) - code: " + c);
+                    tryAddDevice(macAddress, false); // retry once
+                });
+            } else {
+                Map<String, Object> data = new HashMap<>();
+                data.put("message", "Connection failed: " + code);
+                data.put("code", "CONNECTION_ERROR");
+                sendEvent("error", data);
+            }
+        });
     }
     
     // ========== Kitchen Scale Controls ==========

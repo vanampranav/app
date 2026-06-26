@@ -52,7 +52,7 @@ class HelpScreen extends StatelessWidget {
 
           // Community Section
           Text(
-            'Through the Power of Community, NIKE, Inc. Advances Toward a Better World for All',
+            'Through the Power of Community! Advances Toward a Better World for All',
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.bold,
                   color: AppTheme.primaryColor,

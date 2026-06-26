@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/food_models.dart';
@@ -265,27 +266,35 @@ class _NutritionLogScreenState extends State<NutritionLogScreen> {
       final fb = FirebaseRestService();
       await fb.init();
       final results = await _visionService.analyzeMealImage(imageFile, userId: fb.uid);
+
+      // Upgrade AI estimates with verified FatSecret nutrition where available
+      // (keeps the spinner up — it's a few quick lookups). Falls back to the AI
+      // estimate when FatSecret has no confident match.
+      final enriched = await _visionService.enrichWithFatSecret(results, _nutritionService);
+
       if (!mounted) return;
 
       Navigator.of(context, rootNavigator: true).pop(); // Close loading
       // Let the pop animation finish before showing the next sheet.
       await Future.delayed(const Duration(milliseconds: 300));
 
-      if (results.isEmpty) {
+      if (enriched.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not identify food in image.')));
         return;
       }
 
       // Convert results to MealEntries with safe key parsing (LLMs vary keys).
+      // fdcId carries the source: 'ai_vision' = AI estimate, otherwise a
+      // FatSecret id = verified nutrition (used for the badge in the sheet).
       final List<MealEntry> initialEntries = [];
-      for (final res in results) {
+      for (final res in enriched) {
         try {
           final name = res['foodName'] ?? res['name'] ?? res['food'] ?? res['item'] ?? 'Unknown Food';
           final weight = (res['weight'] ?? res['quantity'] ?? 100.0).toDouble();
           initialEntries.add(MealEntry(
             id: '${DateTime.now().millisecondsSinceEpoch}_$name',
             foodName: name,
-            fdcId: 'ai_vision',
+            fdcId: (res['fdcId'] ?? 'ai_vision').toString(),
             weight: weight,
             nutrition: NutritionData.fromJson(res['nutrition'] ?? {}),
             meal: meal,
@@ -1104,10 +1113,6 @@ class _FoodEntryDetailSheet extends StatelessWidget {
                     if (n.fiber > 0)
                       _nutrientRow('Dietary Fiber',  '${n.fiber.toStringAsFixed(1)} g',
                           const Color(0xFF6BCB77)),
-                    if ((n.sodium ?? 0) > 0)
-                      _nutrientRow('Sodium',
-                          '${(n.sodium ?? 0).toStringAsFixed(1)} mg',
-                          const Color(0xFFFFAA00)),
                     if ((n.sugar ?? 0) > 0)
                       _nutrientRow('Sugar',
                           '${(n.sugar ?? 0).toStringAsFixed(1)} g',
@@ -1115,7 +1120,15 @@ class _FoodEntryDetailSheet extends StatelessWidget {
                     if ((n.cholesterol ?? 0) > 0)
                       _nutrientRow('Cholesterol',
                           '${(n.cholesterol ?? 0).toStringAsFixed(1)} mg',
-                          const Color(0xFFFF6B6B)),
+                          const Color(0xFFFFD93D)),
+                    if ((n.sodium ?? 0) > 0)
+                      _nutrientRow('Sodium',
+                          '${(n.sodium ?? 0).toStringAsFixed(1)} mg',
+                          const Color(0xFFFF8C42)),
+                    if ((n.potassium ?? 0) > 0)
+                      _nutrientRow('Potassium',
+                          '${(n.potassium ?? 0).toStringAsFixed(1)} mg',
+                          const Color(0xFF3B9EFF)),
                     if ((n.calcium ?? 0) > 0)
                       _nutrientRow('Calcium',
                           '${(n.calcium ?? 0).toStringAsFixed(1)} mg',
@@ -1123,7 +1136,19 @@ class _FoodEntryDetailSheet extends StatelessWidget {
                     if ((n.vitaminC ?? 0) > 0)
                       _nutrientRow('Vitamin C',
                           '${(n.vitaminC ?? 0).toStringAsFixed(1)} mg',
-                          const Color(0xFFFF8C42)),
+                          const Color(0xFFFF6B6B)),
+                    if ((n.vitaminA ?? 0) > 0)
+                      _nutrientRow('Vitamin A',
+                          '${(n.vitaminA ?? 0).toStringAsFixed(1)} μg',
+                          const Color(0xFFFFAA00)),
+                    if ((n.iron ?? 0) > 0)
+                      _nutrientRow('Iron',
+                          '${(n.iron ?? 0).toStringAsFixed(1)} mg',
+                          const Color(0xFFB06060)),
+                    if ((n.magnesium ?? 0) > 0)
+                      _nutrientRow('Magnesium',
+                          '${(n.magnesium ?? 0).toStringAsFixed(1)} mg',
+                          const Color(0xFF8B5CF6)),
                   ]),
                 ),
               ],
@@ -1136,11 +1161,15 @@ class _FoodEntryDetailSheet extends StatelessWidget {
 
   bool _hasExtra(NutritionData n) =>
       n.fiber > 0 ||
-      (n.sodium ?? 0) > 0 ||
       (n.sugar ?? 0) > 0 ||
       (n.cholesterol ?? 0) > 0 ||
+      (n.sodium ?? 0) > 0 ||
+      (n.potassium ?? 0) > 0 ||
       (n.calcium ?? 0) > 0 ||
-      (n.vitaminC ?? 0) > 0;
+      (n.vitaminC ?? 0) > 0 ||
+      (n.vitaminA ?? 0) > 0 ||
+      (n.iron ?? 0) > 0 ||
+      (n.magnesium ?? 0) > 0;
 
   Widget _macroRow(String label, double val, int pct, Color color) {
     return Row(children: [
@@ -1309,6 +1338,30 @@ class _ConfirmFoodItem extends StatelessWidget {
             onPressed: onRemoved,
           ),
         ]),
+        const SizedBox(height: 10),
+        // Source badge: verified (FatSecret) vs AI estimate
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Builder(builder: (_) {
+            final verified = entry.fdcId != 'ai_vision';
+            final color = verified ? AppTheme.lime : AppTheme.textTertiary;
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: color.withOpacity(0.3)),
+              ),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(verified ? Icons.verified_rounded : Icons.auto_awesome_rounded,
+                    size: 11, color: color),
+                const SizedBox(width: 4),
+                Text(verified ? 'Verified' : 'AI estimate',
+                    style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w700)),
+              ]),
+            );
+          }),
+        ),
         const SizedBox(height: 16),
         Row(children: [
           Expanded(
@@ -1316,8 +1369,8 @@ class _ConfirmFoodItem extends StatelessWidget {
               label: 'Weight (g)',
               value: entry.weight.round().toString(),
               onChanged: (val) {
-                final w = double.tryParse(val) ?? entry.weight;
-                onChanged(_copyWith(weight: w));
+                final w = double.tryParse(val);
+                if (w != null && w > 0) onChanged(_copyWith(weight: w));
               },
             ),
           ),
@@ -1408,6 +1461,7 @@ class _EditField extends StatelessWidget {
         child: TextFormField(
           initialValue: value,
           keyboardType: TextInputType.number,
+          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
           style: AppTheme.numericMD.copyWith(fontSize: 16),
           decoration: const InputDecoration(isDense: true, border: InputBorder.none),
           onChanged: onChanged,
@@ -1444,6 +1498,7 @@ class _MacroEdit extends StatelessWidget {
             key: ValueKey(value),
             initialValue: value,
             keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
             textAlign: TextAlign.center,
             style: AppTheme.numericMD.copyWith(fontSize: 14, color: Colors.white),
             decoration: const InputDecoration(

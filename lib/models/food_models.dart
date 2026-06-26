@@ -142,6 +142,56 @@ class NutritionData {
       'retinol': retinol,
     };
   }
+
+  /// Returns a copy with every value multiplied by [f] — used to scale a
+  /// single serving's nutrition by a chosen quantity (e.g. 2 lattes).
+  NutritionData scale(double f) {
+    double? s(double? v) => v == null ? null : v * f;
+    return NutritionData(
+      calories: calories * f,
+      fat: fat * f,
+      carbs: carbs * f,
+      protein: protein * f,
+      fiber: fiber * f,
+      sugar: sugar * f,
+      vitaminA: s(vitaminA),
+      vitaminB1: s(vitaminB1),
+      vitaminB2: s(vitaminB2),
+      vitaminC: s(vitaminC),
+      vitaminE: s(vitaminE),
+      calcium: s(calcium),
+      iron: s(iron),
+      magnesium: s(magnesium),
+      potassium: s(potassium),
+      sodium: s(sodium),
+      zinc: s(zinc),
+      cholesterol: s(cholesterol),
+      carotene: s(carotene),
+      retinol: s(retinol),
+    );
+  }
+}
+
+/// One FatSecret serving option for a food (e.g. "1 grande (16 fl oz)" or
+/// "100 g"), with its own complete nutrition. Lets users log branded / non-gram
+/// foods by serving + quantity instead of being forced to enter grams.
+class FoodServing {
+  final String id;
+  final String description;   // "1 grande (16 fl oz)", "100 g", "1 cup"...
+  final double? metricAmount; // e.g. 240
+  final String? metricUnit;   // 'g' | 'ml' | null
+  final NutritionData nutrition; // for ONE of this serving
+
+  const FoodServing({
+    required this.id,
+    required this.description,
+    required this.nutrition,
+    this.metricAmount,
+    this.metricUnit,
+  });
+
+  /// True when this serving is gram/ml based — i.e. compatible with the scale.
+  bool get isWeightBased => metricUnit == 'g' || metricUnit == 'ml';
 }
 
 enum MealType { breakfast, lunch, dinner, snacks }

@@ -579,6 +579,10 @@ class _MeasurementScreenState extends State<MeasurementScreen> {
 
     await _memberService.addMeasurement(bodyMeasurement);
 
+    // Update the home-screen "Weight" stat, which reads this key.
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble('latest_weight', measurement.weight);
+
     // Push to Apple Health / Health Connect (silent — never blocks UI)
     HealthService().syncScaleReading(measurement);
   }
@@ -690,6 +694,10 @@ class _MeasurementScreenState extends State<MeasurementScreen> {
     );
 
     await _memberService.addMeasurement(bodyMeasurement);
+
+    // Update the home-screen "Weight" stat, which reads this key.
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble('latest_weight', weightKg);
 
     final measurements =
         await _memberService.getMeasurements(_activeMember!.id, limit: 2);

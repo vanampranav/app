@@ -40,6 +40,18 @@ class FitDaysService {
   Stream<WeightMeasurement> get weightDataStream =>
       _weightDataController.stream;
   Stream<bool> get scanningStream => _scanningController.stream;
+
+  // Last weight reading received this session. A broadcast stream only delivers
+  // events that occur AFTER a listener subscribes, so a screen opened while the
+  // scale is idle would otherwise see nothing. Callers seed from this on open.
+  WeightMeasurement? _lastWeight;
+  WeightMeasurement? get lastWeight => _lastWeight;
+
+  // MAC of the device actively streaming weight. More reliable than
+  // connectedDeviceMac for sending tare/unit commands, because a stale bound
+  // device churning connect/disconnect can clobber connectedDeviceMac.
+  String? _activeScaleMac;
+  String? get activeScaleMac => _activeScaleMac;
   Stream<String> get errorStream => _errorController.stream;
   // Emits true when BT is powered on, false when off/unavailable
   Stream<bool> get bluetoothStateStream => _bluetoothStateController.stream;
@@ -104,8 +116,10 @@ class FitDaysService {
         // iOS fallback: older iOS SDK also used this event type for kitchen scales.
         // Either way: definitively a kitchen scale.
         if (data != null) {
-          _weightDataController.add(
-              WeightMeasurement.fromMap(data, source: WeightSource.kitchenScale));
+          final m = WeightMeasurement.fromMap(data, source: WeightSource.kitchenScale);
+          _lastWeight = m;
+          if (data['macAddress'] != null) _activeScaleMac = data['macAddress'] as String?;
+          _weightDataController.add(m);
         }
         break;
 
@@ -135,8 +149,10 @@ class FitDaysService {
             src = WeightSource.bodyFatScale;
           }
 
-          _weightDataController.add(
-              WeightMeasurement.fromMap(data, source: src));
+          final m = WeightMeasurement.fromMap(data, source: src);
+          _lastWeight = m;
+          if (data['macAddress'] != null) _activeScaleMac = data['macAddress'] as String?;
+          _weightDataController.add(m);
         }
         break;
 

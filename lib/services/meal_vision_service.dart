@@ -2,6 +2,9 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
+import '../models/food_models.dart';
+import '../utils/nutrition_validator.dart';
+import 'nutrition_service.dart';
 
 /// Calls the FastAPI `/analyze-meal` endpoint, which uses an OpenAI Vision
 /// model to identify food in a photo and estimate weight + nutrition.
@@ -15,7 +18,7 @@ import 'package:flutter/foundation.dart';
 ///   ]
 /// }
 class MealVisionService {
-  static const String _baseUrl = 'https://elefit-app.onrender.com';
+  static const String _baseUrl = 'https://hotel-ioji.onrender.com';
 
   // Shared secret the backend validates (X-API-Key). Keep in sync with the
   // backend's ELEFIT_API_KEY. Blocks casual direct abuse of the public endpoint.
@@ -74,4 +77,81 @@ class MealVisionService {
       throw Exception('Could not reach the meal-analysis service. Check your connection and try again.');
     }
   }
+
+  /// Upgrades vision results with verified FatSecret nutrition where possible.
+  ///
+  /// For each detected food we keep the AI's name + weight, then try to look the
+  /// food up in FatSecret and replace the AI's *nutrition estimate* with verified
+  /// data scaled to that weight. If FatSecret has no confident match (common for
+  /// non-US / regional foods on the free tier) we keep the AI estimate — so we
+  /// never end up worse than before.
+  ///
+  /// Each returned food gets a `source`: 'verified' (FatSecret) or 'estimate' (AI),
+  /// and verified foods get the FatSecret `fdcId`.
+  Future<List<Map<String, dynamic>>> enrichWithFatSecret(
+    List<Map<String, dynamic>> visionFoods,
+    NutritionService nutrition,
+  ) async {
+    return Future.wait(visionFoods.map((food) => _enrichOne(food, nutrition)));
+  }
+
+  Future<Map<String, dynamic>> _enrichOne(
+    Map<String, dynamic> food,
+    NutritionService nutrition,
+  ) async {
+    final name = (food['foodName'] ?? food['name'] ?? '').toString();
+    final weight = (food['weight'] ?? 100.0).toDouble();
+    food['source'] = 'estimate'; // default — AI estimate
+
+    if (name.trim().isEmpty || weight <= 0) return food;
+
+    try {
+      final matches = await nutrition.searchFood(name);
+      // Pick the first result whose name reasonably overlaps the AI's name.
+      FoodItem? best;
+      for (final m in matches) {
+        if (_nameMatches(name, m.name)) {
+          best = m;
+          break;
+        }
+      }
+      if (best == null) return food; // no confident match → keep AI estimate
+
+      final calc = await nutrition.calculateNutrition(best.fdcId, weight);
+      final fs = calc['nutrition'] as NutritionData?;
+      if (fs == null) return food;
+
+      // Full plausibility check (NOT just macro-consistency): a wrong FatSecret
+      // match can be internally consistent yet physically impossible — e.g.
+      // 5400 kcal / 300g = 1800 kcal/100g. The per-100g guard in validate()
+      // catches that; on any warning we discard FatSecret and keep the AI estimate.
+      final check = NutritionValidator.validate(fs, weight);
+      if (!check.usable || check.hasWarning) return food;
+
+      food['nutrition'] = fs.toJson();
+      food['fdcId'] = best.fdcId;
+      food['source'] = 'verified';
+      return food;
+    } catch (e) {
+      debugPrint('MealVision: FatSecret enrich failed for "$name": $e');
+      return food; // any failure → keep AI estimate
+    }
+  }
+
+  /// True when at least half of the AI name's meaningful tokens appear in the
+  /// FatSecret name — guards against fuzzy mismatches (e.g. "dosa" → "Dr Pepper").
+  bool _nameMatches(String aiName, String fsName) {
+    final a = _tokens(aiName);
+    final b = _tokens(fsName);
+    if (a.isEmpty || b.isEmpty) return false;
+    final overlap = a.where(b.contains).length;
+    return overlap / a.length >= 0.5;
+  }
+
+  Set<String> _tokens(String s) => s
+      .toLowerCase()
+      .replaceAll(RegExp(r'[^a-z0-9 ]'), ' ')
+      .split(' ')
+      .where((t) => t.length > 2)
+      .toSet();
 }

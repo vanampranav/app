@@ -32,8 +32,10 @@ void main() async {
     // Continue without Firebase - OneSignal handles notifications
   }
   
-  // Initialize OneSignal for notifications and in-app messages
-  await OneSignalService.initialize();
+  // Initialize OneSignal for notifications and in-app messages.
+  // Fire-and-forget — do NOT await, so the notification-permission dialog never
+  // blocks first paint (the app shows immediately; the prompt appears over it).
+  OneSignalService.initialize();
 
   // Set preferred orientations
   await SystemChrome.setPreferredOrientations([

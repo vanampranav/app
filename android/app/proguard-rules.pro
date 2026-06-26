@@ -1,3 +1,15 @@
+# ── FitDays / ICOMON SDK — keep the ENTIRE SDK ──────────────────────────────
+# R8 was stripping the BLE connection internals (manager.ble.ICBleHandler,
+# manager.worker.ICWorkerManager, common.*) in release builds, so addDevice()
+# "succeeded" but no GATT connection ever formed and no weight streamed. Keeping
+# only specific classes is not enough — keep everything under the SDK packages.
+-keep class cn.icomon.** { *; }
+-keep interface cn.icomon.** { *; }
+-keep class com.icomon.** { *; }
+-keep interface com.icomon.** { *; }
+-dontwarn cn.icomon.**
+-dontwarn com.icomon.**
+
 # FitDays SDK ProGuard Rules
 -keep class cn.icomon.icdevicemanager.ICDeviceManager { *; }
 -keep class cn.icomon.icdevicemanager.ICBluetoothSystem { *; }

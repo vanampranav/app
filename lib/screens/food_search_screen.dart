@@ -292,7 +292,14 @@ class _FoodSearchScreenState extends State<FoodSearchScreen> {
                   cursorColor: AppTheme.lime,
                   textInputAction: TextInputAction.search,
                   onSubmitted: (v) {
-                    setState(() => _showSuggestions = false);
+                    // Cancel any pending autocomplete so it can't re-open the
+                    // suggestions after we close them, and dismiss the keyboard.
+                    _debounce?.cancel();
+                    _searchFocus.unfocus();
+                    setState(() {
+                      _showSuggestions = false;
+                      _suggestions = [];
+                    });
                     _searchFood(v);
                   },
                   onChanged: (v) {
@@ -391,6 +398,8 @@ class _FoodSearchScreenState extends State<FoodSearchScreen> {
                   child: Column(
                     children: _suggestions.map((s) => InkWell(
                       onTap: () {
+                        _debounce?.cancel();
+                        _searchFocus.unfocus();
                         _searchController.text = s;
                         setState(() { _showSuggestions = false; _suggestions = []; });
                         _searchFood(s);
