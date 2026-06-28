@@ -54,11 +54,7 @@ const communityPoints = [
   "A calm space to share wins, setbacks, and momentum",
 ];
 
-const progressPoints = [
-  "Body composition and weight trends in one dashboard",
-  "Workout consistency and recovery insights over time",
-  "Simple weekly summaries so progress feels clear and motivating",
-];
+// progressPoints removed; replaced by focused "Progress and Feedback" chips in the section
 
 const testimonials = [
   {
@@ -377,22 +373,57 @@ export default function Home() {
         </motion.section>
 
         <motion.section id="progress" initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.2 }} transition={{ duration: 0.6 }} className="px-4 py-20 sm:px-6 lg:px-8">
-          <div className="mx-auto grid max-w-7xl gap-10 rounded-[2.5rem] border border-white/10 bg-gradient-to-br from-[#07111f] to-[#111c34] p-8 shadow-[0_30px_120px_rgba(0,0,0,0.24)] lg:grid-cols-[1.05fr_0.95fr] lg:p-12">
-            <div>
+          <div className="mx-auto grid max-w-7xl gap-10 rounded-[2.5rem] border border-white/10 bg-gradient-to-br from-[#061018] to-[#0b1728] p-8 shadow-[0_30px_120px_rgba(0,0,0,0.24)] lg:grid-cols-[0.95fr_1.05fr] lg:p-12 items-center">
+            <div className="max-w-xl">
               <SectionHeader
-                eyebrow="Progress tracking"
-                title="See your progress clearly."
-                description="The app turns your habits and measurements into a clear weekly story you can actually trust."
+                eyebrow="Progress"
+                title="Better insight creates better consistency."
+                description="When people can clearly see their habits, trends, and momentum, they feel more grounded and more likely to keep going. Progress becomes encouraging instead of confusing."
               />
-              <div className="mt-8 grid gap-4 sm:grid-cols-2">
-                {progressPoints.map((point) => (
-                  <div key={point} className="rounded-[1.25rem] border border-white/10 bg-white/5 p-4 text-sm text-slate-300 backdrop-blur-xl">
-                    {point}
+
+              <div className="mt-6 space-y-4 text-lg leading-7 text-slate-300">
+                <p>
+                  A calm view of your routine and momentum — not a dense dashboard, but gentle clarity that helps you make better choices.
+                </p>
+              </div>
+
+              <div className="mt-8 flex flex-wrap gap-3">
+                {[
+                  "Clear visibility into your routine",
+                  "A better view of momentum over time",
+                  "Support that helps you adjust with ease",
+                ].map((chip) => (
+                  <div key={chip} className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-300 backdrop-blur-xl">
+                    {chip}
                   </div>
                 ))}
               </div>
             </div>
-            <PhoneMockup imageSrc="/images/app-dashboard.png" alt="EleFit progress tracking dashboard" />
+
+            <div>
+              <div className="rounded-[1.75rem] border border-white/8 bg-slate-950/60 p-6 shadow-[0_20px_80px_rgba(0,0,0,0.35)]">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-teal-200">Weekly momentum</p>
+                    <p className="mt-2 text-sm text-slate-300">Simple trends that show whether your habits are improving week over week.</p>
+                  </div>
+
+                  <div className="ml-4 h-20 w-44">
+                    <svg viewBox="0 0 220 80" fill="none" xmlns="http://www.w3.org/2000/svg" className="h-full w-full" aria-hidden>
+                      <defs>
+                        <linearGradient id="g" x1="0" x2="1">
+                          <stop offset="0%" stopColor="#06b6d4" stopOpacity="0.9" />
+                          <stop offset="100%" stopColor="#60a5fa" stopOpacity="0.9" />
+                        </linearGradient>
+                      </defs>
+                      <rect width="220" height="80" rx="10" fill="rgba(255,255,255,0.02)"/>
+                      <path d="M10 55 C40 40, 70 30, 100 35 C130 40, 160 28, 190 22" stroke="url(#g)" strokeWidth="4" strokeLinecap="round" fill="none" opacity="0.95"/>
+                      <circle cx="190" cy="22" r="3.5" fill="#60a5fa" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </motion.section>
 
