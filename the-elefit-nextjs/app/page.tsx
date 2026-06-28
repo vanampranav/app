@@ -455,6 +455,81 @@ export default function Home() {
           </div>
         </motion.section>
 
+        <motion.section
+          id="built-for-real-life"
+          initial={prefersReducedMotion ? false : { opacity: 0, y: 20 }}
+          whileInView={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.2 }}
+          transition={{ duration: prefersReducedMotion ? 0 : 0.6 }}
+          className="px-4 py-20 sm:px-6 lg:px-8"
+        >
+          <div className="mx-auto max-w-7xl">
+            <div className="mx-auto max-w-3xl text-center">
+              <p className="text-sm font-medium uppercase tracking-[0.32em] text-teal-200">Built for real life</p>
+              <h2 className="mt-4 text-3xl font-semibold leading-[1.02] tracking-[-0.02em] text-white sm:text-4xl lg:text-5xl">
+                A health experience that supports your life, not your stress.
+              </h2>
+              <p className="mt-4 text-lg leading-7 text-slate-300">
+                EleFit is designed for people already carrying a lot. It meets them with steady guidance, calm structure, and thoughtful support instead of pressure.
+              </p>
+            </div>
+
+            <div className="mt-10 grid gap-6 sm:grid-cols-1 lg:grid-cols-3">
+              <div className="rounded-[1.5rem] border border-white/8 bg-slate-950/60 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
+                <p className="text-sm font-semibold text-white">Busy Professionals</p>
+                <p className="mt-3 text-sm text-slate-300">Build consistency alongside deadlines, meetings, travel, and ambition.</p>
+              </div>
+
+              <div className="rounded-[1.5rem] border border-white/8 bg-slate-950/60 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
+                <p className="text-sm font-semibold text-white">Parents</p>
+                <p className="mt-3 text-sm text-slate-300">Create healthier rhythms while raising a family and managing real responsibilities.</p>
+              </div>
+
+              <div className="rounded-[1.5rem] border border-white/8 bg-slate-950/60 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
+                <p className="text-sm font-semibold text-white">Coaches</p>
+                <p className="mt-3 text-sm text-slate-300">Support clients with accountability, visibility, and systems that fit their lives.</p>
+              </div>
+            </div>
+          </div>
+        </motion.section>
+
+        <motion.section
+          id="early-access-cta"
+          initial={prefersReducedMotion ? false : { opacity: 0, y: 18 }}
+          whileInView={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.2 }}
+          transition={{ duration: prefersReducedMotion ? 0 : 0.6 }}
+          className="px-4 py-20 sm:px-6 lg:px-8"
+        >
+          <div className="mx-auto max-w-7xl">
+            <div className="mx-auto max-w-3xl text-center rounded-[1.75rem] border border-white/8 bg-gradient-to-br from-[#04121a] to-[#071422] p-8 shadow-[0_30px_120px_rgba(0,0,0,0.36)]">
+              <p className="text-sm font-medium uppercase tracking-[0.32em] text-teal-200">Early access</p>
+              <h2 className="mt-4 text-3xl font-semibold leading-[1.02] tracking-[-0.02em] text-white sm:text-4xl lg:text-5xl">
+                Join the people building healthier routines that actually fit.
+              </h2>
+              <p className="mt-4 text-lg leading-7 text-slate-300">
+                Be part of the first wave of people experiencing EleFit. Sign up for early access and help shape a healthier, more sustainable way to live.
+              </p>
+
+              <div className="mt-8">
+                <EarlyAccessForm />
+              </div>
+
+              <div className="mt-6 flex flex-wrap justify-center gap-3">
+                {[
+                  "Early access available now",
+                  "Designed for busy lives",
+                  "Calm, premium experience",
+                ].map((chip) => (
+                  <div key={chip} className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-300 backdrop-blur-xl">
+                    {chip}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </motion.section>
+
         <motion.section id="founder-story" initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.2 }} transition={{ duration: 0.6 }} className="px-4 py-20 sm:px-6 lg:px-8">
           <div className="mx-auto grid max-w-7xl gap-10 rounded-[2.5rem] border border-white/10 bg-gradient-to-br from-[#0a1222] to-[#060b16] p-8 shadow-[0_30px_120px_rgba(0,0,0,0.22)] lg:grid-cols-[0.95fr_1.05fr] lg:p-12">
             <div>
