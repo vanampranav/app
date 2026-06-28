@@ -24,17 +24,22 @@ class LeaderboardInsightCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('MOTIVATIONAL RANK', style: AppTheme.labelSM.copyWith(color: AppTheme.purpleLight)),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Rank #${insights.currentRank}',
-                    style: AppTheme.headingMD.copyWith(color: AppTheme.lime),
-                  ),
-                ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('MOTIVATIONAL RANK', style: AppTheme.labelSM.copyWith(color: AppTheme.purpleLight)),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Rank #${insights.currentRank}',
+                      style: AppTheme.headingMD.copyWith(color: AppTheme.lime),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(

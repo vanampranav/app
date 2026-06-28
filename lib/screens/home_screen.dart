@@ -174,7 +174,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             child: Container(
               width: 40, height: 4,
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
+                color: Colors.white.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -198,7 +198,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 color: AppTheme.lime,
                 borderRadius: BorderRadius.circular(AppTheme.radiusPill),
                 boxShadow: [
-                  BoxShadow(color: AppTheme.lime.withOpacity(0.3),
+                  BoxShadow(color: AppTheme.lime.withValues(alpha: 0.3),
                       blurRadius: 16, offset: const Offset(0, 6)),
                 ],
               ),
@@ -225,7 +225,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               decoration: BoxDecoration(
                 color: AppTheme.surface2,
                 borderRadius: BorderRadius.circular(AppTheme.radiusPill),
-                border: Border.all(color: Colors.white.withOpacity(0.1)),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
               ),
               child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                 const Icon(Icons.edit_outlined,
@@ -348,7 +348,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             fillColor: AppTheme.surface2,
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-              borderSide: BorderSide(color: Colors.white.withOpacity(0.08)),
+              borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(AppTheme.radiusMd),
@@ -518,19 +518,24 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       backgroundColor: AppTheme.bg,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
+      centerTitle: false,
       toolbarHeight: 56,
-      title: Image.asset(
-        'assets/images/elefit_logo.png',
-        height: 36,
-        fit: BoxFit.fitHeight,
-        errorBuilder: (_, __, ___) => const Text(
-          'ELEFIT.',
-          style: TextStyle(
-            color: AppTheme.lime,
-            fontSize: 20,
-            fontWeight: FontWeight.w900,
-            letterSpacing: 2,
-            fontStyle: FontStyle.italic,
+      title: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 160),
+        child: Image.asset(
+          'assets/images/elefit_logo.png',
+          height: 36,
+          fit: BoxFit.contain,
+          alignment: Alignment.centerLeft,
+          errorBuilder: (_, __, ___) => const Text(
+            'ELEFIT.',
+            style: TextStyle(
+              color: AppTheme.lime,
+              fontSize: 20,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 2,
+              fontStyle: FontStyle.italic,
+            ),
           ),
         ),
       ),
@@ -580,21 +585,30 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '$_greeting$_greetingName 👋',
-                    style: AppTheme.headingMD,
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    _formatDate(),
-                    style: AppTheme.bodyMD,
-                  ),
-                ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '$_greeting$_greetingName 👋',
+                      style: AppTheme.headingMD,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _formatDate(),
+                      style: AppTheme.bodyMD,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
               ),
-              if (_streak > 0) EFStreakBadge(streak: _streak),
+              if (_streak > 0) ...[
+                const SizedBox(width: 12),
+                EFStreakBadge(streak: _streak),
+              ],
             ],
           ),
         ),
@@ -861,7 +875,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             Container(
               width: 64, height: 64,
               decoration: BoxDecoration(
-                color: AppTheme.lime.withOpacity(0.12),
+                color: AppTheme.lime.withValues(alpha: 0.12),
                 shape: BoxShape.circle,
               ),
               child: const Icon(Icons.auto_awesome_rounded,

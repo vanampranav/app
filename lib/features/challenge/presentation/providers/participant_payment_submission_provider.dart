@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:elefit_app/features/challenge/data/models/challenge.dart';
 import 'package:elefit_app/features/challenge/data/models/challenge_participant.dart';
 import 'package:elefit_app/features/challenge/data/models/payment_record.dart';
@@ -63,6 +63,10 @@ class ParticipantPaymentSubmissionProvider with ChangeNotifier {
       _challenge = await _challengeRepository.getChallengeById(challengeId);
       _participant = await _participantRepository.getParticipantByUserAndChallenge(userId, challengeId);
       
+      if (kDebugMode) {
+        debugPrint('PaymentSubmission: Loaded participant. paymentStatus: ${_participant?.paymentStatus}');
+      }
+
       final payments = await _paymentRepository.streamPaymentsByUser(userId).first;
       try {
         _existingPayment = payments.firstWhere((p) => p.challengeId == challengeId);

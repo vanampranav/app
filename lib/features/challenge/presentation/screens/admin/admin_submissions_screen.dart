@@ -114,7 +114,7 @@ class _AdminSubmissionsContent extends StatelessWidget {
                 color: isSelected ? AppTheme.lime : AppTheme.surface1,
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
-                  color: isSelected ? AppTheme.lime : Colors.white.withOpacity(0.05),
+                  color: isSelected ? AppTheme.lime : Colors.white.withValues(alpha: 0.05),
                 ),
               ),
               child: Center(
@@ -200,14 +200,22 @@ class _SubmissionCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(submission.type.toUpperCase(), style: AppTheme.labelSM.copyWith(color: AppTheme.lime, letterSpacing: 1.2)),
-                  const SizedBox(height: 4),
-                  Text(viewModel.displayName, style: AppTheme.headingSM),
-                ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(submission.type.toUpperCase(), style: AppTheme.labelSM.copyWith(color: AppTheme.lime, letterSpacing: 1.2)),
+                    const SizedBox(height: 4),
+                    Text(
+                      viewModel.displayName,
+                      style: AppTheme.headingSM,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(width: 8),
               _StatusBadge(status: submission.reviewStatus),
             ],
           ),
@@ -220,13 +228,21 @@ class _SubmissionCard extends StatelessWidget {
           
           Row(
             children: [
-              _SubmissionMetric(label: 'WEIGHT', value: '$weight kg'),
+              Flexible(child: _SubmissionMetric(label: 'WEIGHT', value: '$weight kg')),
               if (bodyFat != null) ...[
-                const SizedBox(width: 32),
-                _SubmissionMetric(label: 'BODY FAT', value: '$bodyFat%'),
+                const SizedBox(width: 16),
+                Flexible(child: _SubmissionMetric(label: 'BODY FAT', value: '$bodyFat%')),
               ],
-              const Spacer(),
-              Text('USER ID: ${submission.userId.substring(0, 8)}...', style: AppTheme.labelSM.copyWith(fontSize: 8, color: AppTheme.textTertiary)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'USER ID: ${submission.userId.substring(0, 8)}...',
+                  style: AppTheme.labelSM.copyWith(fontSize: 8, color: AppTheme.textTertiary),
+                  textAlign: TextAlign.end,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             ],
           ),
           
@@ -292,7 +308,7 @@ class _SubmissionCard extends StatelessWidget {
               width: double.infinity,
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.05),
+                color: Colors.white.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Column(
@@ -448,9 +464,9 @@ class _StatusBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Text(
         label.toUpperCase(),

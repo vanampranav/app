@@ -71,7 +71,7 @@ class _AdminPaymentsContent extends StatelessWidget {
   }
 
   Widget _buildFilterBar(BuildContext context, AdminPaymentsProvider provider) {
-    final filters = ['All', 'Pending', 'Approved/Paid', 'Rejected'];
+    final filters = ['All', 'Pending', 'Approved/Paid', 'Failed'];
     
     return Container(
       height: 50,
@@ -93,7 +93,7 @@ class _AdminPaymentsContent extends StatelessWidget {
                 color: isSelected ? AppTheme.lime : AppTheme.surface1,
                 borderRadius: BorderRadius.circular(25),
                 border: Border.all(
-                  color: isSelected ? AppTheme.lime : Colors.white.withOpacity(0.1),
+                  color: isSelected ? AppTheme.lime : Colors.white.withValues(alpha: 0.1),
                 ),
               ),
               child: Center(
@@ -174,17 +174,27 @@ class _PaymentCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(viewModel.displayName, style: AppTheme.headingSM),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Submitted: ${payment.createdAt != null ? dateFormat.format(payment.createdAt!) : 'N/A'}',
-                    style: AppTheme.bodySM.copyWith(color: AppTheme.textTertiary),
-                  ),
-                ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      viewModel.displayName,
+                      style: AppTheme.headingSM,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Submitted: ${payment.createdAt != null ? dateFormat.format(payment.createdAt!) : 'N/A'}',
+                      style: AppTheme.bodySM.copyWith(color: AppTheme.textTertiary),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(width: 8),
               _StatusBadge(status: payment.status),
             ],
           ),
@@ -192,19 +202,24 @@ class _PaymentCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('USER ID: ${payment.userId.substring(0, 8)}...', style: AppTheme.labelSM.copyWith(fontSize: 8, color: AppTheme.textTertiary)),
-                  const SizedBox(height: 4),
-                  Text('AMOUNT', style: AppTheme.labelSM.copyWith(fontSize: 9)),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${payment.amount} ${payment.currency}',
-                    style: AppTheme.numericMD.copyWith(fontSize: 18, color: AppTheme.lime),
-                  ),
-                ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('USER ID: ${payment.userId.substring(0, 8)}...', style: AppTheme.labelSM.copyWith(fontSize: 8, color: AppTheme.textTertiary)),
+                    const SizedBox(height: 4),
+                    Text('AMOUNT', style: AppTheme.labelSM.copyWith(fontSize: 9)),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${payment.amount} ${payment.currency}',
+                      style: AppTheme.numericMD.copyWith(fontSize: 18, color: AppTheme.lime),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(width: 12),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
@@ -260,7 +275,7 @@ class _PaymentCard extends StatelessWidget {
               width: double.infinity,
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.05),
+                color: Colors.white.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
@@ -399,6 +414,7 @@ class _StatusBadge extends StatelessWidget {
       case 'pending': color = Colors.amber; break;
       case 'waived': color = Colors.blue; break;
       case 'refunded':
+      case 'failed':
       case 'rejected': color = AppTheme.error; break;
       default: color = Colors.grey;
     }
@@ -406,9 +422,9 @@ class _StatusBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Text(
         status.toUpperCase(),

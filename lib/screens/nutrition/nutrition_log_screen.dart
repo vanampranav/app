@@ -16,6 +16,7 @@ import '../../widgets/device_scan_sheet.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/ef_components.dart';
 import '../food_search_screen.dart';
+import '../../services/analytics_service.dart';
 
 // Meal metadata now uses MealIconHelper instead of emoji strings.
 
@@ -173,6 +174,7 @@ class _NutritionLogScreenState extends State<NutritionLogScreen> {
       for (final e in entries) _summary.entries.add(e);
     });
     await _save();
+    await AnalyticsService.logMealLogged('fatsecret');
 
     // Push each new entry to Apple Health / Health Connect (silent)
     for (final e in entries) {
@@ -221,7 +223,7 @@ class _NutritionLogScreenState extends State<NutritionLogScreen> {
 
     debugPrint('MealVision: Image picked, reading bytes...');
     // Read bytes BEFORE showing any dialogs to avoid file access issues after dismissal
-    final bytes = await image.readAsBytes();
+    await image.readAsBytes();
     final imageFile = File(image.path);
 
     // Increase delay to ensure iOS has fully cleaned up the picker scene
@@ -312,6 +314,7 @@ class _NutritionLogScreenState extends State<NutritionLogScreen> {
         for (final e in confirmedEntries) _summary.entries.add(e);
       });
       await _save();
+      await AnalyticsService.logMealLogged('ai_photo');
 
       for (final e in confirmedEntries) {
         HealthService().syncMealEntry(e);

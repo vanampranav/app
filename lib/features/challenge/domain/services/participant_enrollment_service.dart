@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart';
 import 'package:elefit_app/features/challenge/data/models/challenge_participant.dart';
+import 'package:elefit_app/features/challenge/data/models/challenge_package.dart';
 import 'package:elefit_app/features/challenge/data/repositories/challenge_participant_repository.dart';
 import 'package:elefit_app/features/challenge/data/repositories/challenge_repository.dart';
 import 'package:elefit_app/features/challenge/data/constants/firestore_collections.dart';
@@ -25,6 +27,7 @@ class ParticipantEnrollmentService {
     required String userId,
     required String challengeId,
     String? leaderboardDisplayName,
+    ChallengePackage? package,
   }) async {
     // Check if already joined
     final existing = await _participantRepository.getParticipantByUserAndChallenge(userId, challengeId);
@@ -42,13 +45,26 @@ class ParticipantEnrollmentService {
       throw Exception('Challenge is not open for registration.');
     }
 
+    if (kDebugMode) {
+      debugPrint('Enrollment: Attempting join for User: $userId in Challenge: $challengeId');
+    }
+
+    // TODO: Future payment integration must use this snapshot to avoid price mismatch.
     final participant = ChallengeParticipant(
       id: '', // Firestore will generate
       challengeId: challengeId,
       userId: userId,
       status: ParticipantStatus.joined,
       paymentStatus: PaymentStatus.pending,
+      amountDue: package?.packagePrice ?? 0.0,
+      currency: package?.currency,
       leaderboardDisplayName: leaderboardDisplayName,
+      selectedPackageId: package?.id,
+      selectedPackageName: package?.name,
+      selectedPackagePrice: package?.packagePrice,
+      selectedPackageCurrency: package?.currency,
+      selectedShopifyVariantsSnapshot: package?.shopifyVariants.map((v) => v.toMap()).toList(),
+      packageSelectedAt: package != null ? DateTime.now() : null,
       joinedAt: DateTime.now(),
       createdAt: DateTime.now(),
     );
@@ -65,21 +81,30 @@ class ParticipantEnrollmentService {
 
     final updatedParticipant = participant.copyWith(
       status: ParticipantStatus.withdrawn,
+      eligibleForPrizes: false,
       updatedAt: DateTime.now(),
     );
 
     await _participantRepository.updateParticipant(updatedParticipant);
   }
 
-  Future<void> approveParticipant(String participantId, String adminId) async {
-    final participant = await _participantRepository.getParticipant(participantId);
+  Future<void> approveParticipant(String challengeId, String userId, String adminId) async {
+    final participant = await _participantRepository.getParticipant(challengeId, userId);
     if (participant == null) {
       throw Exception('Participant not found.');
     }
 
     final previousData = participant.toMap();
+    
+    // Recalculate eligibility
+    final bool isPaymentEligible = participant.paymentStatus == PaymentStatus.paid || participant.paymentStatus == PaymentStatus.waived;
+    final bool isEligible = isPaymentEligible && 
+                            participant.baselineSubmitted && 
+                            !participant.disqualified;
+
     final updatedParticipant = participant.copyWith(
       status: ParticipantStatus.active,
+      eligibleForPrizes: isEligible,
       lastUpdatedByAdminId: adminId,
       updatedAt: DateTime.now(),
     );
@@ -91,7 +116,7 @@ class ParticipantEnrollmentService {
       challengeId: participant.challengeId,
       action: 'approve_participant',
       targetCollection: FirestoreCollections.challengeParticipants,
-      targetId: participantId,
+      targetId: userId,
       previousData: previousData,
       newData: updatedParticipant.toMap(),
     );
@@ -102,8 +127,8 @@ class ParticipantEnrollmentService {
     }
   }
 
-  Future<void> rejectParticipant(String participantId, String adminId, String reason) async {
-    final participant = await _participantRepository.getParticipant(participantId);
+  Future<void> rejectParticipant(String challengeId, String userId, String adminId, String reason) async {
+    final participant = await _participantRepository.getParticipant(challengeId, userId);
     if (participant == null) {
       throw Exception('Participant not found.');
     }
@@ -123,7 +148,7 @@ class ParticipantEnrollmentService {
       challengeId: participant.challengeId,
       action: 'reject_participant',
       targetCollection: FirestoreCollections.challengeParticipants,
-      targetId: participantId,
+      targetId: userId,
       previousData: previousData,
       newData: updatedParticipant.toMap(),
       reason: reason,

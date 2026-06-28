@@ -130,6 +130,7 @@ class _EFButtonState extends State<EFButton> with SingleTickerProviderStateMixin
 class EFCard extends StatelessWidget {
   final Widget child;
   final EdgeInsets? padding;
+  final EdgeInsets? margin;
   final Color? color;
   final VoidCallback? onTap;
   final bool elevated;
@@ -140,6 +141,7 @@ class EFCard extends StatelessWidget {
     Key? key,
     required this.child,
     this.padding,
+    this.margin,
     this.color,
     this.onTap,
     this.elevated = false,
@@ -154,6 +156,7 @@ class EFCard extends StatelessWidget {
 
     Widget card = Container(
       padding: padding ?? const EdgeInsets.all(AppTheme.md),
+      margin: margin,
       decoration: BoxDecoration(
         color: cardColor,
         borderRadius: br,
@@ -421,10 +424,23 @@ class _EFMacroBarState extends State<EFMacroBar>
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(widget.label, style: AppTheme.labelMD),
-            Text(
-              '${widget.current}/${widget.target}${widget.unit}',
-              style: AppTheme.labelMD.copyWith(color: widget.color),
+            Expanded(
+              child: Text(
+                widget.label,
+                style: AppTheme.labelMD,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                '${widget.current}/${widget.target}${widget.unit}',
+                style: AppTheme.labelMD.copyWith(color: widget.color),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.end,
+              ),
             ),
           ],
         ),
@@ -535,34 +551,58 @@ class EFStatTile extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: EFCard(
-        padding: const EdgeInsets.all(AppTheme.md),
+        padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(label.toUpperCase(), style: AppTheme.labelSM),
-                if (icon != null)
+                Expanded(
+                  child: Text(
+                    label.toUpperCase(),
+                    style: AppTheme.labelSM,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (icon != null) ...[
+                  const SizedBox(width: 8),
                   IconTheme(
                     data: IconThemeData(color: valueColor ?? AppTheme.lime, size: 16),
                     child: icon!,
                   ),
+                ],
               ],
             ),
             const SizedBox(height: AppTheme.sm),
             Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text(
-                  value,
-                  style: AppTheme.numericMD.copyWith(color: valueColor ?? AppTheme.textPrimary),
+                Flexible(
+                  child: Text(
+                    value,
+                    style: AppTheme.numericMD.copyWith(
+                      color: valueColor ?? AppTheme.textPrimary,
+                      fontSize: 22,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-                if (unit != null) ...[
-                  const SizedBox(width: 3),
+                if (unit != null && unit!.isNotEmpty) ...[
+                  const SizedBox(width: 4),
                   Padding(
-                    padding: const EdgeInsets.only(bottom: 4),
-                    child: Text(unit!, style: AppTheme.bodyMD),
+                    padding: const EdgeInsets.only(bottom: 2),
+                    child: Text(
+                      unit!, 
+                      style: AppTheme.labelSM.copyWith(
+                        fontSize: 9, 
+                        color: AppTheme.textSecondary,
+                        letterSpacing: 0,
+                      ),
+                      maxLines: 1,
+                    ),
                   ),
                 ],
               ],
@@ -593,11 +633,20 @@ class EFSectionHeader extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Text(title.toUpperCase(), style: AppTheme.labelMD.copyWith(letterSpacing: 2.0)),
-        if (action != null)
+        Expanded(
+          child: Text(
+            title.toUpperCase(),
+            style: AppTheme.labelMD.copyWith(letterSpacing: 2.0),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        if (action != null) ...[
+          const SizedBox(width: 12),
           GestureDetector(
             onTap: onAction,
             child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text(action!, style: AppTheme.labelMD.copyWith(color: AppTheme.lime)),
                 const SizedBox(width: 2),
@@ -605,6 +654,7 @@ class EFSectionHeader extends StatelessWidget {
               ],
             ),
           ),
+        ],
       ],
     );
   }
@@ -714,33 +764,33 @@ class _EFQuickActionState extends State<EFQuickAction>
         scale: _scale,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 120),
-          padding: const EdgeInsets.fromLTRB(8, 18, 8, 14),
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 14),
           decoration: BoxDecoration(
             // Gradient background — stronger on press
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                color.withOpacity(_pressed ? 0.22 : 0.13),
-                color.withOpacity(_pressed ? 0.08 : 0.03),
+                color.withValues(alpha: _pressed ? 0.22 : 0.13),
+                color.withValues(alpha: _pressed ? 0.08 : 0.03),
               ],
             ),
             borderRadius: BorderRadius.circular(AppTheme.radiusXl),
             border: Border.all(
-              color: color.withOpacity(_pressed ? 0.55 : 0.28),
+              color: color.withValues(alpha: _pressed ? 0.55 : 0.28),
               width: 1.5,
             ),
             boxShadow: _pressed
                 ? [
                     BoxShadow(
-                      color: color.withOpacity(0.30),
+                      color: color.withValues(alpha: 0.30),
                       blurRadius: 18,
                       offset: const Offset(0, 6),
                     )
                   ]
                 : [
                     BoxShadow(
-                      color: color.withOpacity(0.12),
+                      color: color.withValues(alpha: 0.12),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
                     )
@@ -757,11 +807,11 @@ class _EFQuickActionState extends State<EFQuickAction>
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
-                    colors: [color, color.withOpacity(0.72)],
+                    colors: [color, color.withValues(alpha: 0.72)],
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: color.withOpacity(_pressed ? 0.55 : 0.38),
+                      color: color.withValues(alpha: _pressed ? 0.55 : 0.38),
                       blurRadius: _pressed ? 14 : 10,
                       offset: const Offset(0, 3),
                     ),
@@ -773,13 +823,15 @@ class _EFQuickActionState extends State<EFQuickAction>
               Text(
                 widget.label,
                 style: const TextStyle(
-                  fontSize: 11,
+                  fontSize: 10,
                   fontWeight: FontWeight.w800,
                   color: AppTheme.textPrimary,
                   letterSpacing: 0.1,
-                  height: 1.3,
+                  height: 1.2,
                 ),
                 textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),

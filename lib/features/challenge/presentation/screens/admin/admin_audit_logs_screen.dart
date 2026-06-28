@@ -86,7 +86,7 @@ class _AdminAuditLogsContent extends StatelessWidget {
                 color: isSelected ? AppTheme.lime : AppTheme.surface1,
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
-                  color: isSelected ? AppTheme.lime : Colors.white.withOpacity(0.05),
+                  color: isSelected ? AppTheme.lime : Colors.white.withValues(alpha: 0.05),
                 ),
               ),
               child: Center(
@@ -159,10 +159,15 @@ class _AuditLogCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                log.action.replaceAll('_', ' ').toUpperCase(),
-                style: const TextStyle(color: AppTheme.lime, fontWeight: FontWeight.w900, fontSize: 11, letterSpacing: 0.5),
+              Expanded(
+                child: Text(
+                  log.action.replaceAll('_', ' ').toUpperCase(),
+                  style: const TextStyle(color: AppTheme.lime, fontWeight: FontWeight.w900, fontSize: 11, letterSpacing: 0.5),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
+              const SizedBox(width: 8),
               Text(
                 log.createdAt != null ? dateFormat.format(log.createdAt!) : 'N/A',
                 style: AppTheme.labelSM.copyWith(fontSize: 10, color: AppTheme.textTertiary),
@@ -170,14 +175,27 @@ class _AuditLogCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          Text('Admin: ${viewModel.adminName}', style: AppTheme.bodySM.copyWith(color: AppTheme.textSecondary)),
+          Text(
+            'Admin: ${viewModel.adminName}',
+            style: AppTheme.bodySM.copyWith(color: AppTheme.textSecondary),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           const SizedBox(height: 4),
-          Text('Target: ${log.targetCollection} (${log.targetId})', style: AppTheme.bodySM.copyWith(color: AppTheme.textTertiary, fontSize: 11)),
+          Text(
+            'Target: ${log.targetCollection} (${log.targetId})',
+            style: AppTheme.bodySM.copyWith(color: AppTheme.textTertiary, fontSize: 11),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           
           if (log.reason != null && log.reason!.isNotEmpty) ...[
             const SizedBox(height: 12),
             Text('REASON:', style: AppTheme.labelSM.copyWith(fontSize: 9, color: AppTheme.textTertiary)),
-            Text(log.reason!, style: AppTheme.bodySM.copyWith(color: AppTheme.error.withOpacity(0.8))),
+            Text(
+              log.reason!, 
+              style: AppTheme.bodySM.copyWith(color: AppTheme.error.withValues(alpha: 0.8)),
+            ),
           ],
           
           if (log.previousData != null || log.newData != null) ...[
@@ -247,9 +265,9 @@ class _DataView extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: isHighlighted ? AppTheme.lime.withOpacity(0.05) : Colors.white.withOpacity(0.05),
+        color: isHighlighted ? AppTheme.lime.withValues(alpha: 0.05) : Colors.white.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: isHighlighted ? AppTheme.lime.withOpacity(0.2) : Colors.white10),
+        border: Border.all(color: isHighlighted ? AppTheme.lime.withValues(alpha: 0.2) : Colors.white10),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

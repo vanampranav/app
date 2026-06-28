@@ -39,8 +39,8 @@ class AdminPaymentsProvider with ChangeNotifier {
     if (_currentFilter == 'Approved/Paid') {
       return _allPayments.where((p) => p.payment.status == PaymentStatus.paid).toList();
     }
-    if (_currentFilter == 'Rejected') {
-      return _allPayments.where((p) => p.payment.status == PaymentStatus.rejected).toList();
+    if (_currentFilter == 'Failed') {
+      return _allPayments.where((p) => p.payment.status == PaymentStatus.failed).toList();
     }
     return _allPayments;
   }

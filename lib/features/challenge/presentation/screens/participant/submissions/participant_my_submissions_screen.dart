@@ -195,19 +195,26 @@ class _ParticipantSubmissionCard extends StatelessWidget {
           
           Row(
             children: [
-              _MetricItem(label: 'WEIGHT', value: '$weight $unit'),
+              Flexible(child: _MetricItem(label: 'WEIGHT', value: '$weight $unit')),
               if (bodyFat != null) ...[
-                const SizedBox(width: 40),
-                _MetricItem(label: 'BODY FAT', value: '$bodyFat%'),
+                const SizedBox(width: 24),
+                Flexible(child: _MetricItem(label: 'BODY FAT', value: '$bodyFat%')),
               ],
-              const Spacer(),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text('SOURCE', style: AppTheme.labelSM.copyWith(fontSize: 8, color: AppTheme.textTertiary)),
-                  const SizedBox(height: 2),
-                  Text(source, style: AppTheme.bodySM.copyWith(fontSize: 10)),
-                ],
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text('SOURCE', style: AppTheme.labelSM.copyWith(fontSize: 8, color: AppTheme.textTertiary)),
+                    const SizedBox(height: 2),
+                    Text(
+                      source,
+                      style: AppTheme.bodySM.copyWith(fontSize: 10),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
               ),
             ],
           ),

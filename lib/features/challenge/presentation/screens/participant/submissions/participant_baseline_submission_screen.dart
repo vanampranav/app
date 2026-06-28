@@ -4,6 +4,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:elefit_app/theme/app_theme.dart';
 import 'package:elefit_app/widgets/ef_components.dart';
+import 'package:elefit_app/widgets/ef_error_components.dart';
+import 'package:elefit_app/utils/app_error_mapper.dart';
 import 'package:elefit_app/features/challenge/data/models/challenge_submission.dart';
 import 'package:elefit_app/features/challenge/data/constants/firestore_collections.dart';
 import 'package:elefit_app/features/challenge/data/repositories/challenge_repository.dart';
@@ -102,21 +104,34 @@ class _ParticipantBaselineSubmissionContentState extends State<_ParticipantBasel
         if (provider.isLoading) {
           return const Scaffold(
             backgroundColor: AppTheme.bg,
-            body: Center(child: CircularProgressIndicator(color: AppTheme.lime)),
+            body: EFLoadingStateView(message: 'Loading baseline data...'),
+          );
+        }
+
+        if (provider.errorMessage != null) {
+          return Scaffold(
+            backgroundColor: AppTheme.bg,
+            appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0, leading: const BackButton()),
+            body: _buildErrorState(context, provider),
           );
         }
 
         final challenge = provider.challenge;
         final submission = provider.existingSubmission;
-        final isApproved = submission?.reviewStatus == ReviewStatus.approved;
-        final isResubmissionRequired = submission?.reviewStatus == ReviewStatus.needsClarification;
-
+        
         if (challenge == null) {
           return const Scaffold(
             backgroundColor: AppTheme.bg,
-            body: Center(child: Text('Challenge not found', style: AppTheme.bodyLG)),
+            body: EFEmptyStateView(
+              title: 'Not Found',
+              message: 'Challenge not found.',
+              icon: Icons.search_off_rounded,
+            ),
           );
         }
+
+        final isApproved = submission?.reviewStatus == ReviewStatus.approved;
+        final isResubmissionRequired = submission?.reviewStatus == ReviewStatus.needsClarification;
 
         // Pre-fill form if existing submission exists OR from profile
         if (!_initializedWithPrefill) {
@@ -317,7 +332,7 @@ class _ParticipantBaselineSubmissionContentState extends State<_ParticipantBasel
             children: [
               Icon(icon, color: color, size: 20),
               const SizedBox(width: 12),
-              Text(label, style: AppTheme.labelLG.copyWith(color: color)),
+              Expanded(child: Text(label, style: AppTheme.labelLG.copyWith(color: color))),
             ],
           ),
           if (notes != null) ...[
@@ -446,7 +461,15 @@ class _ParticipantBaselineSubmissionContentState extends State<_ParticipantBasel
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: AppTheme.bodyMD.copyWith(color: AppTheme.textSecondary)),
+        Expanded(
+          child: Text(
+            label,
+            style: AppTheme.bodyMD.copyWith(color: AppTheme.textSecondary),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        const SizedBox(width: 8),
         Text(value, style: AppTheme.bodyMD.copyWith(fontWeight: FontWeight.bold)),
       ],
     );
@@ -591,5 +614,21 @@ class _ParticipantBaselineSubmissionContentState extends State<_ParticipantBasel
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Baseline submitted successfully!'), backgroundColor: AppTheme.lime));
       Navigator.pop(context);
     }
+  }
+
+  Widget _buildErrorState(BuildContext context, ParticipantBaselineSubmissionProvider provider) {
+    final mappedError = AppErrorMapper.map(
+      provider.errorMessage!,
+      screenName: 'ParticipantBaselineSubmissionScreen',
+      featureName: 'ChallengeSubmissions',
+      userId: provider.userId,
+    );
+
+    return EFErrorView(
+      title: mappedError.title,
+      message: mappedError.message,
+      technicalCode: mappedError.technicalCode,
+      onBack: () => Navigator.pop(context),
+    );
   }
 }

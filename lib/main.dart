@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'dart:ui';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'services/analytics_service.dart';
 import 'models/cart_model.dart';
 import 'models/wishlist_model.dart';
 import 'models/address_model.dart';
@@ -25,8 +28,10 @@ import 'package:elefit_app/features/challenge/data/repositories/challenge_submis
 import 'package:elefit_app/features/challenge/data/repositories/payment_record_repository.dart';
 import 'package:elefit_app/features/challenge/data/repositories/challenge_notification_repository.dart';
 import 'package:elefit_app/features/challenge/data/repositories/admin_audit_log_repository.dart';
+import 'package:elefit_app/features/challenge/data/repositories/challenge_package_repository.dart';
 import 'package:elefit_app/features/challenge/data/repositories/user_repository.dart';
 import 'package:elefit_app/features/challenge/domain/services/admin_audit_service.dart';
+import 'package:elefit_app/features/challenge/domain/services/challenge_package_service.dart';
 import 'package:elefit_app/features/challenge/domain/services/challenge_notification_service.dart';
 import 'package:elefit_app/features/challenge/domain/services/challenge_service.dart';
 import 'package:elefit_app/features/challenge/domain/services/participant_enrollment_service.dart';
@@ -44,12 +49,27 @@ void main() async {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
+    
+    // Pass all uncaught "fatal" errors from the framework to Crashlytics
+    FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
+    
+    // Pass all uncaught asynchronous errors that aren't handled by the Flutter framework to Crashlytics
+    PlatformDispatcher.instance.onError = (error, stack) {
+      FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+      return true;
+    };
+
     debugPrint('Firebase initialized successfully');
   } catch (e) {
     debugPrint('Firebase initialization failed: $e');
-    // If initialization fails, following providers that use Firebase will throw exceptions.
   }
   
+  // Initialize Analytics
+  await AnalyticsService.initialize();
+  
+  // Log App Open
+  AnalyticsService.logAppOpened();
+
   // Initialize OneSignal for notifications and in-app messages
   await OneSignalService.initialize();
 
@@ -91,6 +111,7 @@ void main() async {
         Provider(create: (_) => ChallengeRepository()),
         Provider(create: (_) => ChallengeParticipantRepository()),
         Provider(create: (_) => ChallengeSubmissionRepository()),
+        Provider(create: (_) => ChallengePackageRepository()),
         Provider(create: (_) => PaymentRecordRepository()),
         Provider(create: (_) => ChallengeNotificationRepository()),
         Provider(create: (_) => AdminAuditLogRepository()),
@@ -99,6 +120,12 @@ void main() async {
         // Services
         ProxyProvider<AdminAuditLogRepository, AdminAuditService>(
           update: (_, repo, __) => AdminAuditService(auditLogRepository: repo),
+        ),
+        ProxyProvider2<ChallengePackageRepository, ChallengeParticipantRepository, ChallengePackageService>(
+          update: (_, repo, repoP, __) => ChallengePackageService(
+            packageRepository: repo,
+            participantRepository: repoP,
+          ),
         ),
         ProxyProvider3<
             ChallengeNotificationRepository,
@@ -208,6 +235,7 @@ class MyApp extends StatelessWidget {
           themeMode: themeProvider.themeMode,
           debugShowCheckedModeBanner: false,
           navigatorKey: NavigationService.navigatorKey,
+          navigatorObservers: [AnalyticsService.observer],
           home: const _SplashRouter(),
           onGenerateRoute: (settings) {
             if (settings.name == '/product-details') {

@@ -93,6 +93,24 @@ class SubmissionReviewService {
 
     await _submissionRepository.updateSubmission(updatedSubmission);
 
+    // If baseline is approved, update participant record
+    if (submission.type == SubmissionType.baseline) {
+      final participant = await _participantRepository.getParticipantByUserAndChallenge(submission.userId, submission.challengeId);
+      if (participant != null) {
+        // Recalculate eligibility
+        final bool isPaymentEligible = participant.paymentStatus == PaymentStatus.paid || participant.paymentStatus == PaymentStatus.waived;
+        final bool isEligible = isPaymentEligible && 
+                                participant.status == ParticipantStatus.active && 
+                                !participant.disqualified;
+
+        await _participantRepository.updateParticipant(participant.copyWith(
+          baselineSubmitted: true,
+          eligibleForPrizes: isEligible,
+          updatedAt: DateTime.now(),
+        ));
+      }
+    }
+
     await _auditService.logAction(
       adminId: adminId,
       challengeId: submission.challengeId,
@@ -124,6 +142,24 @@ class SubmissionReviewService {
     );
 
     await _submissionRepository.updateSubmission(updatedSubmission);
+
+    // If baseline is approved, update participant record
+    if (submission.type == SubmissionType.baseline) {
+      final participant = await _participantRepository.getParticipantByUserAndChallenge(submission.userId, submission.challengeId);
+      if (participant != null) {
+        // Recalculate eligibility
+        final bool isPaymentEligible = participant.paymentStatus == PaymentStatus.paid || participant.paymentStatus == PaymentStatus.waived;
+        final bool isEligible = isPaymentEligible && 
+                                participant.status == ParticipantStatus.active && 
+                                !participant.disqualified;
+
+        await _participantRepository.updateParticipant(participant.copyWith(
+          baselineSubmitted: true,
+          eligibleForPrizes: isEligible,
+          updatedAt: DateTime.now(),
+        ));
+      }
+    }
 
     await _auditService.logAction(
       adminId: adminId,
@@ -157,6 +193,24 @@ class SubmissionReviewService {
     );
 
     await _submissionRepository.updateSubmission(updatedSubmission);
+
+    // If baseline is approved, update participant record
+    if (submission.type == SubmissionType.baseline) {
+      final participant = await _participantRepository.getParticipantByUserAndChallenge(submission.userId, submission.challengeId);
+      if (participant != null) {
+        // Recalculate eligibility
+        final bool isPaymentEligible = participant.paymentStatus == PaymentStatus.paid || participant.paymentStatus == PaymentStatus.waived;
+        final bool isEligible = isPaymentEligible && 
+                                participant.status == ParticipantStatus.active && 
+                                !participant.disqualified;
+
+        await _participantRepository.updateParticipant(participant.copyWith(
+          baselineSubmitted: true,
+          eligibleForPrizes: isEligible,
+          updatedAt: DateTime.now(),
+        ));
+      }
+    }
 
     await _auditService.logAction(
       adminId: adminId,

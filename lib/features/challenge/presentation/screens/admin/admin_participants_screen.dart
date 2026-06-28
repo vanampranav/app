@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:elefit_app/theme/app_theme.dart';
 import 'package:elefit_app/widgets/ef_components.dart';
+import 'package:elefit_app/widgets/ef_error_components.dart';
+import 'package:elefit_app/utils/app_error_mapper.dart';
 import 'package:elefit_app/features/challenge/data/constants/firestore_collections.dart';
 import 'package:elefit_app/features/challenge/data/models/challenge_participant.dart';
 import 'package:elefit_app/features/challenge/data/repositories/challenge_participant_repository.dart';
@@ -54,11 +56,15 @@ class _AdminParticipantsContent extends StatelessWidget {
               _buildFilterBar(context, provider),
               Expanded(
                 child: provider.isLoading
-                    ? const Center(child: CircularProgressIndicator(color: AppTheme.lime))
+                    ? const EFLoadingStateView(message: 'Loading participants...')
                     : provider.errorMessage != null
-                        ? _buildErrorState(provider.errorMessage!)
+                        ? _buildErrorState(context, provider)
                         : provider.participants.isEmpty
-                            ? _buildEmptyState(provider.currentFilter)
+                            ? EFEmptyStateView(
+                                title: 'No Participants',
+                                message: 'No ${provider.currentFilter.toLowerCase()} participants found.',
+                                icon: Icons.people_outline_rounded,
+                              )
                             : _buildParticipantList(context, provider),
               ),
             ],
@@ -91,7 +97,7 @@ class _AdminParticipantsContent extends StatelessWidget {
                 color: isSelected ? AppTheme.lime : AppTheme.surface1,
                 borderRadius: BorderRadius.circular(25),
                 border: Border.all(
-                  color: isSelected ? AppTheme.lime : Colors.white.withOpacity(0.1),
+                  color: isSelected ? AppTheme.lime : Colors.white.withValues(alpha: 0.1),
                 ),
               ),
               child: Center(
@@ -113,7 +119,7 @@ class _AdminParticipantsContent extends StatelessWidget {
 
   Widget _buildParticipantList(BuildContext context, AdminParticipantsProvider provider) {
     return ListView.separated(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
       itemCount: provider.participants.length,
       separatorBuilder: (_, __) => const SizedBox(height: 16),
       itemBuilder: (ctx, i) {
@@ -123,25 +129,18 @@ class _AdminParticipantsContent extends StatelessWidget {
     );
   }
 
-  Widget _buildEmptyState(String filter) {
-    return Center(
-      child: Text(
-        'No $filter participants found.',
-        style: AppTheme.bodyLG.copyWith(color: AppTheme.textSecondary),
-      ),
+  Widget _buildErrorState(BuildContext context, AdminParticipantsProvider provider) {
+    final mappedError = AppErrorMapper.map(
+      provider.errorMessage!,
+      screenName: 'AdminParticipantsScreen',
+      featureName: 'AdminManagement',
     );
-  }
 
-  Widget _buildErrorState(String message) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Text(
-          message,
-          textAlign: TextAlign.center,
-          style: AppTheme.bodyMD.copyWith(color: AppTheme.error),
-        ),
-      ),
+    return EFErrorView(
+      title: mappedError.title,
+      message: mappedError.message,
+      technicalCode: mappedError.technicalCode,
+      onRetry: () => provider.fetchData(),
     );
   }
 }
@@ -172,17 +171,25 @@ class _ParticipantCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(viewModel.displayName, style: AppTheme.headingSM),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Joined: ${participant.joinedAt != null ? dateFormat.format(participant.joinedAt!) : 'N/A'}',
-                    style: AppTheme.bodySM.copyWith(color: AppTheme.textSecondary),
-                  ),
-                ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      viewModel.displayName,
+                      style: AppTheme.headingSM,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Joined: ${participant.joinedAt != null ? dateFormat.format(participant.joinedAt!) : 'N/A'}',
+                      style: AppTheme.bodySM.copyWith(color: AppTheme.textSecondary),
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(width: 8),
               _StatusBadge(status: participant.status, type: 'participant'),
             ],
           ),
@@ -190,18 +197,27 @@ class _ParticipantCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('USER ID: ${participant.userId.substring(0, 8)}...', style: AppTheme.labelSM.copyWith(fontSize: 8, color: AppTheme.textTertiary)),
-                  const SizedBox(height: 4),
-                  Text('PAYMENT STATUS', style: AppTheme.labelSM.copyWith(fontSize: 9)),
-                  const SizedBox(height: 4),
-                  _StatusBadge(status: participant.paymentStatus, type: 'payment'),
-                ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'USER ID: ${participant.userId.substring(0, 8)}...',
+                      style: AppTheme.labelSM.copyWith(fontSize: 8, color: AppTheme.textTertiary),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text('PAYMENT STATUS', style: AppTheme.labelSM.copyWith(fontSize: 9)),
+                    const SizedBox(height: 4),
+                    _StatusBadge(status: participant.paymentStatus, type: 'payment'),
+                  ],
+                ),
               ),
+              const SizedBox(width: 8),
               if (participant.status == ParticipantStatus.joined || participant.status == ParticipantStatus.invited)
                 Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     IconButton(
                       icon: const Icon(Icons.check_circle_outline_rounded, color: AppTheme.lime),
@@ -220,7 +236,7 @@ class _ParticipantCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.05),
+                color: Colors.white.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
@@ -339,9 +355,9 @@ class _StatusBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Text(
         status.toUpperCase(),

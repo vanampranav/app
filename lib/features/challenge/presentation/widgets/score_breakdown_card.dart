@@ -31,7 +31,15 @@ class ScoreBreakdownCard extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('MOTIVATIONAL SCORE', style: AppTheme.labelLG.copyWith(color: AppTheme.lime)),
+                  Expanded(
+                    child: Text(
+                      'MOTIVATIONAL SCORE',
+                      style: AppTheme.labelLG.copyWith(color: AppTheme.lime),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   Text(
                     breakdown.totalLeaderboardScore.toStringAsFixed(1),
                     style: AppTheme.numericLG.copyWith(color: AppTheme.lime, fontSize: 24),
@@ -119,7 +127,15 @@ class ScoreBreakdownCard extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: AppTheme.bodyMD.copyWith(fontWeight: FontWeight.bold)),
+        Expanded(
+          child: Text(
+            label,
+            style: AppTheme.bodyMD.copyWith(fontWeight: FontWeight.bold),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        const SizedBox(width: 8),
         Text(
           '${data.score?.toStringAsFixed(2) ?? "0.00"}$unit',
           style: AppTheme.numericLG.copyWith(color: AppTheme.textPrimary, fontSize: 20),

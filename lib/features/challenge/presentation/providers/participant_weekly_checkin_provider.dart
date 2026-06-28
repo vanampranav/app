@@ -10,6 +10,7 @@ import 'package:elefit_app/features/challenge/data/repositories/challenge_partic
 import 'package:elefit_app/features/challenge/data/repositories/challenge_submission_repository.dart';
 import 'package:elefit_app/features/challenge/domain/services/submission_review_service.dart';
 import 'package:elefit_app/features/challenge/data/constants/firestore_collections.dart';
+import 'package:elefit_app/services/analytics_service.dart';
 
 class ParticipantWeeklyCheckinProvider with ChangeNotifier {
   final String challengeId;
@@ -172,6 +173,7 @@ class ParticipantWeeklyCheckinProvider with ChangeNotifier {
       };
 
       await _submissionService.submitWeeklyCheckIn(userId, challengeId, submissionData);
+      await AnalyticsService.logWeeklyCheckinSubmitted(challengeId, _currentWeekNumber);
       
     } catch (e) {
       _errorMessage = e.toString();

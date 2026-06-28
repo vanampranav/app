@@ -12,6 +12,7 @@ import 'package:elefit_app/features/challenge/data/repositories/challenge_submis
 import 'package:elefit_app/features/challenge/domain/services/submission_review_service.dart';
 import 'package:elefit_app/features/challenge/data/constants/firestore_collections.dart';
 import 'package:elefit_app/services/member_service.dart';
+import 'package:elefit_app/services/analytics_service.dart';
 
 class ParticipantBaselineSubmissionProvider with ChangeNotifier {
   final String challengeId;
@@ -196,6 +197,7 @@ class ParticipantBaselineSubmissionProvider with ChangeNotifier {
       };
 
       await _submissionService.submitBaseline(userId, challengeId, submissionData);
+      await AnalyticsService.logBaselineSubmitted(challengeId, source);
       
     } catch (e) {
       _errorMessage = e.toString();

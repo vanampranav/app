@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:elefit_app/features/challenge/data/models/challenge.dart';
 import 'package:elefit_app/features/challenge/data/models/challenge_participant.dart';
+import 'package:elefit_app/features/challenge/data/models/challenge_package.dart';
 import 'package:elefit_app/features/challenge/data/repositories/challenge_repository.dart';
 import 'package:elefit_app/features/challenge/data/repositories/challenge_participant_repository.dart';
 import 'package:elefit_app/features/challenge/domain/services/participant_enrollment_service.dart';
@@ -53,23 +54,12 @@ class ParticipantChallengeDetailProvider with ChangeNotifier {
       onError: (err) => _handleError('Error loading challenge: $err'),
     );
 
-    _participantSub = _participantRepository
-        .streamParticipantsByUser(userId)
-        .map((list) => list.firstWhere((p) => p.challengeId == challengeId, 
-            orElse: () => throw 'not_found'))
-        .listen(
+    _participantSub = _participantRepository.streamParticipant(challengeId, userId).listen(
       (data) {
         _participant = data;
         _checkLoadingDone();
       },
-      onError: (err) {
-        if (err == 'not_found') {
-          _participant = null;
-          _checkLoadingDone();
-        } else {
-          _handleError('Error checking participation: $err');
-        }
-      },
+      onError: (err) => _handleError('Error checking participation: $err'),
     );
   }
 
@@ -86,7 +76,7 @@ class ParticipantChallengeDetailProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> joinChallenge({String? nickname}) async {
+  Future<void> joinChallenge({String? nickname, ChallengePackage? package}) async {
     if (_isJoining) return;
     _isJoining = true;
     _errorMessage = null;
@@ -97,6 +87,7 @@ class ParticipantChallengeDetailProvider with ChangeNotifier {
         userId: userId, 
         challengeId: challengeId,
         leaderboardDisplayName: nickname,
+        package: package,
       );
     } catch (e) {
       _errorMessage = e.toString();

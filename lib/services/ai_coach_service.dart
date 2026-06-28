@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import '../models/ai_coach_models.dart';
 import 'package:flutter/foundation.dart';
 import 'ai_coach_parser.dart';
+import 'analytics_service.dart';
 
 class AiCoachTarget {
   final int tdee;
@@ -57,6 +58,7 @@ class AiCoachService {
       }
 
       final data = jsonDecode(response.body);
+      await AnalyticsService.logAiCoachUsed('calculate_targets');
       return AiCoachTarget(
         tdee: data['tdee'] ?? 0,
         dailyCalories: data['targetCalories'] ?? 2000,
@@ -138,6 +140,8 @@ class AiCoachService {
     } else {
       weeklyWorkouts = List.generate(7, (_) => DayWorkout(name: 'Rest Day', isRestDay: true));
     }
+
+    await AnalyticsService.logAiCoachUsed('generate_full_plan');
 
     return FitnessPlan(
       dailyCalories: target.dailyCalories,

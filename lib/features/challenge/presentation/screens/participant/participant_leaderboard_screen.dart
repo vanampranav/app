@@ -268,7 +268,14 @@ class _LeaderboardRow extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Text(entry.displayName, style: AppTheme.headingSM.copyWith(fontSize: 14)),
+                    Expanded(
+                      child: Text(
+                        entry.displayName,
+                        style: AppTheme.headingSM.copyWith(fontSize: 14),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
                     if (isMe) ...[
                       const SizedBox(width: 8),
                       Container(
@@ -286,6 +293,8 @@ class _LeaderboardRow extends StatelessWidget {
                 Text(
                   'Last updated: ${entry.latestSubmissionType}',
                   style: AppTheme.bodySM.copyWith(fontSize: 10, color: AppTheme.textTertiary),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),

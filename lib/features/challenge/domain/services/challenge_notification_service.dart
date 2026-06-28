@@ -69,6 +69,19 @@ class ChallengeNotificationService {
     );
   }
 
+  Future<void> notifyPaymentFailed(String userId, String challengeTitle, String challengeId, String reason) async {
+    await createChallengeNotification(
+      recipientUserId: userId,
+      title: 'Payment Verification Failed',
+      body: 'Please review your challenge payment for "$challengeTitle" and submit updated proof. Reason: $reason',
+      type: 'paymentFailed',
+      category: 'payment',
+      priority: 'high',
+      data: {'challengeId': challengeId, 'reason': reason},
+      deepLink: 'challenge_dashboard',
+    );
+  }
+
   Future<void> notifySubmissionApproved(String userId, String challengeTitle, String submissionType, String challengeId) async {
     String body = 'Your $submissionType submission for "$challengeTitle" has been approved.';
     if (submissionType == 'baseline') {

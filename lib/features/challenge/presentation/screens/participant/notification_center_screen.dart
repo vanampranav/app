@@ -147,14 +147,19 @@ class _NotificationCard extends StatelessWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        _getTypeLabel(),
-                        style: AppTheme.labelSM.copyWith(
-                          color: _getTypeColor(),
-                          fontSize: 8,
-                          fontWeight: FontWeight.w900,
+                      Expanded(
+                        child: Text(
+                          _getTypeLabel(),
+                          style: AppTheme.labelSM.copyWith(
+                            color: _getTypeColor(),
+                            fontSize: 8,
+                            fontWeight: FontWeight.w900,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
+                      const SizedBox(width: 8),
                       Text(
                         _formatTimestamp(notification.createdAt),
                         style: AppTheme.bodySM.copyWith(color: AppTheme.textTertiary, fontSize: 10),

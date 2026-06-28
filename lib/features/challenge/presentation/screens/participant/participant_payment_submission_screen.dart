@@ -2,6 +2,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+import 'package:elefit_app/widgets/ef_error_components.dart';
+import 'package:elefit_app/features/challenge/presentation/screens/participant/participant_payment_recovery_screen.dart';
 import 'package:elefit_app/theme/app_theme.dart';
 import 'package:elefit_app/widgets/ef_components.dart';
 import 'package:elefit_app/features/challenge/data/models/challenge.dart';
@@ -99,20 +101,65 @@ class _ParticipantPaymentSubmissionContentState extends State<_ParticipantPaymen
         if (provider.isLoading) {
           return const Scaffold(
             backgroundColor: AppTheme.bg,
-            body: Center(child: CircularProgressIndicator(color: AppTheme.lime)),
+            body: EFLoadingStateView(message: 'Loading payment details...'),
           );
         }
 
         final challenge = provider.challenge;
-        final payment = provider.existingPayment;
-        final isPaid = payment?.status == PaymentStatus.paid;
-
-        if (challenge == null) {
+        final participant = provider.participant;
+        
+        if (challenge == null || participant == null) {
           return const Scaffold(
             backgroundColor: AppTheme.bg,
-            body: Center(child: Text('Challenge not found', style: AppTheme.bodyLG)),
+            body: EFEmptyStateView(title: 'Not Found', message: 'Challenge data not found.'),
           );
         }
+
+        final paymentStatus = participant.paymentStatus;
+        final isVerified = paymentStatus == PaymentStatus.paid || paymentStatus == PaymentStatus.waived;
+        final isPendingReview = paymentStatus == PaymentStatus.pendingReview;
+
+        // Route Guard: If failed, redirect to recovery screen (or show button)
+        if (paymentStatus == PaymentStatus.failed) {
+          return Scaffold(
+            backgroundColor: AppTheme.bg,
+            appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0, leading: const BackButton()),
+            body: EFEmptyStateView(
+              title: 'Verification Failed',
+              message: 'Please use the recovery flow to update your proof.',
+              icon: Icons.error_outline_rounded,
+              action: EFButton(
+                label: 'Go to Recovery',
+                onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => ParticipantPaymentRecoveryScreen(challengeId: provider.challengeId))),
+                fullWidth: false,
+                padding: const EdgeInsets.symmetric(horizontal: 32),
+              ),
+            ),
+          );
+        }
+
+        // Route Guard: If already verified or in review, don't allow new submission
+        if (isVerified || isPendingReview) {
+          return Scaffold(
+            backgroundColor: AppTheme.bg,
+            appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0, leading: const BackButton()),
+            body: EFEmptyStateView(
+              title: isVerified ? 'Payment Verified' : 'Review in Progress',
+              message: isVerified 
+                ? 'Your registration for this challenge is active.' 
+                : 'We are currently reviewing your payment proof. Please check back later.',
+              icon: isVerified ? Icons.check_circle_outline_rounded : Icons.hourglass_bottom_rounded,
+              action: EFButton(
+                label: 'Go Back',
+                onTap: () => Navigator.pop(context),
+                fullWidth: false,
+                padding: const EdgeInsets.symmetric(horizontal: 32),
+              ),
+            ),
+          );
+        }
+
+        final payment = provider.existingPayment;
 
         // Initialize controllers if not already done and we have data
         if (_amountController.text.isEmpty && payment != null) {
@@ -138,7 +185,7 @@ class _ParticipantPaymentSubmissionContentState extends State<_ParticipantPaymen
               children: [
                 _buildChallengeInfo(challenge),
                 const SizedBox(height: 32),
-                if (isPaid)
+                if (isVerified)
                   _buildSuccessState()
                 else ...[
                   _buildInstructions(),

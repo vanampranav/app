@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:elefit_app/features/challenge/data/models/challenge_participant.dart';
 import 'package:elefit_app/features/challenge/data/repositories/challenge_participant_repository.dart';
 import 'package:elefit_app/features/challenge/data/repositories/user_repository.dart';
@@ -55,6 +55,11 @@ class AdminParticipantsProvider with ChangeNotifier {
   })  : _participantRepository = participantRepository,
         _userRepository = userRepository,
         _enrollmentService = enrollmentService {
+    fetchData();
+  }
+
+  void fetchData() {
+    _subscription?.cancel();
     _listenToParticipants();
   }
 
@@ -63,8 +68,16 @@ class AdminParticipantsProvider with ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
 
+    if (kDebugMode) {
+      debugPrint('AdminParticipantsProvider: Starting query for challenge: $challengeId');
+      debugPrint('AdminParticipantsProvider: Querying path: challenges/$challengeId/participants');
+    }
+
     _subscription = _participantRepository.streamParticipantsByChallenge(challengeId).listen(
       (data) async {
+        if (kDebugMode) {
+          debugPrint('AdminParticipantsProvider: Successfully retrieved ${data.length} participants');
+        }
         final userIds = data.map((p) => p.userId).toList();
         final users = await _userRepository.getUsersByIds(userIds);
         final userMap = {for (var u in users) u.id: u};
@@ -98,12 +111,12 @@ class AdminParticipantsProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> approveParticipant(String participantId, String adminId) async {
+  Future<void> approveParticipant(String userId, String adminId) async {
     _isActionInProgress = true;
     notifyListeners();
 
     try {
-      await _enrollmentService.approveParticipant(participantId, adminId);
+      await _enrollmentService.approveParticipant(challengeId, userId, adminId);
       _errorMessage = null;
     } catch (e) {
       _errorMessage = e.toString();
@@ -113,12 +126,12 @@ class AdminParticipantsProvider with ChangeNotifier {
     }
   }
 
-  Future<void> rejectParticipant(String participantId, String adminId, String reason) async {
+  Future<void> rejectParticipant(String userId, String adminId, String reason) async {
     _isActionInProgress = true;
     notifyListeners();
 
     try {
-      await _enrollmentService.rejectParticipant(participantId, adminId, reason);
+      await _enrollmentService.rejectParticipant(challengeId, userId, adminId, reason);
       _errorMessage = null;
     } catch (e) {
       _errorMessage = e.toString();

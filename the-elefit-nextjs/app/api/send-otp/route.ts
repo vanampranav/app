@@ -1,6 +1,8 @@
 import { Resend } from 'resend';
 import { NextResponse } from 'next/server';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(req: Request) {
     try {
         const resendKey = process.env.NEXT_PUBLIC_RESEND_KEY || process.env.RESEND_API_KEY;

@@ -188,7 +188,14 @@ class _InfoRow extends StatelessWidget {
       children: [
         Icon(icon, size: 14, color: AppTheme.textTertiary),
         const SizedBox(width: 8),
-        Text(label, style: AppTheme.bodySM.copyWith(color: AppTheme.textSecondary)),
+        Expanded(
+          child: Text(
+            label,
+            style: AppTheme.bodySM.copyWith(color: AppTheme.textSecondary),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
       ],
     );
   }
@@ -212,9 +219,9 @@ class _StatusBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Text(
         label,

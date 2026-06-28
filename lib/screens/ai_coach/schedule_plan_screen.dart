@@ -3,7 +3,7 @@ import '../../models/ai_coach_models.dart';
 import '../../theme/app_theme.dart';
 import '../../services/pdf_service.dart';
 import '../profile_screen.dart';
-import 'ai_coach_screen.dart';
+import '../../services/analytics_service.dart';
 
 const List<String> _MEAL_TIMES = ['Breakfast', 'Lunch', 'Snacks', 'Dinner'];
 
@@ -440,7 +440,13 @@ class _AiCoachSchedulePlanScreenState extends State<AiCoachSchedulePlanScreen> {
   Widget _buildTab(String id, String icon, String label) {
     final isActive = _activeTab == id;
     return GestureDetector(
-      onTap: () => setState(() => _activeTab = id),
+      onTap: () {
+        setState(() => _activeTab = id);
+        AnalyticsService.logAiCoachUsed('view_$id');
+        if (id == 'workout') {
+          AnalyticsService.logWorkoutPlanViewed(widget.plan.workoutFocus);
+        }
+      },
       child: Column(
         children: [
           Row(

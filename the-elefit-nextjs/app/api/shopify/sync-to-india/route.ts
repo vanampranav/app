@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 
+export const dynamic = 'force-dynamic';
+
 const INDIA_DOMAIN = 'nad691-1n.myshopify.com';
 const INDIA_ADMIN_TOKEN = process.env.SHOPIFY_INDIA_ADMIN_TOKEN || '';
 const API_VERSION = '2025-01';

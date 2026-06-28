@@ -57,6 +57,15 @@ class ParticipantChallengeDashboardProvider with ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
 
+    _listen();
+  }
+
+  void _listen() {
+    _challengeSub?.cancel();
+    _participantSub?.cancel();
+    _submissionSub?.cancel();
+    _paymentSub?.cancel();
+
     _challengeSub = _challengeRepository.streamChallengeById(challengeId).listen(
       (data) {
         _challenge = data;
@@ -65,12 +74,12 @@ class ParticipantChallengeDashboardProvider with ChangeNotifier {
       onError: (err) => _handleError('Error loading challenge: $err'),
     );
 
-    _participantSub = _participantRepository.streamParticipantsByUser(userId).listen(
-      (list) {
-        try {
-          _participant = list.firstWhere((p) => p.challengeId == challengeId);
+    _participantSub = _participantRepository.streamParticipant(challengeId, userId).listen(
+      (data) {
+        if (data != null) {
+          _participant = data;
           _checkLoadingDone();
-        } catch (_) {
+        } else {
           _participant = null;
           _handleError('Participation record not found.');
         }
@@ -95,6 +104,10 @@ class ParticipantChallengeDashboardProvider with ChangeNotifier {
         notifyListeners();
       },
     );
+  }
+
+  Future<void> refresh() async {
+    _listen();
   }
 
   void _checkLoadingDone() {

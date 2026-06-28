@@ -74,6 +74,8 @@ let storage: FirebaseStorage;
 let database: any;
 let analytics: any;
 
+export const getFirebaseDb = () => db;
+
 const isConfigValid = !!firebaseConfig.apiKey;
 
 // Secret salt for deriving bridge passwords from Shopify IDs

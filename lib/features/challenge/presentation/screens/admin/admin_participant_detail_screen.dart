@@ -42,7 +42,12 @@ class _AdminParticipantDetailContent extends StatelessWidget {
         return Scaffold(
           backgroundColor: AppTheme.bg,
           appBar: AppBar(
-            title: Text(provider.isLoading ? 'Loading...' : provider.displayName),
+            title: Text(
+              provider.isLoading ? 'Loading...' : provider.displayName,
+              style: AppTheme.headingMD,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
             backgroundColor: Colors.transparent,
             elevation: 0,
             leading: const BackButton(color: AppTheme.textPrimary),

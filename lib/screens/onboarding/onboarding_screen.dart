@@ -7,6 +7,8 @@ import '../../services/firebase_rest_service.dart';
 import '../../services/health_service.dart';
 import '../home_screen.dart';
 import 'package:elefit_app/features/challenge/domain/services/auth_service.dart';
+import 'package:elefit_app/services/analytics_service.dart';
+import 'package:elefit_app/utils/app_error_mapper.dart';
 import 'package:provider/provider.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -137,6 +139,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
   // ── Navigation ─────────────────────────────────────────────────────────────
   void _next() {
+    if (_step == 0) {
+      AnalyticsService.logRegistrationStarted(source: 'app', method: 'email');
+    }
     if (_step == 1) { _handleAuth(); return; }
     if (_step < 10) setState(() { _goingForward = true; _step++; });
   }
@@ -227,17 +232,13 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   }
 
   String _friendlyError(Object e) {
+    final mapped = AppErrorMapper.map(
+      e,
+      screenName: 'OnboardingScreen',
+      featureName: 'Auth',
+    );
+
     final msg = e.toString().toLowerCase();
-    if (msg.contains('socket') ||
-        msg.contains('connection reset') ||
-        msg.contains('connection refused') ||
-        msg.contains('network') ||
-        msg.contains('errno = 54') ||
-        msg.contains('clientexception') ||
-        msg.contains('handshake') ||
-        msg.contains('timeout')) {
-      return 'No internet connection. Please check your network and try again.';
-    }
     if (msg.contains('email') && msg.contains('already')) {
       return 'An account with this email already exists. Try signing in instead.';
     }
@@ -255,7 +256,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     if (msg.contains('invalid email')) {
       return 'Please enter a valid email address.';
     }
-    return e.toString().replaceAll('Exception: ', '');
+    
+    return mapped.message;
   }
 
   void _prefillFromProfile(Map<String, dynamic> p) {
@@ -374,6 +376,12 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       await _saveLocalPrefs();
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('onboarded', true);
+
+      // Log Profile Completion
+      await AnalyticsService.logProfileCompleted(
+        fitnessGoal: _goal,
+        userType: _gender,
+      );
 
       _goToHome();
     } catch (e) {

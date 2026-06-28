@@ -38,11 +38,19 @@ class ChallengeScoringService {
     required bool isChallengeCompleted,
   }) {
     // 1. Eligibility Checks
-    if (participant.status == ParticipantStatus.disqualified) {
+    if (participant.status == ParticipantStatus.disqualified || participant.disqualified) {
       return OfficialWinnerData(
         metric: "disqualified",
         isEligible: false,
         ineligibilityReason: "Participant is disqualified from the challenge.",
+      );
+    }
+
+    if (!participant.eligibleForPrizes) {
+      return OfficialWinnerData(
+        metric: "paymentPending",
+        isEligible: false,
+        ineligibilityReason: "Payment must be verified for prize eligibility.",
       );
     }
 

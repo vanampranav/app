@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:elefit_app/features/challenge/data/constants/firestore_collections.dart';
 import 'package:elefit_app/features/challenge/data/models/challenge_participant.dart';
@@ -8,15 +9,22 @@ class ChallengeParticipantRepository {
   ChallengeParticipantRepository({FirebaseFirestore? firestore})
       : _firestore = firestore ?? FirebaseFirestore.instance;
 
-  CollectionReference get _collection =>
-      _firestore.collection(FirestoreCollections.challengeParticipants);
+  DocumentReference _participantDoc(String challengeId, String userId) => _firestore
+      .collection(FirestoreCollections.challenges)
+      .doc(challengeId)
+      .collection('participants')
+      .doc(userId);
 
   Future<void> joinChallenge(ChallengeParticipant participant) async {
     try {
-      await _collection.doc(participant.id.isEmpty ? null : participant.id).set(
-            participant.toFirestore(),
-            SetOptions(merge: true),
-          );
+      final docRef = _participantDoc(participant.challengeId, participant.userId);
+      if (kDebugMode) {
+        debugPrint('Enrollment: Writing to path: ${docRef.path}');
+      }
+      await docRef.set(
+        participant.toFirestore(),
+        SetOptions(merge: true),
+      );
     } catch (e) {
       throw Exception('Failed to join challenge: $e');
     }
@@ -24,15 +32,19 @@ class ChallengeParticipantRepository {
 
   Future<void> updateParticipant(ChallengeParticipant participant) async {
     try {
-      await _collection.doc(participant.id).update(participant.toFirestore());
+      final docRef = _participantDoc(participant.challengeId, participant.userId);
+      if (kDebugMode) {
+        debugPrint('Enrollment: Updating path: ${docRef.path}');
+      }
+      await docRef.update(participant.toFirestore());
     } catch (e) {
       throw Exception('Failed to update participant: $e');
     }
   }
 
-  Future<ChallengeParticipant?> getParticipant(String participantId) async {
+  Future<ChallengeParticipant?> getParticipant(String challengeId, String userId) async {
     try {
-      final doc = await _collection.doc(participantId).get();
+      final doc = await _participantDoc(challengeId, userId).get();
       if (!doc.exists) return null;
       return ChallengeParticipant.fromFirestore(doc);
     } catch (e) {
@@ -40,25 +52,28 @@ class ChallengeParticipantRepository {
     }
   }
 
+  // Helper for backward compatibility or when we only have the participant's own fields
+  Future<ChallengeParticipant?> getParticipantFromObject(ChallengeParticipant p) async {
+    return getParticipant(p.challengeId, p.userId);
+  }
+
   Future<ChallengeParticipant?> getParticipantByUserAndChallenge(
       String userId, String challengeId) async {
-    try {
-      final snapshot = await _collection
-          .where('userId', isEqualTo: userId)
-          .where('challengeId', isEqualTo: challengeId)
-          .limit(1)
-          .get();
-      if (snapshot.docs.isEmpty) return null;
-      return ChallengeParticipant.fromFirestore(snapshot.docs.first);
-    } catch (e) {
-      throw Exception('Failed to get participant by user and challenge: $e');
-    }
+    return getParticipant(challengeId, userId);
+  }
+
+  Stream<ChallengeParticipant?> streamParticipant(String challengeId, String userId) {
+    return _participantDoc(challengeId, userId)
+        .snapshots()
+        .map((doc) => doc.exists ? ChallengeParticipant.fromFirestore(doc) : null);
   }
 
   Stream<List<ChallengeParticipant>> streamParticipantsByChallenge(
       String challengeId) {
-    return _collection
-        .where('challengeId', isEqualTo: challengeId)
+    return _firestore
+        .collection(FirestoreCollections.challenges)
+        .doc(challengeId)
+        .collection('participants')
         .snapshots()
         .map((snapshot) => snapshot.docs
             .map((doc) => ChallengeParticipant.fromFirestore(doc))
@@ -66,11 +81,28 @@ class ChallengeParticipantRepository {
   }
 
   Stream<List<ChallengeParticipant>> streamParticipantsByUser(String userId) {
-    return _collection
+    // This now requires a collectionGroup query
+    return _firestore
+        .collectionGroup('participants')
         .where('userId', isEqualTo: userId)
         .snapshots()
         .map((snapshot) => snapshot.docs
             .map((doc) => ChallengeParticipant.fromFirestore(doc))
             .toList());
+  }
+
+  Future<bool> hasParticipantsWithPackage(String challengeId, String packageId) async {
+    try {
+      final snapshot = await _firestore
+          .collection(FirestoreCollections.challenges)
+          .doc(challengeId)
+          .collection('participants')
+          .where('selectedPackageId', isEqualTo: packageId)
+          .limit(1)
+          .get();
+      return snapshot.docs.isNotEmpty;
+    } catch (e) {
+      throw Exception('Failed to check participants with package: $e');
+    }
   }
 }

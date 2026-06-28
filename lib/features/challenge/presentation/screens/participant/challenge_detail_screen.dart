@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:elefit_app/theme/app_theme.dart';
 import 'package:elefit_app/widgets/ef_components.dart';
+import 'package:elefit_app/widgets/ef_error_components.dart';
+import 'package:elefit_app/utils/app_error_mapper.dart';
 import 'package:elefit_app/features/challenge/data/constants/firestore_collections.dart';
 import 'package:elefit_app/features/challenge/data/models/challenge.dart';
 import 'package:elefit_app/features/challenge/data/repositories/challenge_repository.dart';
@@ -10,7 +12,9 @@ import 'package:elefit_app/features/challenge/data/repositories/challenge_partic
 import 'package:elefit_app/features/challenge/domain/services/participant_enrollment_service.dart';
 import 'package:elefit_app/features/challenge/domain/services/auth_service.dart';
 import 'package:elefit_app/features/challenge/presentation/screens/participant/participant_challenge_dashboard_screen.dart';
+import 'package:elefit_app/features/challenge/presentation/screens/participant/challenge_package_selection_screen.dart';
 import 'package:elefit_app/features/challenge/presentation/providers/participant_challenge_detail_provider.dart';
+import 'package:elefit_app/services/analytics_service.dart';
 
 class ChallengeDetailScreen extends StatelessWidget {
   final String challengeId;
@@ -45,6 +49,7 @@ class _ChallengeDetailContent extends StatefulWidget {
 class _ChallengeDetailContentState extends State<_ChallengeDetailContent> {
   bool _agreedToRules = false;
   final _nicknameController = TextEditingController();
+  bool _viewLogged = false;
 
   @override
   void dispose() {
@@ -60,6 +65,11 @@ class _ChallengeDetailContentState extends State<_ChallengeDetailContent> {
       builder: (context, provider, _) {
         final challenge = provider.challenge;
 
+        if (challenge != null && !_viewLogged) {
+          _viewLogged = true;
+          AnalyticsService.logChallengeViewed(challenge.id, challenge.title);
+        }
+
         return Scaffold(
           backgroundColor: AppTheme.bg,
           appBar: AppBar(
@@ -69,11 +79,15 @@ class _ChallengeDetailContentState extends State<_ChallengeDetailContent> {
             leading: const BackButton(color: AppTheme.textPrimary),
           ),
           body: provider.isLoading
-              ? const Center(child: CircularProgressIndicator(color: AppTheme.lime))
+              ? const EFLoadingStateView(message: 'Loading challenge details...')
               : provider.errorMessage != null
-                  ? _buildErrorState(provider.errorMessage!)
+                  ? _buildErrorState(context, provider)
                   : challenge == null
-                      ? const Center(child: Text('Challenge not found.', style: AppTheme.bodyLG))
+                      ? const EFEmptyStateView(
+                          title: 'Not Found',
+                          message: 'Challenge not found.',
+                          icon: Icons.search_off_rounded,
+                        )
                       : SingleChildScrollView(
                           padding: const EdgeInsets.all(24),
                           child: Column(
@@ -153,9 +167,9 @@ class _ChallengeDetailContentState extends State<_ChallengeDetailContent> {
           width: double.infinity,
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: isAccent ? AppTheme.lime.withOpacity(0.05) : AppTheme.surface1,
+            color: isAccent ? AppTheme.lime.withValues(alpha: 0.05) : AppTheme.surface1,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: isAccent ? AppTheme.lime.withOpacity(0.2) : Colors.white.withOpacity(0.05)),
+            border: Border.all(color: isAccent ? AppTheme.lime.withValues(alpha: 0.2) : Colors.white.withValues(alpha: 0.05)),
           ),
           child: Text(
             content,
@@ -217,9 +231,9 @@ class _ChallengeDetailContentState extends State<_ChallengeDetailContent> {
           width: double.infinity,
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: statusColor.withOpacity(0.1),
+            color: statusColor.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: statusColor.withOpacity(0.3)),
+            border: Border.all(color: statusColor.withValues(alpha: 0.3)),
           ),
           child: Column(
             children: [
@@ -348,30 +362,58 @@ class _ChallengeDetailContentState extends State<_ChallengeDetailContent> {
       return;
     }
 
-    await provider.joinChallenge(nickname: nickname);
-    if (context.mounted) {
-      if (provider.errorMessage != null) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(provider.errorMessage!), backgroundColor: AppTheme.error));
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Joined challenge successfully! 🎉'), backgroundColor: AppTheme.lime));
-        Navigator.pushReplacement(
-          context, 
-          MaterialPageRoute(builder: (_) => ParticipantChallengeDashboardScreen(challengeId: provider.challengeId))
-        );
-      }
-    }
+    AnalyticsService.logChallengeJoinStarted(provider.challengeId);
+    
+    // Navigate to Package Selection
+    if (!context.mounted) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ChallengePackageSelectionScreen(
+          challengeId: provider.challengeId,
+          onPackageSelected: (package) async {
+            // After package is selected, complete enrollment
+            await provider.joinChallenge(
+              nickname: nickname,
+              package: package,
+            );
+            
+            if (context.mounted) {
+              if (provider.errorMessage != null) {
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(provider.errorMessage!), backgroundColor: AppTheme.error));
+              } else {
+                AnalyticsService.logChallengeJoinCompleted(provider.challengeId, package.id);
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Joined challenge successfully! 🎉'), backgroundColor: AppTheme.lime));
+                Navigator.pushAndRemoveUntil(
+                  context, 
+                  MaterialPageRoute(builder: (_) => ParticipantChallengeDashboardScreen(challengeId: provider.challengeId)),
+                  (route) => route.isFirst,
+                );
+              }
+            }
+          },
+        ),
+      ),
+    );
   }
 
   void _showErrorSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), backgroundColor: AppTheme.error));
   }
 
-  Widget _buildErrorState(String msg) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Text(msg, textAlign: TextAlign.center, style: AppTheme.bodyMD.copyWith(color: AppTheme.error)),
-      ),
+  Widget _buildErrorState(BuildContext context, ParticipantChallengeDetailProvider provider) {
+    final mappedError = AppErrorMapper.map(
+      provider.errorMessage!,
+      screenName: 'ChallengeDetailScreen',
+      featureName: 'ChallengeDiscovery',
+      userId: provider.userId,
+    );
+
+    return EFErrorView(
+      title: mappedError.title,
+      message: mappedError.message,
+      technicalCode: mappedError.technicalCode,
+      onBack: () => Navigator.pop(context),
     );
   }
 }

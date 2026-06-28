@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:elefit_app/features/challenge/data/models/app_user.dart';
 import 'package:elefit_app/features/challenge/data/constants/firestore_collections.dart';
+import 'package:elefit_app/services/analytics_service.dart';
 
 class AuthService with ChangeNotifier {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -37,6 +38,12 @@ class AuthService with ChangeNotifier {
       if (doc.exists) {
         _currentUser = AppUser.fromFirestore(doc);
         debugPrint('AuthService: User profile loaded. isAdmin: ${_currentUser?.isAdmin}, role: ${_currentUser?.role}');
+        
+        // Set user ID and basic properties in analytics
+        await AnalyticsService.setUserProperties(
+          userId: firebaseUser.uid,
+          subscriptionType: 'free', // Default for now
+        );
       } else {
         debugPrint('AuthService: User document not found in Firestore at users/${firebaseUser.uid}');
         // Fallback or create minimal profile if missing
@@ -44,6 +51,8 @@ class AuthService with ChangeNotifier {
           id: firebaseUser.uid,
           email: firebaseUser.email ?? '',
         );
+        
+        await AnalyticsService.setUserProperties(userId: firebaseUser.uid);
       }
     } catch (e) {
       debugPrint('AuthService: Error fetching user profile: $e');
@@ -55,10 +64,17 @@ class AuthService with ChangeNotifier {
   }
 
   bool get isUserAdmin {
-    if (_currentUser == null) return false;
-    return _currentUser!.isAdmin ||
+    if (_currentUser == null) {
+      if (kDebugMode) debugPrint('AuthService: isUserAdmin evaluated to false (user is null)');
+      return false;
+    }
+    final result = _currentUser!.isAdmin ||
         _currentUser!.role == 'admin' ||
         _currentUser!.role == 'superAdmin';
+    if (kDebugMode) {
+      debugPrint('AuthService: isUserAdmin evaluated to $result for UID: ${_currentUser!.id}');
+    }
+    return result;
   }
 
   Future<void> signIn(String email, String password) async {
@@ -67,6 +83,7 @@ class AuthService with ChangeNotifier {
         email: email.trim(),
         password: password,
       );
+      await AnalyticsService.logLoginSuccess('email');
     } catch (e) {
       debugPrint('Error signing in: $e');
       rethrow;
@@ -79,6 +96,7 @@ class AuthService with ChangeNotifier {
         email: email.trim(),
         password: password,
       );
+      await AnalyticsService.logRegistrationCompleted(method: 'email', source: 'app');
     } catch (e) {
       debugPrint('Error signing up: $e');
       rethrow;

@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="1200" viewBox="0 0 640 1200">
+  <rect width="640" height="1200" rx="48" fill="#050816"/>
+  <rect x="40" y="40" width="560" height="1120" rx="36" fill="#0b1327"/>
+  <rect x="80" y="90" width="480" height="94" rx="24" fill="#111c34"/>
+  <rect x="110" y="122" width="180" height="14" rx="7" fill="#f8fafc"/>
+  <rect x="110" y="150" width="120" height="12" rx="6" fill="#64748b"/>
+  <rect x="420" y="118" width="110" height="40" rx="20" fill="#2dd4bf" opacity="0.8"/>
+  <rect x="80" y="230" width="220" height="300" rx="28" fill="#111c34"/>
+  <rect x="340" y="230" width="220" height="300" rx="28" fill="url(#grad4)"/>
+  <rect x="80" y="560" width="480" height="220" rx="28" fill="#111c34"/>
+  <rect x="80" y="820" width="480" height="240" rx="28" fill="#14233d"/>
+  <rect x="120" y="282" width="140" height="14" rx="7" fill="#f8fafc"/>
+  <rect x="120" y="314" width="100" height="10" rx="5" fill="#64748b"/>
+  <rect x="120" y="360" width="120" height="120" rx="16" fill="#2dd4bf" opacity="0.7"/>
+  <rect x="380" y="282" width="140" height="14" rx="7" fill="#f8fafc"/>
+  <rect x="380" y="314" width="100" height="10" rx="5" fill="#e2e8f0"/>
+  <rect x="380" y="370" width="140" height="14" rx="7" fill="#f8fafc"/>
+  <rect x="380" y="404" width="100" height="10" rx="5" fill="#e2e8f0"/>
+  <rect x="110" y="610" width="180" height="16" rx="8" fill="#f8fafc"/>
+  <rect x="110" y="646" width="250" height="12" rx="6" fill="#64748b"/>
+  <rect x="110" y="680" width="200" height="12" rx="6" fill="#64748b"/>
+  <rect x="400" y="610" width="120" height="110" rx="22" fill="url(#grad5)"/>
+  <rect x="120" y="876" width="160" height="14" rx="7" fill="#f8fafc"/>
+  <rect x="120" y="914" width="280" height="12" rx="6" fill="#64748b"/>
+  <rect x="120" y="950" width="200" height="12" rx="6" fill="#64748b"/>
+  <circle cx="460" cy="900" r="50" fill="#2dd4bf" opacity="0.85"/>
+  <defs>
+    <linearGradient id="grad4" x1="340" y1="230" x2="560" y2="530" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0f766e"/>
+      <stop offset="1" stop-color="#3b82f6"/>
+    </linearGradient>
+    <linearGradient id="grad5" x1="400" y1="610" x2="520" y2="720" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2dd4bf"/>
+      <stop offset="1" stop-color="#38bdf8"/>
+    </linearGradient>
+  </defs>
+</svg>

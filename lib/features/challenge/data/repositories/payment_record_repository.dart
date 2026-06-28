@@ -11,12 +11,14 @@ class PaymentRecordRepository {
   CollectionReference get _collection =>
       _firestore.collection(FirestoreCollections.paymentRecords);
 
-  Future<void> createPaymentRecord(PaymentRecord payment) async {
+  Future<String> createPaymentRecord(PaymentRecord payment) async {
     try {
-      await _collection.doc(payment.id.isEmpty ? null : payment.id).set(
-            payment.toFirestore(),
-            SetOptions(merge: true),
-          );
+      final docRef = _collection.doc(payment.id.isEmpty ? null : payment.id);
+      await docRef.set(
+        payment.toFirestore(),
+        SetOptions(merge: true),
+      );
+      return docRef.id;
     } catch (e) {
       throw Exception('Failed to create payment record: $e');
     }

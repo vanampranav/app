@@ -14,6 +14,9 @@ import 'package:elefit_app/features/challenge/presentation/screens/admin/admin_c
 import 'package:elefit_app/features/challenge/presentation/screens/admin/admin_participants_screen.dart';
 import 'package:elefit_app/features/challenge/presentation/screens/admin/admin_payments_screen.dart';
 import 'package:elefit_app/features/challenge/presentation/screens/admin/admin_submissions_screen.dart';
+import 'package:elefit_app/features/challenge/presentation/screens/admin/admin_challenge_packages_screen.dart';
+import 'package:elefit_app/features/challenge/presentation/screens/admin/admin_challenge_payments_screen.dart';
+import 'package:elefit_app/features/challenge/presentation/screens/admin/admin_challenge_eligibility_dashboard_screen.dart';
 import 'package:elefit_app/features/challenge/presentation/screens/admin/admin_audit_logs_screen.dart';
 
 import 'package:elefit_app/features/challenge/domain/services/challenge_notification_service.dart';
@@ -210,7 +213,7 @@ class _AdminChallengeDetailContent extends StatelessWidget {
             size: 20,
           ),
           const SizedBox(width: 12),
-          Text(label, style: AppTheme.bodyMD),
+          Expanded(child: Text(label, style: AppTheme.bodyMD)),
         ],
       ),
     );
@@ -245,9 +248,30 @@ class _AdminChallengeDetailContent extends StatelessWidget {
         const SizedBox(height: 12),
         _buildActionButton(
           context,
+          icon: Icons.payments_outlined,
+          label: 'Payment Tracking',
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AdminChallengePaymentsScreen(challengeId: challenge.id))),
+        ),
+        const SizedBox(height: 12),
+        _buildActionButton(
+          context,
+          icon: Icons.dashboard_customize_outlined,
+          label: 'Eligibility Dashboard',
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AdminChallengeEligibilityDashboardScreen(challengeId: challenge.id))),
+        ),
+        const SizedBox(height: 12),
+        _buildActionButton(
+          context,
           icon: Icons.history_rounded,
           label: 'View Audit Logs',
           onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AdminAuditLogsScreen(challengeId: challenge.id))),
+        ),
+        const SizedBox(height: 12),
+        _buildActionButton(
+          context,
+          icon: Icons.inventory_2_outlined,
+          label: 'Manage Packages',
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AdminChallengePackagesScreen(challengeId: challenge.id))),
         ),
       ],
     );
@@ -399,8 +423,15 @@ class _AdminChallengeDetailContent extends StatelessWidget {
         children: [
           Icon(icon, size: 20, color: AppTheme.lime),
           const SizedBox(width: 16),
-          Text(label, style: AppTheme.labelLG),
-          const Spacer(),
+          Expanded(
+            child: Text(
+              label,
+              style: AppTheme.labelLG,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 8),
           const Icon(Icons.chevron_right_rounded, color: AppTheme.textTertiary),
         ],
       ),

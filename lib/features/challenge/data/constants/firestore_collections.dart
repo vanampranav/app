@@ -27,10 +27,15 @@ class ParticipantStatus {
 
 class PaymentStatus {
   static const String pending = 'pending';
+  static const String pendingReview = 'pending_review';
+  static const String partiallyPaid = 'partiallyPaid';
   static const String paid = 'paid';
   static const String waived = 'waived';
   static const String refunded = 'refunded';
-  static const String rejected = 'rejected';
+  static const String failed = 'failed';
+
+  // Legacy (mapping if needed)
+  static const String rejected = 'failed';
 }
 
 class SubmissionType {
@@ -47,9 +52,15 @@ class ReviewStatus {
 }
 
 class PaymentMethod {
+  static const String manual = 'manual';
+  static const String cash = 'cash';
   static const String zelle = 'zelle';
   static const String venmo = 'venmo';
+  static const String paypal = 'paypal';
+  static const String upi = 'upi';
+  static const String stripe = 'stripe';
+  
+  // Legacy
   static const String cashApp = 'cashApp';
-  static const String cash = 'cash';
   static const String other = 'other';
 }
