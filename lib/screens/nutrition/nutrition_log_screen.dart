@@ -10,6 +10,7 @@ import '../../services/nutrition_service.dart';
 import '../../services/meal_vision_service.dart';
 import '../../services/firebase_rest_service.dart';
 import '../../services/fitdays_service.dart';
+import '../../services/streak_service.dart';
 import '../../models/device_model.dart';
 import '../../utils/food_emoji_helper.dart';
 import '../../utils/food_icon_helper.dart';
@@ -40,7 +41,9 @@ class _NutritionLogScreenState extends State<NutritionLogScreen> {
   DailySummary _summary         = DailySummary(date: DateTime.now(), entries: []);
   Set<String>  _daysWithEntries = {};   // keys like '2026-05-29'
   bool         _scaleConnected  = false;
+  bool         _bluetoothOn      = true;
   StreamSubscription? _connSub;
+  StreamSubscription? _btSub;
 
   int _calGoal     = 2000;
   int _proteinGoal = 150;
@@ -64,18 +67,58 @@ class _NutritionLogScreenState extends State<NutritionLogScreen> {
     _loadGoals();
     _loadSummary();
     _loadDaysWithEntries();
-    // Track scale connection state for the BT button colour
-    _scaleConnected = _fitDays.connectedDeviceMac != null;
-    _connSub = _fitDays.connectionStateStream.listen((data) {
+    // Track scale connection state for the BT button colour. Use the service's
+    // set-based check so a stale device's disconnect doesn't wrongly flip it.
+    _scaleConnected = _fitDays.hasConnectedDevice;
+    _connSub = _fitDays.connectionStateStream.listen((_) {
       if (!mounted) return;
-      setState(() => _scaleConnected = data['state'] == 'connected');
+      setState(() => _scaleConnected = _fitDays.hasConnectedDevice);
+    });
+
+    // Track the phone's Bluetooth state so the BT button can show "off".
+    _bluetoothOn = _fitDays.isBluetoothOn ?? true;
+    _btSub = _fitDays.bluetoothStateStream.listen((on) {
+      if (!mounted) return;
+      setState(() {
+        _bluetoothOn = on;
+        if (!on) _scaleConnected = false; // BT off ⇒ nothing is connected
+      });
     });
   }
 
   @override
   void dispose() {
     _connSub?.cancel();
+    _btSub?.cancel();
     super.dispose();
+  }
+
+  void _showBluetoothOffMessage() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surface1,
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppTheme.radiusXxl)),
+        title: Row(children: [
+          const Icon(Icons.bluetooth_disabled_rounded, color: AppTheme.error, size: 20),
+          const SizedBox(width: 10),
+          Text('Bluetooth is off', style: AppTheme.headingSM),
+        ]),
+        content: Text(
+          'Turn on Bluetooth in your device settings to connect your scale.',
+          style: AppTheme.bodyMD.copyWith(height: 1.5),
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.lime, foregroundColor: Colors.black),
+            child: const Text('Got it', style: TextStyle(fontWeight: FontWeight.w900)),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _loadDaysWithEntries() async {
@@ -145,16 +188,8 @@ class _NutritionLogScreenState extends State<NutritionLogScreen> {
     await prefs.setInt('carbs_$k',        _summary.totalCarbs.round());
     await prefs.setInt('fat_$k',          _summary.totalFat.round());
 
-    // Update streak — only increment once per day
-    final todayKey   = _dateKey(d);
-    final lastLogged = prefs.getString('streak_last_date') ?? '';
-    if (lastLogged != todayKey) {
-      final yesterday    = _dateKey(d.subtract(const Duration(days: 1)));
-      final currentStreak = prefs.getInt('streak') ?? 0;
-      final newStreak    = lastLogged == yesterday ? currentStreak + 1 : 1;
-      await prefs.setInt('streak', newStreak);
-      await prefs.setString('streak_last_date', todayKey);
-    }
+    // Logging a meal counts as a streak-qualifying activity for today.
+    await StreakService.recordActivity();
   }
 
   bool _isToday(DateTime d) {
@@ -388,17 +423,27 @@ class _NutritionLogScreenState extends State<NutritionLogScreen> {
               color: AppTheme.textPrimary,
               letterSpacing: -0.3)),
       actions: [
-        // Bluetooth / scale connect button
+        // Bluetooth / scale connect button — 3 states: BT off, connected, idle.
         IconButton(
-          tooltip: _scaleConnected ? 'Scale connected' : 'Connect scale',
+          tooltip: !_bluetoothOn
+              ? 'Bluetooth is off'
+              : _scaleConnected
+                  ? 'Scale connected'
+                  : 'Connect scale',
           icon: Icon(
-            _scaleConnected
-                ? Icons.bluetooth_connected_rounded
-                : Icons.bluetooth_rounded,
-            color: _scaleConnected ? AppTheme.lime : AppTheme.textSecondary,
+            !_bluetoothOn
+                ? Icons.bluetooth_disabled_rounded
+                : _scaleConnected
+                    ? Icons.bluetooth_connected_rounded
+                    : Icons.bluetooth_rounded,
+            color: !_bluetoothOn
+                ? AppTheme.error
+                : _scaleConnected
+                    ? AppTheme.lime
+                    : AppTheme.textSecondary,
             size: 22,
           ),
-          onPressed: _showScaleScanner,
+          onPressed: !_bluetoothOn ? _showBluetoothOffMessage : _showScaleScanner,
         ),
         // Calendar / date picker
         IconButton(
@@ -1226,20 +1271,49 @@ class _MealVisionConfirmSheet extends StatefulWidget {
 }
 
 class _MealVisionConfirmSheetState extends State<_MealVisionConfirmSheet> {
-  late List<MealEntry> _entries;
+  late List<MealEntry> _entries;      // current (editable) entries
+  late List<MealEntry> _baseEntries;  // immutable originals — for proportional recalc
 
   @override
   void initState() {
     super.initState();
     _entries = List.from(widget.initialEntries);
+    _baseEntries = List.from(widget.initialEntries);
   }
 
-  void _updateEntry(int index, MealEntry newEntry) {
-    setState(() => _entries[index] = newEntry);
+  void _setName(int index, String name) {
+    final e = _entries[index];
+    setState(() => _entries[index] = MealEntry(
+          id: e.id, foodName: name, fdcId: e.fdcId, weight: e.weight,
+          nutrition: e.nutrition, meal: e.meal, timestamp: e.timestamp,
+          imageUrl: e.imageUrl,
+        ));
+  }
+
+  /// Changing the weight rescales ALL nutrition proportionally from the ORIGINAL
+  /// reading (not the current value) so repeated edits don't compound.
+  void _setWeight(int index, double newWeight) {
+    if (newWeight <= 0) return;
+    final base = _baseEntries[index];
+    final cur = _entries[index];
+    final factor = base.weight > 0 ? newWeight / base.weight : 1.0;
+    setState(() => _entries[index] = MealEntry(
+          id: cur.id,
+          foodName: cur.foodName, // keep any name edit
+          fdcId: cur.fdcId,
+          weight: newWeight,
+          nutrition: base.nutrition.scale(factor),
+          meal: cur.meal,
+          timestamp: cur.timestamp,
+          imageUrl: cur.imageUrl,
+        ));
   }
 
   void _removeEntry(int index) {
-    setState(() => _entries.removeAt(index));
+    setState(() {
+      _entries.removeAt(index);
+      _baseEntries.removeAt(index); // keep the two lists index-aligned
+    });
     if (_entries.isEmpty) Navigator.pop(context);
   }
 
@@ -1276,7 +1350,8 @@ class _MealVisionConfirmSheetState extends State<_MealVisionConfirmSheet> {
             separatorBuilder: (_, __) => const SizedBox(height: 16),
             itemBuilder: (ctx, i) => _ConfirmFoodItem(
               entry: _entries[i],
-              onChanged: (e) => _updateEntry(i, e),
+              onNameChanged: (name) => _setName(i, name),
+              onWeightChanged: (w) => _setWeight(i, w),
               onRemoved: () => _removeEntry(i),
             ),
           ),
@@ -1295,12 +1370,14 @@ class _MealVisionConfirmSheetState extends State<_MealVisionConfirmSheet> {
 
 class _ConfirmFoodItem extends StatelessWidget {
   final MealEntry entry;
-  final Function(MealEntry) onChanged;
+  final ValueChanged<String> onNameChanged;
+  final ValueChanged<double> onWeightChanged;
   final VoidCallback onRemoved;
 
   const _ConfirmFoodItem({
     required this.entry,
-    required this.onChanged,
+    required this.onNameChanged,
+    required this.onWeightChanged,
     required this.onRemoved,
   });
 
@@ -1330,7 +1407,7 @@ class _ConfirmFoodItem extends StatelessWidget {
                 border: InputBorder.none,
                 hintText: 'Food name',
               ),
-              onChanged: (val) => onChanged(_copyWith(foodName: val)),
+              onChanged: onNameChanged,
             ),
           ),
           IconButton(
@@ -1364,81 +1441,39 @@ class _ConfirmFoodItem extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         Row(children: [
+          // Weight is the ONLY editable nutrition input — everything else is
+          // recalculated proportionally from it (key on weight so the field
+          // updates if changed elsewhere, but lets the user type freely).
           Expanded(
             child: _EditField(
               label: 'Weight (g)',
               value: entry.weight.round().toString(),
               onChanged: (val) {
                 final w = double.tryParse(val);
-                if (w != null && w > 0) onChanged(_copyWith(weight: w));
+                if (w != null && w > 0) onWeightChanged(w);
               },
             ),
           ),
           const SizedBox(width: 12),
+          // Calories — derived, read-only.
           Expanded(
-            child: _EditField(
+            child: _ReadOnlyField(
               label: 'Calories',
               value: entry.nutrition.calories.round().toString(),
-              onChanged: (val) {
-                final cal = double.tryParse(val) ?? entry.nutrition.calories;
-                onChanged(_copyWith(calories: cal));
-              },
             ),
           ),
         ]),
         const SizedBox(height: 12),
+        // Macros — derived from weight, read-only.
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
-            _MacroEdit(
-              label: 'P',
-              value: entry.nutrition.protein.round().toString(),
-              color: const Color(0xFFFF6B6B),
-              onChanged: (val) => onChanged(_copyWith(protein: double.tryParse(val))),
-            ),
-            _MacroEdit(
-              label: 'C',
-              value: entry.nutrition.carbs.round().toString(),
-              color: const Color(0xFF4ECDC4),
-              onChanged: (val) => onChanged(_copyWith(carbs: double.tryParse(val))),
-            ),
-            _MacroEdit(
-              label: 'F',
-              value: entry.nutrition.fat.round().toString(),
-              color: const Color(0xFFFFD93D),
-              onChanged: (val) => onChanged(_copyWith(fat: double.tryParse(val))),
-            ),
+            _MacroDisplay(label: 'P', value: entry.nutrition.protein.round().toString(), color: const Color(0xFFFF6B6B)),
+            _MacroDisplay(label: 'C', value: entry.nutrition.carbs.round().toString(), color: const Color(0xFF4ECDC4)),
+            _MacroDisplay(label: 'F', value: entry.nutrition.fat.round().toString(), color: const Color(0xFFFFD93D)),
           ],
         ),
       ]),
-    );
-  }
-
-  MealEntry _copyWith({
-    String? foodName,
-    double? weight,
-    double? calories,
-    double? protein,
-    double? carbs,
-    double? fat,
-  }) {
-    return MealEntry(
-      id: entry.id,
-      foodName: foodName ?? entry.foodName,
-      fdcId: entry.fdcId,
-      weight: weight ?? entry.weight,
-      meal: entry.meal,
-      timestamp: entry.timestamp,
-      imageUrl: entry.imageUrl,
-      nutrition: NutritionData(
-        calories: calories ?? entry.nutrition.calories,
-        protein: protein ?? entry.nutrition.protein,
-        carbs: carbs ?? entry.nutrition.carbs,
-        fat: fat ?? entry.nutrition.fat,
-        fiber: entry.nutrition.fiber,
-        sugar: entry.nutrition.sugar,
-        sodium: entry.nutrition.sodium,
-      ),
     );
   }
 }
@@ -1471,13 +1506,40 @@ class _EditField extends StatelessWidget {
   }
 }
 
-class _MacroEdit extends StatelessWidget {
+// Read-only numeric field — used for derived nutrition values (calories) that
+// recalculate from weight and must not be directly edited.
+class _ReadOnlyField extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _ReadOnlyField({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(label, style: AppTheme.labelSM.copyWith(color: AppTheme.textTertiary)),
+      const SizedBox(height: 4),
+      Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppTheme.surface2.withOpacity(0.5),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(value,
+            style: AppTheme.numericMD.copyWith(fontSize: 16, color: AppTheme.textSecondary)),
+      ),
+    ]);
+  }
+}
+
+// Read-only macro chip — derived from weight, not directly editable.
+class _MacroDisplay extends StatelessWidget {
   final String label;
   final String value;
   final Color color;
-  final Function(String) onChanged;
 
-  const _MacroEdit({required this.label, required this.value, required this.color, required this.onChanged});
+  const _MacroDisplay({required this.label, required this.value, required this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -1488,26 +1550,15 @@ class _MacroEdit extends StatelessWidget {
         const SizedBox(height: 4),
         Container(
           width: 54,
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
           decoration: BoxDecoration(
-            color: AppTheme.surface2,
+            color: AppTheme.surface2.withOpacity(0.5),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(color: Colors.white.withOpacity(0.05)),
           ),
-          child: TextFormField(
-            key: ValueKey(value),
-            initialValue: value,
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
-            textAlign: TextAlign.center,
-            style: AppTheme.numericMD.copyWith(fontSize: 14, color: Colors.white),
-            decoration: const InputDecoration(
-              isDense: true,
-              border: InputBorder.none,
-              contentPadding: EdgeInsets.zero,
-            ),
-            onChanged: onChanged,
-          ),
+          child: Text(value,
+              textAlign: TextAlign.center,
+              style: AppTheme.numericMD.copyWith(fontSize: 14, color: AppTheme.textSecondary)),
         ),
       ],
     );

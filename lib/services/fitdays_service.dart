@@ -47,6 +47,15 @@ class FitDaysService {
   WeightMeasurement? _lastWeight;
   WeightMeasurement? get lastWeight => _lastWeight;
 
+  // Timestamp of the last weight reading. A powered-on scale streams
+  // continuously; a powered-off one goes silent. So "streaming" = a reading
+  // arrived in the last few seconds — the only reliable "scale is really on/here"
+  // signal (a stale BLE connection lingers long after the scale powers off).
+  DateTime? _lastWeightAt;
+  bool get isScaleStreaming =>
+      _lastWeightAt != null &&
+      DateTime.now().difference(_lastWeightAt!).inSeconds < 5;
+
   // MAC of the device actively streaming weight. More reliable than
   // connectedDeviceMac for sending tare/unit commands, because a stale bound
   // device churning connect/disconnect can clobber connectedDeviceMac.
@@ -60,9 +69,15 @@ class FitDaysService {
   bool    _isScanning       = false;
   bool?   _isBluetoothOn;
   bool?   get isBluetoothOn => _isBluetoothOn;
-  String? _connectedDeviceMac;
-  /// MAC address of the currently connected device, or null if disconnected.
-  String? get connectedDeviceMac => _connectedDeviceMac;
+  // Track ALL connected devices as a set. A stale bound device can churn
+  // connect/disconnect; with a single field its disconnect would wrongly clear
+  // the real connection. The set keeps the live device even when another drops.
+  final Set<String> _connectedMacs = {};
+  /// MAC of a currently connected device (most recent), or null if none.
+  String? get connectedDeviceMac =>
+      _connectedMacs.isEmpty ? null : _connectedMacs.last;
+  /// True when at least one device is connected.
+  bool get hasConnectedDevice => _connectedMacs.isNotEmpty;
   StreamSubscription? _eventSubscription;
 
   /// Set up event channel listener for SDK events
@@ -105,8 +120,20 @@ class FitDaysService {
           // needing to know the MAC address themselves.
           final state = data['state'] as String?;
           final mac   = data['macAddress'] as String?;
-          if (state == 'connected')    _connectedDeviceMac = mac;
-          if (state == 'disconnected') _connectedDeviceMac = null;
+          if (mac != null) {
+            if (state == 'connected') _connectedMacs.add(mac);
+            if (state == 'disconnected') {
+              _connectedMacs.remove(mac);
+              // The streaming device dropped (e.g. scale powered off) — clear the
+              // cached "active scale" + last reading so the UI stops showing it as
+              // connected/live.
+              if (_activeScaleMac == mac) {
+                _activeScaleMac = null;
+                _lastWeight = null;
+                _lastWeightAt = null;
+              }
+            }
+          }
           _connectionStateController.add(data);
         }
         break;
@@ -118,6 +145,7 @@ class FitDaysService {
         if (data != null) {
           final m = WeightMeasurement.fromMap(data, source: WeightSource.kitchenScale);
           _lastWeight = m;
+          _lastWeightAt = DateTime.now();
           if (data['macAddress'] != null) _activeScaleMac = data['macAddress'] as String?;
           _weightDataController.add(m);
         }
@@ -151,6 +179,7 @@ class FitDaysService {
 
           final m = WeightMeasurement.fromMap(data, source: src);
           _lastWeight = m;
+          _lastWeightAt = DateTime.now();
           if (data['macAddress'] != null) _activeScaleMac = data['macAddress'] as String?;
           _weightDataController.add(m);
         }

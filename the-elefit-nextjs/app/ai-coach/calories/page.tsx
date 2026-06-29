@@ -223,7 +223,7 @@ export default function Calories() {
 
             // 2. Generate Workout Plan (Conditional)
             if (data.helpType === 'workout' || data.helpType === 'both') {
-                const workoutResponse = await fetch('https://yantraprise.com/workoutplan', {
+                const workoutResponse = await fetch('https://yantraprise/workoutplan', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({

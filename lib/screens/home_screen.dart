@@ -18,6 +18,7 @@ import '../screens/shop_screen.dart';
 import '../widgets/main_layout.dart';
 import '../screens/measurement_screen.dart';
 import '../services/member_service.dart';
+import '../services/streak_service.dart';
 import '../models/member_model.dart';
 import '../widgets/device_scan_sheet.dart';
 
@@ -105,6 +106,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Future<void> _loadFitnessStats() async {
     final prefs = await SharedPreferences.getInstance();
     final today = _todayKey();
+    // Streak is only shown if still "alive" (activity today or yesterday);
+    // a broken streak reads back as 0 instead of a stale number.
+    final aliveStreak = await StreakService.currentStreak();
     if (mounted) {
       setState(() {
         _caloriesConsumed = prefs.getInt('cal_consumed_$today') ?? 0;
@@ -118,7 +122,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         _fatG             = prefs.getInt('fat_$today') ?? 0;
         _fatGoal          = prefs.getInt('fat_goal') ?? 65;
         _latestWeight     = prefs.getDouble('latest_weight');
-        _streak           = prefs.getInt('streak') ?? 0;
+        _streak           = aliveStreak;
         _waterMl          = prefs.getInt('water_ml_${_todayKey()}') ?? 0;
         _userName         = prefs.getString('user_name') ?? '';
       });
@@ -590,7 +594,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   ),
                 ],
               ),
-              if (_streak > 0) EFStreakBadge(streak: _streak),
+              if (_streak > 0)
+                GestureDetector(
+                  onTap: _showStreakInfo,
+                  child: EFStreakBadge(streak: _streak),
+                ),
             ],
           ),
         ),
@@ -926,6 +934,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 unit: 'days',
                 icon: const Text('🔥', style: TextStyle(fontSize: 14)),
                 valueColor: const Color(0xFFFF6B35),
+                onTap: _showStreakInfo,
               ),
             ),
             const SizedBox(width: AppTheme.sm),
@@ -945,13 +954,105 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
+  // ─── Streak info ──────────────────────────────────────────────────────────────
+
+  void _showStreakInfo() {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: AppTheme.surface1,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFF6B35).withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Center(
+                    child: Text('🔥', style: TextStyle(fontSize: 24)),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Text('Your daily streak', style: AppTheme.headingSM),
+                ),
+              ]),
+              const SizedBox(height: 16),
+              Text(
+                'Improve your streak by logging meals consistently and gain credits.',
+                style: AppTheme.bodyMD,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Do any of these once a day to keep it alive:',
+                style: AppTheme.bodyMD.copyWith(color: AppTheme.textSecondary),
+              ),
+              const SizedBox(height: 10),
+              _streakTip('🍽️', 'Log a meal'),
+              _streakTip('⚖️', 'Record your weight'),
+              _streakTip('💧', 'Log your water'),
+              const SizedBox(height: 8),
+              Text(
+                'Miss a day and your streak resets to zero — so check in daily!',
+                style: AppTheme.bodySM.copyWith(color: AppTheme.textTertiary),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFFF6B35),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                    ),
+                  ),
+                  child: const Text('Got it',
+                      style: TextStyle(fontWeight: FontWeight.w700)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _streakTip(String emoji, String label) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(children: [
+        Text(emoji, style: const TextStyle(fontSize: 16)),
+        const SizedBox(width: 10),
+        Text(label, style: AppTheme.bodyMD),
+      ]),
+    );
+  }
+
   // ─── Water sheet ──────────────────────────────────────────────────────────────
 
   Future<void> _addWater(int ml) async {
     final prefs = await SharedPreferences.getInstance();
     final newTotal = _waterMl + ml;
     await prefs.setInt('water_ml_${_todayKey()}', newTotal);
-    if (mounted) setState(() => _waterMl = newTotal);
+    // Logging water keeps the daily streak alive.
+    final newStreak = await StreakService.recordActivity();
+    if (mounted) setState(() {
+      _waterMl = newTotal;
+      _streak = newStreak;
+    });
   }
 
   void _showWaterSheet() {

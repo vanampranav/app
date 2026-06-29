@@ -46,11 +46,21 @@ class _DeviceScanSheetState extends State<DeviceScanSheet> {
   StreamSubscription? _connSub;
   StreamSubscription? _scanningSub;
   StreamSubscription? _btSub;
+  StreamSubscription? _weightSub;
+  Timer? _streamTick;
 
   @override
   void initState() {
     super.initState();
     _setupDeviceListeners();
+    // Re-evaluate "is the scale actually streaming" on each reading + every 2s
+    // (so it flips back to off when the scale goes silent / is powered off).
+    _weightSub = _fitDays.weightDataStream.listen((_) {
+      if (mounted) setState(() {});
+    });
+    _streamTick = Timer.periodic(const Duration(seconds: 2), (_) {
+      if (mounted) setState(() {});
+    });
     _init();
   }
 
@@ -60,9 +70,18 @@ class _DeviceScanSheetState extends State<DeviceScanSheet> {
     _connSub?.cancel();
     _scanningSub?.cancel();
     _btSub?.cancel();
+    _weightSub?.cancel();
+    _streamTick?.cancel();
     _fitDays.stopScan();
     super.dispose();
   }
+
+  /// Whether the scale is genuinely reachable RIGHT NOW (not a stale connection).
+  /// Kitchen scales stream continuously when on, so streaming = on. Body-fat
+  /// scales only send on weigh-in, so fall back to the connection state.
+  bool get _scaleReachable => widget.filterType == DeviceType.kitchenScale
+      ? _fitDays.isScaleStreaming
+      : _fitDays.hasConnectedDevice;
 
   // ── Initialise: permissions → SDK profile → Bluetooth check → scan ────────
   Future<void> _init() async {
@@ -300,7 +319,14 @@ class _DeviceScanSheetState extends State<DeviceScanSheet> {
       ));
     }
 
-    final alreadyConnectedMac = _fitDays.connectedDeviceMac;
+    // Only treat as connected when the scale is genuinely reachable — a stale
+    // BLE connection lingers after the scale powers off.
+    final alreadyConnectedMac = _scaleReachable ? _fitDays.connectedDeviceMac : null;
+    // Kitchen scale is off (not streaming) once BT + permissions are ready.
+    final scaleIsOff = widget.filterType == DeviceType.kitchenScale &&
+        _isBluetoothOn &&
+        _hasPermissions &&
+        !_fitDays.isScaleStreaming;
 
     return Container(
       decoration: const BoxDecoration(
@@ -341,6 +367,33 @@ class _DeviceScanSheetState extends State<DeviceScanSheet> {
           ]),
         ),
         Divider(height: 1, color: Colors.white.withOpacity(0.06)),
+
+        // Scale is off — prompt the user to power it on (kitchen scale streams
+        // continuously when on, so "not streaming" = off).
+        if (scaleIsOff) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+            child: Row(children: [
+              const Icon(Icons.power_settings_new_rounded,
+                  color: AppTheme.warning, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('Please turn on your scale',
+                      style: AppTheme.bodyMD.copyWith(color: AppTheme.warning, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 2),
+                  Text('Power on your scale and keep it nearby — it will connect automatically.',
+                      style: AppTheme.bodySM),
+                ]),
+              ),
+              const SizedBox(width: 8),
+              const SizedBox(
+                width: 16, height: 16,
+                child: CircularProgressIndicator(color: AppTheme.warning, strokeWidth: 2)),
+            ]),
+          ),
+          Divider(height: 1, color: Colors.white.withOpacity(0.04)),
+        ],
 
         // Already connected banner
         if (alreadyConnectedMac != null) ...[

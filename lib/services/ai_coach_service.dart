@@ -23,6 +23,8 @@ class AiCoachTarget {
 }
 
 class AiCoachService {
+  // Custom FastAPI backend (same host as meal-vision). Endpoints: /user,
+  // /mealplan, /workoutplan. Rate-limited + API-key gated server-side.
   static const String _baseUrl = 'https://yantraprise.com';
 
   /// Step 1: Call /user endpoint to get calorie targets + macros

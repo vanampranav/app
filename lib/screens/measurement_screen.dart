@@ -8,6 +8,7 @@ import '../models/member_model.dart';
 import '../services/fitdays_service.dart';
 import '../services/member_service.dart';
 import '../services/health_service.dart';
+import '../services/streak_service.dart';
 import '../theme/app_theme.dart';
 import 'add_member_screen.dart';
 
@@ -118,6 +119,10 @@ class _MeasurementScreenState extends State<MeasurementScreen> {
   WeightMeasurement? _compareMeasurement;
   Member? _activeMember;
   List<Member> _members = [];
+  // True while switching members + re-initialising the SDK. Readings that arrive
+  // during this window must NOT be saved — the SDK still holds the previous
+  // member's profile, so body composition would be wrong for the new member.
+  bool _switchingMember = false;
   bool _isConnected = false;
   bool _isLoading = true;
   StreamSubscription? _weightSub;
@@ -217,7 +222,7 @@ class _MeasurementScreenState extends State<MeasurementScreen> {
         description: 'Subcutaneous fat is the fat stored directly under your skin. While some subcutaneous fat is normal and healthy, too much can lead to health issues. This type of fat can be reduced through diet and exercise.',
         scaleMin: 0,
         scaleMax: 30,
-        getValue: () => null, // Not available from SDK
+        getValue: () => _latestMeasurement?.subcutaneousFat,
         ranges: isMale ? [
           MetricRange(label: 'Low', minValue: 0, maxValue: 8.6, color: const Color(0xFF4FC3F7), level: HealthLevel.low),
           MetricRange(label: 'Standard', minValue: 8.6, maxValue: 16.7, color: const Color(0xFF81C784), level: HealthLevel.standard),
@@ -544,6 +549,7 @@ class _MeasurementScreenState extends State<MeasurementScreen> {
       if (measurement.isStabilized &&
           measurement.weight >= 20.0 &&
           _activeMember != null &&
+          !_switchingMember && // don't save while the SDK is mid-profile-switch
           measurement.hasBodyComposition) {
         _saveMeasurement(measurement);
       }
@@ -567,6 +573,7 @@ class _MeasurementScreenState extends State<MeasurementScreen> {
       weightKg: measurement.weight,
       bmi: measurement.bmi,
       bodyFatPercent: measurement.bodyFat,
+      subcutaneousFatPercent: measurement.subcutaneousFat,
       muscleRatePercent: measurement.muscle,
       bodyWaterPercent: measurement.water,
       boneMassKg: measurement.boneMass,
@@ -585,6 +592,9 @@ class _MeasurementScreenState extends State<MeasurementScreen> {
 
     // Push to Apple Health / Health Connect (silent — never blocks UI)
     HealthService().syncScaleReading(measurement);
+
+    // Recording a body measurement keeps the daily streak alive.
+    await StreakService.recordActivity();
   }
 
   /// BMI from height in member profile — no BIA needed
@@ -699,6 +709,9 @@ class _MeasurementScreenState extends State<MeasurementScreen> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble('latest_weight', weightKg);
 
+    // Logging a weight keeps the daily streak alive.
+    await StreakService.recordActivity();
+
     final measurements =
         await _memberService.getMeasurements(_activeMember!.id, limit: 2);
     if (mounted && measurements.isNotEmpty) {
@@ -711,6 +724,41 @@ class _MeasurementScreenState extends State<MeasurementScreen> {
         }
       });
     }
+  }
+
+  /// Switches the active member atomically: blocks saving, clears the previous
+  /// member's reading, re-initialises the SDK with the new member's profile, then
+  /// loads the new member's history. Prevents a reading from being saved to the
+  /// wrong profile or with another member's body-composition math.
+  Future<void> _switchToMember(Member member) async {
+    setState(() {
+      _switchingMember = true;
+      _activeMember = member;
+      // Drop the previous member's reading so it can't be attributed here.
+      _latestMeasurement = null;
+      _compareMeasurement = null;
+    });
+
+    await _memberService.setActiveMember(member.id);
+    await widget.fitDaysService.initializeSDK(
+      age: member.age,
+      height: member.heightCm,
+      sex: member.gender.sdkSexType,
+    );
+
+    // Load the new member's most recent measurements for the screen.
+    final measurements =
+        await _memberService.getMeasurements(member.id, limit: 2);
+    if (!mounted) return;
+    setState(() {
+      if (measurements.isNotEmpty) {
+        _latestMeasurement = WeightMeasurement.fromBodyMeasurement(measurements.first);
+        if (measurements.length > 1) {
+          _compareMeasurement = WeightMeasurement.fromBodyMeasurement(measurements[1]);
+        }
+      }
+      _switchingMember = false;
+    });
   }
 
   void _showMemberSelector() {
@@ -748,15 +796,9 @@ class _MeasurementScreenState extends State<MeasurementScreen> {
                           color: Colors.black, size: 15),
                     )
                   : null,
-              onTap: () async {
-                await _memberService.setActiveMember(member.id);
-                setState(() => _activeMember = member);
-                await widget.fitDaysService.initializeSDK(
-                  age: member.age,
-                  height: member.heightCm,
-                  sex: member.gender.sdkSexType,
-                );
+              onTap: () {
                 Navigator.pop(context);
+                _switchToMember(member);
               },
             )),
             Divider(height: 1, color: Colors.white.withOpacity(0.06)),

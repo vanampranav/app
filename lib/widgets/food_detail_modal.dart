@@ -61,6 +61,7 @@ class _FoodDetailModalState extends State<FoodDetailModal> {
   late TextEditingController _weightCtrl;
   StreamSubscription?        _weightSub;
   Timer?                     _weightDebounce;
+  Timer?                     _scaleFreshness; // drops "live" if readings stop
 
   // ── Unit conversion helpers ──────────────────────────────────────────────
   static const _units = ['g', 'oz', 'ml', 'lb'];
@@ -137,6 +138,17 @@ class _FoodDetailModalState extends State<FoodDetailModal> {
     }
   }
 
+  /// Mark the scale "live" and arm a freshness timer. A real scale streams
+  /// continuously; a powered-off one goes silent — so if no reading arrives for
+  /// a few seconds we drop the "live" state.
+  void _markScaleLive() {
+    _scaleActive = true;
+    _scaleFreshness?.cancel();
+    _scaleFreshness = Timer(const Duration(seconds: 4), () {
+      if (mounted) setState(() => _scaleActive = false);
+    });
+  }
+
   void _applyScaleWeight(WeightMeasurement m) {
     // Ignore the scale entirely when logging by serving — only grams use it.
     if (!_isWeightMode) return;
@@ -151,15 +163,16 @@ class _FoodDetailModalState extends State<FoodDetailModal> {
     _weightCtrl.text = displayVal.toStringAsFixed(displayVal >= 1 ? 1 : 0);
     if (grams <= 0) {
       // Scale connected but empty — show it's live and wait for food (no error).
-      setState(() { _scaleActive = true; _nutrition = null; _error = null; });
+      setState(() { _markScaleLive(); _nutrition = null; _error = null; });
       return;
     }
-    setState(() => _scaleActive = true);
+    setState(_markScaleLive);
     _calculateNutrition();
   }
 
   @override
   void dispose() {
+    _scaleFreshness?.cancel();
     _weightDebounce?.cancel();
     _weightSub?.cancel();
     _weightCtrl.dispose();

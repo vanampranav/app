@@ -327,6 +327,7 @@ public class FitDaysSDKManager implements ICDeviceManagerDelegate, ICScanDeviceD
             android.util.Log.d("FitDaysSDK", "Body composition data available");
             weightData.put("bmi", data.bmi);
             weightData.put("bodyFat", data.bodyFatPercent);
+            weightData.put("subcutaneousFat", data.subcutaneousFatPercent);
             weightData.put("muscle", data.musclePercent);
             weightData.put("water", data.moisturePercent);
             weightData.put("boneMass", data.boneMass);

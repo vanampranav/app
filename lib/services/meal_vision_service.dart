@@ -18,7 +18,7 @@ import 'nutrition_service.dart';
 ///   ]
 /// }
 class MealVisionService {
-  static const String _baseUrl = 'https://hotel-ioji.onrender.com';
+  static const String _baseUrl = 'https://yantraprise.com';
 
   // Shared secret the backend validates (X-API-Key). Keep in sync with the
   // backend's ELEFIT_API_KEY. Blocks casual direct abuse of the public endpoint.

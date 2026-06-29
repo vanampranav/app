@@ -121,6 +121,7 @@ class WeightMeasurement {
   final bool isStabilized;
   final double? bmi;
   final double? bodyFat;
+  final double? subcutaneousFat;
   final double? muscle;
   final double? water;
   final double? boneMass;
@@ -141,6 +142,7 @@ class WeightMeasurement {
     required this.isStabilized,
     this.bmi,
     this.bodyFat,
+    this.subcutaneousFat,
     this.muscle,
     this.water,
     this.boneMass,
@@ -161,6 +163,7 @@ class WeightMeasurement {
       isStabilized: map['isStabilized'] as bool? ?? false,
       bmi: map['bmi'] != null ? (map['bmi'] as num).toDouble() : null,
       bodyFat: map['bodyFat'] != null ? (map['bodyFat'] as num).toDouble() : null,
+      subcutaneousFat: map['subcutaneousFat'] != null ? (map['subcutaneousFat'] as num).toDouble() : null,
       muscle: map['muscle'] != null ? (map['muscle'] as num).toDouble() : null,
       water: map['water'] != null ? (map['water'] as num).toDouble() : null,
       boneMass: map['boneMass'] != null ? (map['boneMass'] as num).toDouble() : null,
@@ -180,6 +183,7 @@ class WeightMeasurement {
       isStabilized: true, // Stored measurements are stable
       bmi: measurement.bmi,
       bodyFat: measurement.bodyFatPercent,
+      subcutaneousFat: measurement.subcutaneousFatPercent,
       muscle: measurement.muscleRatePercent,
       water: measurement.bodyWaterPercent,
       boneMass: measurement.boneMassKg,
@@ -201,6 +205,7 @@ class WeightMeasurement {
       'isStabilized': isStabilized,
       'bmi': bmi,
       'bodyFat': bodyFat,
+      'subcutaneousFat': subcutaneousFat,
       'muscle': muscle,
       'water': water,
       'boneMass': boneMass,
