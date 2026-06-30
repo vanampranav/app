@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import 'package:elefit_app/theme/app_theme.dart';
 import 'package:elefit_app/widgets/ef_components.dart';
 import 'package:elefit_app/widgets/ef_error_components.dart';
-import 'package:elefit_app/utils/app_error_mapper.dart';
 import 'package:elefit_app/features/challenge/data/models/challenge_package.dart';
 import 'package:elefit_app/features/challenge/domain/services/challenge_package_service.dart';
 import 'package:elefit_app/features/challenge/presentation/providers/challenge_package_provider.dart';
@@ -125,17 +124,12 @@ class _ChallengePackageSelectionContentState extends State<_ChallengePackageSele
 
   Widget _buildErrorState(BuildContext context, ChallengePackageProvider provider) {
     final userId = context.read<AuthService>().currentUser?.id;
-    final mappedError = AppErrorMapper.map(
+
+    return EFErrorView.map(
       provider.errorMessage!,
       screenName: 'ChallengePackageSelectionScreen',
       featureName: 'ChallengeEnrollment',
       userId: userId,
-    );
-
-    return EFErrorView(
-      title: mappedError.title,
-      message: mappedError.message,
-      technicalCode: mappedError.technicalCode,
       onRetry: () => provider.retry(),
     );
   }

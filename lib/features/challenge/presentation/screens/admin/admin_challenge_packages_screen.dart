@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import 'package:elefit_app/theme/app_theme.dart';
 import 'package:elefit_app/widgets/ef_components.dart';
 import 'package:elefit_app/widgets/ef_error_components.dart';
-import 'package:elefit_app/utils/app_error_mapper.dart';
 import 'package:elefit_app/features/challenge/data/models/challenge_package.dart';
 import 'package:elefit_app/features/challenge/domain/services/challenge_package_service.dart';
 import 'package:elefit_app/features/challenge/domain/services/admin_audit_service.dart';
@@ -103,16 +102,10 @@ class _AdminChallengePackagesContent extends StatelessWidget {
   }
 
   Widget _buildErrorState(BuildContext context, AdminChallengePackagesProvider provider) {
-    final mappedError = AppErrorMapper.map(
+    return EFErrorView.map(
       provider.errorMessage!,
       screenName: 'AdminChallengePackagesScreen',
       featureName: 'ChallengePackageManagement',
-    );
-
-    return EFErrorView(
-      title: mappedError.title,
-      message: mappedError.message,
-      technicalCode: mappedError.technicalCode,
       onRetry: () => provider.fetchPackages(),
     );
   }

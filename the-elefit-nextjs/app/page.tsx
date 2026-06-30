@@ -2,6 +2,7 @@
 
 import { motion, useReducedMotion } from "framer-motion";
 import Image from "next/image";
+import { useState } from "react";
 import {
   ArrowRight,
   BrainCircuit,
@@ -76,6 +77,7 @@ const testimonials = [
 
 export default function Home() {
   const prefersReducedMotion = useReducedMotion();
+  const [founderImageSrc, setFounderImageSrc] = useState("/images/founder-real.jpg");
 
   return (
     <div className="min-h-screen bg-[#050816] text-white">
@@ -231,11 +233,16 @@ export default function Home() {
               <div className="order-1 lg:order-1">
                 <div className="relative h-[360px] w-full rounded-[1.5rem] overflow-hidden shadow-[0_30px_80px_rgba(0,0,0,0.5)] sm:h-[420px] lg:h-[520px]">
                   <Image
-                    src="/images/founder.jpg"
+                    src={founderImageSrc}
                     alt="Founder and family"
                     fill
                     sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 520px"
-                    className="object-cover"
+                    className="object-cover object-[center_28%] sm:object-center"
+                    onError={() => {
+                      if (founderImageSrc !== "/images/founder.jpg") {
+                        setFounderImageSrc("/images/founder.jpg");
+                      }
+                    }}
                     priority
                   />
                 </div>
@@ -527,27 +534,6 @@ export default function Home() {
                 ))}
               </div>
             </div>
-          </div>
-        </motion.section>
-
-        <motion.section id="founder-story" initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.2 }} transition={{ duration: 0.6 }} className="px-4 py-20 sm:px-6 lg:px-8">
-          <div className="mx-auto grid max-w-7xl gap-10 rounded-[2.5rem] border border-white/10 bg-gradient-to-br from-[#0a1222] to-[#060b16] p-8 shadow-[0_30px_120px_rgba(0,0,0,0.22)] lg:grid-cols-[0.95fr_1.05fr] lg:p-12">
-            <div>
-              <SectionHeader
-                eyebrow="Founder story"
-                title="Built by people on the same journey."
-                description="EleFit was created for adults who want to feel healthy, strong, and energized without turning fitness into a second job."
-              />
-              <p className="mt-8 text-lg leading-8 text-slate-300">
-                We built this experience from the perspective of busy professionals and parents who need structure, not shame. The goal is simple: make consistency feel natural.
-              </p>
-              <div className="mt-8 flex flex-wrap gap-3">
-                <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-300">Evidence-based coaching</div>
-                <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-300">Human accountability</div>
-                <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-300">Long-term change</div>
-              </div>
-            </div>
-            <PhoneMockup imageSrc="/images/founder.jpg" alt="Founder story visual" />
           </div>
         </motion.section>
 

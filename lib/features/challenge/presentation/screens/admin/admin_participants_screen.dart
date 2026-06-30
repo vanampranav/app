@@ -4,7 +4,6 @@ import 'package:intl/intl.dart';
 import 'package:elefit_app/theme/app_theme.dart';
 import 'package:elefit_app/widgets/ef_components.dart';
 import 'package:elefit_app/widgets/ef_error_components.dart';
-import 'package:elefit_app/utils/app_error_mapper.dart';
 import 'package:elefit_app/features/challenge/data/constants/firestore_collections.dart';
 import 'package:elefit_app/features/challenge/data/models/challenge_participant.dart';
 import 'package:elefit_app/features/challenge/data/repositories/challenge_participant_repository.dart';
@@ -130,16 +129,10 @@ class _AdminParticipantsContent extends StatelessWidget {
   }
 
   Widget _buildErrorState(BuildContext context, AdminParticipantsProvider provider) {
-    final mappedError = AppErrorMapper.map(
+    return EFErrorView.map(
       provider.errorMessage!,
       screenName: 'AdminParticipantsScreen',
       featureName: 'AdminManagement',
-    );
-
-    return EFErrorView(
-      title: mappedError.title,
-      message: mappedError.message,
-      technicalCode: mappedError.technicalCode,
       onRetry: () => provider.fetchData(),
     );
   }

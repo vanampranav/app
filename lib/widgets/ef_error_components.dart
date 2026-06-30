@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import '../utils/app_error_mapper.dart';
 import 'ef_components.dart';
 
 class EFErrorView extends StatelessWidget {
@@ -19,6 +20,36 @@ class EFErrorView extends StatelessWidget {
     this.onBack,
     this.onContactSupport,
   }) : super(key: key);
+
+  /// Convenience constructor that automatically maps raw technical errors 
+  /// into user-friendly UI states and logs them to Crashlytics.
+  factory EFErrorView.map(
+    dynamic rawError, {
+    Key? key,
+    String? screenName,
+    String? featureName,
+    String? userId,
+    VoidCallback? onRetry,
+    VoidCallback? onBack,
+    VoidCallback? onContactSupport,
+  }) {
+    final mapped = AppErrorMapper.map(
+      rawError,
+      screenName: screenName,
+      featureName: featureName,
+      userId: userId,
+    );
+
+    return EFErrorView(
+      key: key,
+      title: mapped.title,
+      message: mapped.message,
+      technicalCode: mapped.technicalCode,
+      onRetry: onRetry,
+      onBack: onBack,
+      onContactSupport: onContactSupport,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {

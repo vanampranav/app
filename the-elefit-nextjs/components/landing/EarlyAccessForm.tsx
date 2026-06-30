@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { addDoc, collection, getDocs, query, serverTimestamp, where } from "firebase/firestore";
+import { addDoc, collection, serverTimestamp } from "firebase/firestore";
 import { CheckCircle2, Loader2, Mail } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { trackEvent } from "@/lib/analytics";
@@ -107,29 +107,20 @@ export function EarlyAccessForm({ compact = false, className = "" }: EarlyAccess
         throw new Error("Firebase is not configured for waitlist submissions yet.");
       }
 
-      const existingQuery = query(collection(db, "earlyAccessLeads"), where("email", "==", normalizedEmail));
-      const existingSnapshot = await getDocs(existingQuery);
+      console.log("Firestore projectId:", db.app.options.projectId);
 
-      if (!existingSnapshot.empty) {
-        persistSubmission(normalizedEmail);
-        setStatus("success");
-        setMessage("Thanks! We already have your email on the list.");
-        setEmail("");
-        setName("");
-        trackEvent("waitlist_form_success", {
-          result: "existing_lead",
-          page_path: pathname || "/",
-        });
-        return;
-      }
-
-      await addDoc(collection(db, "earlyAccessLeads"), {
+      const payload = {
         name: trimmedName || null,
         email: normalizedEmail,
         source: "landing-page",
         pagePath: pathname || "/",
         createdAt: serverTimestamp(),
-      });
+      };
+
+      console.log("Firestore write collection:", "earlyAccessLeads");
+      console.log("Firestore write payload keys:", Object.keys(payload));
+
+      await addDoc(collection(db, "earlyAccessLeads"), payload);
 
       persistSubmission(normalizedEmail);
       setStatus("success");
@@ -141,7 +132,12 @@ export function EarlyAccessForm({ compact = false, className = "" }: EarlyAccess
         page_path: pathname || "/",
       });
     } catch (error) {
-      console.error("Early access submission failed", error);
+      const firestoreError = error as { name?: string; code?: string; message?: string };
+      console.error("Early access submission failed");
+      console.error("Firestore error name:", firestoreError.name);
+      console.error("Firestore error code:", firestoreError.code);
+      console.error("Firestore error message:", firestoreError.message);
+      console.error("Firestore full error object:", error);
       setStatus("error");
       setMessage(error instanceof Error ? error.message : "Something went wrong. Please try again.");
       trackEvent("waitlist_form_error", {

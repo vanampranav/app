@@ -5,7 +5,6 @@ import 'package:provider/provider.dart';
 import 'package:elefit_app/theme/app_theme.dart';
 import 'package:elefit_app/widgets/ef_components.dart';
 import 'package:elefit_app/widgets/ef_error_components.dart';
-import 'package:elefit_app/utils/app_error_mapper.dart';
 import 'package:elefit_app/features/challenge/data/models/challenge_submission.dart';
 import 'package:elefit_app/features/challenge/data/constants/firestore_collections.dart';
 import 'package:elefit_app/features/challenge/data/repositories/challenge_repository.dart';
@@ -558,17 +557,11 @@ class _ParticipantWeeklyCheckinContentState extends State<_ParticipantWeeklyChec
   }
 
   Widget _buildErrorState(BuildContext context, ParticipantWeeklyCheckinProvider provider) {
-    final mappedError = AppErrorMapper.map(
+    return EFErrorView.map(
       provider.errorMessage!,
       screenName: 'ParticipantWeeklyCheckinScreen',
       featureName: 'ChallengeSubmissions',
       userId: provider.userId,
-    );
-
-    return EFErrorView(
-      title: mappedError.title,
-      message: mappedError.message,
-      technicalCode: mappedError.technicalCode,
       onBack: () => Navigator.pop(context),
     );
   }

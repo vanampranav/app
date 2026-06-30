@@ -4,7 +4,6 @@ import 'package:intl/intl.dart';
 import 'package:elefit_app/theme/app_theme.dart';
 import 'package:elefit_app/widgets/ef_components.dart';
 import 'package:elefit_app/widgets/ef_error_components.dart';
-import 'package:elefit_app/utils/app_error_mapper.dart';
 import 'package:elefit_app/features/challenge/data/constants/firestore_collections.dart';
 import 'package:elefit_app/features/challenge/data/models/challenge.dart';
 import 'package:elefit_app/features/challenge/data/repositories/challenge_repository.dart';
@@ -402,17 +401,11 @@ class _ChallengeDetailContentState extends State<_ChallengeDetailContent> {
   }
 
   Widget _buildErrorState(BuildContext context, ParticipantChallengeDetailProvider provider) {
-    final mappedError = AppErrorMapper.map(
+    return EFErrorView.map(
       provider.errorMessage!,
       screenName: 'ChallengeDetailScreen',
       featureName: 'ChallengeDiscovery',
       userId: provider.userId,
-    );
-
-    return EFErrorView(
-      title: mappedError.title,
-      message: mappedError.message,
-      technicalCode: mappedError.technicalCode,
       onBack: () => Navigator.pop(context),
     );
   }
