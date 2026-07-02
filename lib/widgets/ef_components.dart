@@ -130,6 +130,7 @@ class _EFButtonState extends State<EFButton> with SingleTickerProviderStateMixin
 class EFCard extends StatelessWidget {
   final Widget child;
   final EdgeInsets? padding;
+  final EdgeInsets? margin;
   final Color? color;
   final VoidCallback? onTap;
   final bool elevated;
@@ -140,6 +141,7 @@ class EFCard extends StatelessWidget {
     Key? key,
     required this.child,
     this.padding,
+    this.margin,
     this.color,
     this.onTap,
     this.elevated = false,
@@ -153,6 +155,7 @@ class EFCard extends StatelessWidget {
     final cardColor = color ?? (elevated ? AppTheme.surface2 : AppTheme.surface1);
 
     Widget card = Container(
+      margin: margin,
       padding: padding ?? const EdgeInsets.all(AppTheme.md),
       decoration: BoxDecoration(
         color: cardColor,

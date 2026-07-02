@@ -4,6 +4,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/main_layout.dart';
 import '../../services/firebase_rest_service.dart';
+import 'package:provider/provider.dart';
+import 'package:elefit_app/features/challenge/domain/services/auth_service.dart';
 import '../../services/health_service.dart';
 import '../home_screen.dart';
 
@@ -163,10 +165,14 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           'firstName': _authFirstName.trim(),
           'credits':   5,
         });
+        // Also sign into the Firebase Auth SDK (needed by the Challenge feature).
+        await _signInFirebaseSdk(_authEmail.trim(), _authPassword);
         setState(() { _name = _authFirstName.trim(); });
       } else {
         // Sign in
         await _fb.signIn(_authEmail.trim(), _authPassword);
+        // Also sign into the Firebase Auth SDK (needed by the Challenge feature).
+        await _signInFirebaseSdk(_authEmail.trim(), _authPassword);
         // Check if this user already completed onboarding
         final existing = await _fb.getOnboardingProfile();
         if (existing != null && existing['dailyCalorieTarget'] != null) {
@@ -192,6 +198,20 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         _authLoading = false;
         _authError = _friendlyError(e);
       });
+    }
+  }
+
+  // Signs into the Firebase Auth SDK using the same credentials as the REST
+  // login. Both hit the same Firebase project (getfit-with-elefit), so the same
+  // email/password works. Best-effort: failure is logged but never blocks the
+  // main (REST-based) onboarding flow.
+  Future<void> _signInFirebaseSdk(String email, String password) async {
+    if (!mounted) return;
+    try {
+      await context.read<AuthService>().signIn(email, password);
+      debugPrint('Firebase Auth SDK sign-in OK');
+    } catch (e) {
+      debugPrint('Firebase Auth SDK sign-in failed (continuing): $e');
     }
   }
 

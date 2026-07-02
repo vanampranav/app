@@ -21,6 +21,9 @@ class FirebaseRestService {
   static const String _prefUid = 'fb_uid';
   static const String _prefEmail = 'fb_email';
   static const String _prefRefreshToken = 'fb_refresh_token';
+  // Stored (encrypted, Keychain/Keystore) so the app can silently sign into the
+  // Firebase Auth SDK on startup — the Challenge feature needs a live SDK session.
+  static const String _prefPassword = 'fb_password';
 
   static const _secureStorage = FlutterSecureStorage();
 
@@ -63,6 +66,11 @@ class FirebaseRestService {
   String? get uid => _uid;
   String? get email => _email;
 
+  /// The password saved at last login (used to silently re-establish the
+  /// Firebase Auth SDK session on startup). Null for sessions created before
+  /// this was added — those users must log in once more to seed it.
+  Future<String?> get storedPassword => _secureStorage.read(key: _prefPassword);
+
   /// Create a new account via Firebase Auth REST API
   Future<Map<String, dynamic>> createAccount(String email, String password) async {
     final response = await http.post(
@@ -87,6 +95,7 @@ class FirebaseRestService {
     await _secureStorage.write(key: _prefIdToken,      value: _idToken!);
     await _secureStorage.write(key: _prefUid,          value: _uid!);
     await _secureStorage.write(key: _prefEmail,        value: _email!);
+    await _secureStorage.write(key: _prefPassword,     value: password);
     if (_refreshToken != null) {
       await _secureStorage.write(key: _prefRefreshToken, value: _refreshToken!);
     }
@@ -193,6 +202,7 @@ class FirebaseRestService {
     await _secureStorage.write(key: _prefIdToken, value: _idToken!);
     await _secureStorage.write(key: _prefUid, value: _uid!);
     await _secureStorage.write(key: _prefEmail, value: _email!);
+    await _secureStorage.write(key: _prefPassword, value: password);
     if (_refreshToken != null) await _secureStorage.write(key: _prefRefreshToken, value: _refreshToken!);
 
     return data;
@@ -208,6 +218,7 @@ class FirebaseRestService {
     await _secureStorage.delete(key: _prefUid);
     await _secureStorage.delete(key: _prefEmail);
     await _secureStorage.delete(key: _prefRefreshToken);
+    await _secureStorage.delete(key: _prefPassword);
   }
 
   /// Get user profile from Firestore `users/{uid}`

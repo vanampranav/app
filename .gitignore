@@ -58,3 +58,6 @@ backend/.venv/
 **/__pycache__/
 *.pyc
 backend/.env
+
+# iOS build artifacts (should never be committed)
+ios/build/

@@ -3,6 +3,7 @@ description: A new Flutter project.
 publish_to: 'none'
 version: 1.0.8+62
 
+
 environment:
   sdk: '>=2.19.0 <4.0.0'
 
@@ -33,8 +34,15 @@ dependencies:
   # OneSignal for push notifications and in-app messages
   onesignal_flutter: ^5.3.4
   
-  # Firebase (core only — auth + firestore done via REST to avoid version conflicts)
+  # Firebase — core/REST for AI Coach & profile; SDK (auth/firestore/storage)
+  # powers the Challenge feature, plus analytics/crashlytics/performance.
   firebase_core: ^3.6.0
+  cloud_firestore: ^5.4.4
+  firebase_auth: ^5.3.1
+  firebase_storage: ^12.3.0
+  firebase_analytics: ^11.3.3
+  firebase_crashlytics: ^4.1.3
+  firebase_performance: ^0.10.0
 
   # PDF generation and sharing
   pdf: ^3.10.8

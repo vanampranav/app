@@ -21,6 +21,10 @@ import '../services/member_service.dart';
 import '../services/streak_service.dart';
 import '../models/member_model.dart';
 import '../widgets/device_scan_sheet.dart';
+import 'package:elefit_app/features/challenge/presentation/screens/participant/challenge_discovery_screen.dart';
+import 'package:elefit_app/features/challenge/presentation/screens/participant/participant_challenge_dashboard_screen.dart';
+import 'package:elefit_app/features/challenge/presentation/providers/home_challenge_entry_provider.dart';
+import 'package:elefit_app/features/challenge/presentation/widgets/notification_bell_icon.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -537,6 +541,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         ),
       ),
       actions: [
+        const NotificationBellIcon(),
+        const SizedBox(width: 8),
         Consumer<CartModel>(
           builder: (_, cart, __) => GestureDetector(
             onTap: () => Navigator.push(context,
@@ -736,6 +742,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   // ─── Quick actions ────────────────────────────────────────────────────────────
 
   Widget _buildQuickActions() {
+    final challengeEntry = context.watch<HomeChallengeEntryProvider>();
+    final hasActive = challengeEntry.hasActiveChallenge;
+    final activeId = challengeEntry.activeParticipation?.challengeId;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppTheme.md),
       child: Column(
@@ -758,6 +768,27 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       ),
                     ),
                   ),
+                ),
+              ),
+              const SizedBox(width: AppTheme.sm),
+              Expanded(
+                child: EFQuickAction(
+                  icon: hasActive ? Icons.dashboard_customize_rounded : Icons.emoji_events_rounded,
+                  label: hasActive ? 'My\nChallenge' : 'Join\nChallenge',
+                  accentColor: AppTheme.lime,
+                  onTap: () {
+                    if (hasActive && activeId != null) {
+                      Navigator.push(
+                        context,
+                        EFPageRoute(page: ParticipantChallengeDashboardScreen(challengeId: activeId)),
+                      );
+                    } else {
+                      Navigator.push(
+                        context,
+                        EFPageRoute(page: const ChallengeDiscoveryScreen()),
+                      );
+                    }
+                  },
                 ),
               ),
               const SizedBox(width: AppTheme.sm),

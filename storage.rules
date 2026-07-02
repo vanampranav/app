@@ -1,0 +1,49 @@
+rules_version = '2';
+
+// Firebase Storage rules for EleFit. Storage is used ONLY by the Challenge
+// feature (progress/body photos + payment proofs), so these paths cover all
+// uploads. Deploy: Firebase Console → Storage → Rules, or
+// `firebase deploy --only storage`.
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    // Admin = users/{uid}.isAdmin == true (Storage rules can read Firestore).
+    function isAdmin() {
+      return isSignedIn()
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.get('isAdmin', false) == true;
+    }
+    function isImageUnder(maxBytes) {
+      return request.resource.size < maxBytes
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    // Progress / body-composition photos (baseline, weekly, final).
+    // Path: challenge_submissions/{challengeId}/{userId}/...
+    // Owner can read+write their own; admins can read all (Rule Book §11 privacy).
+    match /challenge_submissions/{challengeId}/{userId}/{allPaths=**} {
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow write: if isSignedIn() && request.auth.uid == userId && isImageUnder(15 * 1024 * 1024);
+    }
+
+    // Payment proofs (sensitive). The uploader's id is embedded in the file
+    // name, not the path, so we can't scope reads per-owner here — restrict
+    // reads to admins; any signed-in user may upload their own proof.
+    match /payment_proofs/{challengeId}/{fileName} {
+      allow read: if isAdmin();
+      allow write: if isSignedIn() && isImageUnder(15 * 1024 * 1024);
+    }
+    // Payment-recovery re-uploads.
+    match /payments/{fileName} {
+      allow read: if isAdmin();
+      allow write: if isSignedIn() && isImageUnder(15 * 1024 * 1024);
+    }
+
+    // Default: deny everything else. (Storage is not used elsewhere in EleFit.)
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
