@@ -274,8 +274,9 @@ class _ParticipantPaymentCard extends StatelessWidget {
                   _buildLabel('Payment Status'),
                   _buildDropdown<String>(
                     value: selectedStatus,
-                    items: [
+                    items: const [
                       PaymentStatus.pending,
+                      PaymentStatus.pendingReview,
                       PaymentStatus.partiallyPaid,
                       PaymentStatus.paid,
                       PaymentStatus.waived,
@@ -406,6 +407,10 @@ class _ParticipantPaymentCard extends StatelessWidget {
   }
 
   Widget _buildDropdown<T>({required T value, required List<T> items, required ValueChanged<T?> onChanged}) {
+    // Guard: DropdownButton asserts if `value` isn't present exactly once in
+    // `items`. If the stored value is a legacy/unlisted option, include it so
+    // the dropdown renders instead of crashing.
+    final safeItems = items.contains(value) ? items : [value, ...items];
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(color: AppTheme.surface1, borderRadius: BorderRadius.circular(12)),
@@ -414,7 +419,7 @@ class _ParticipantPaymentCard extends StatelessWidget {
           value: value,
           isExpanded: true,
           dropdownColor: AppTheme.surface1,
-          items: items.map((i) => DropdownMenuItem(value: i, child: Text(i.toString(), style: const TextStyle(color: Colors.white)))).toList(),
+          items: safeItems.map((i) => DropdownMenuItem(value: i, child: Text(i.toString(), style: const TextStyle(color: Colors.white)))).toList(),
           onChanged: onChanged,
         ),
       ),
