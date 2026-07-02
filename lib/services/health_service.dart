@@ -50,23 +50,37 @@ class HealthService {
       ? HealthDataType.DISTANCE_DELTA
       : HealthDataType.DISTANCE_WALKING_RUNNING;
 
-  List<HealthDataType> get _readTypes => [
-        HealthDataType.STEPS,
-        HealthDataType.ACTIVE_ENERGY_BURNED,
-        HealthDataType.BASAL_ENERGY_BURNED,
-        HealthDataType.HEART_RATE,
-        HealthDataType.RESTING_HEART_RATE,
-        _hrvType,
-        HealthDataType.SLEEP_ASLEEP,
-        HealthDataType.SLEEP_AWAKE,
-        HealthDataType.SLEEP_DEEP,
-        HealthDataType.SLEEP_REM,
-        HealthDataType.SLEEP_LIGHT,
-        HealthDataType.WEIGHT,
-        HealthDataType.WATER,
-        _distanceType,
-        HealthDataType.WORKOUT,
-      ];
+  // Read types are platform-specific.
+  //
+  // Android (Health Connect): MINIMUM scope only — steps, active calories, and
+  // weight — to comply with Google Play's "Minimum Scope" Health Connect policy.
+  // (Requesting more than the app's features use gets the app rejected.)
+  //
+  // iOS (HealthKit): the full set, since Apple permits granular read scopes and
+  // the Performance screen surfaces heart rate / HRV / sleep / distance / workouts.
+  List<HealthDataType> get _readTypes => _isAndroid
+      ? const [
+          HealthDataType.STEPS,
+          HealthDataType.ACTIVE_ENERGY_BURNED,
+          HealthDataType.WEIGHT,
+        ]
+      : [
+          HealthDataType.STEPS,
+          HealthDataType.ACTIVE_ENERGY_BURNED,
+          HealthDataType.BASAL_ENERGY_BURNED,
+          HealthDataType.HEART_RATE,
+          HealthDataType.RESTING_HEART_RATE,
+          _hrvType,
+          HealthDataType.SLEEP_ASLEEP,
+          HealthDataType.SLEEP_AWAKE,
+          HealthDataType.SLEEP_DEEP,
+          HealthDataType.SLEEP_REM,
+          HealthDataType.SLEEP_LIGHT,
+          HealthDataType.WEIGHT,
+          HealthDataType.WATER,
+          _distanceType,
+          HealthDataType.WORKOUT,
+        ];
 
   List<HealthDataType> get _writeTypes => [
         HealthDataType.WEIGHT,
