@@ -62,7 +62,7 @@ class AdminChallengeDetailProvider with ChangeNotifier {
       await _notificationService.createWeeklyCheckInOpenNotifications(challengeId, weekNumber, _challenge!.title);
       _errorMessage = null;
     } catch (e) {
-      _errorMessage = e.toString();
+      _errorMessage = e.toString().replaceFirst('Exception: ', '');
     } finally {
       _isActionInProgress = false;
       notifyListeners();
@@ -78,7 +78,7 @@ class AdminChallengeDetailProvider with ChangeNotifier {
       await _notificationService.createWeeklyCheckInDueReminders(challengeId, weekNumber, _challenge!.title);
       _errorMessage = null;
     } catch (e) {
-      _errorMessage = e.toString();
+      _errorMessage = e.toString().replaceFirst('Exception: ', '');
     } finally {
       _isActionInProgress = false;
       notifyListeners();
@@ -94,7 +94,7 @@ class AdminChallengeDetailProvider with ChangeNotifier {
       await _notificationService.createFinalSubmissionOpenNotifications(challengeId, _challenge!.title);
       _errorMessage = null;
     } catch (e) {
-      _errorMessage = e.toString();
+      _errorMessage = e.toString().replaceFirst('Exception: ', '');
     } finally {
       _isActionInProgress = false;
       notifyListeners();
@@ -110,7 +110,7 @@ class AdminChallengeDetailProvider with ChangeNotifier {
       await _notificationService.createFinalSubmissionDueReminders(challengeId, _challenge!.title);
       _errorMessage = null;
     } catch (e) {
-      _errorMessage = e.toString();
+      _errorMessage = e.toString().replaceFirst('Exception: ', '');
     } finally {
       _isActionInProgress = false;
       notifyListeners();
@@ -125,7 +125,7 @@ class AdminChallengeDetailProvider with ChangeNotifier {
       await _challengeService.activateChallenge(challengeId, adminId);
       _errorMessage = null;
     } catch (e) {
-      _errorMessage = e.toString();
+      _errorMessage = e.toString().replaceFirst('Exception: ', '');
     } finally {
       _isActionInProgress = false;
       notifyListeners();
@@ -140,7 +140,7 @@ class AdminChallengeDetailProvider with ChangeNotifier {
       await _challengeService.closeChallenge(challengeId, adminId);
       _errorMessage = null;
     } catch (e) {
-      _errorMessage = e.toString();
+      _errorMessage = e.toString().replaceFirst('Exception: ', '');
     } finally {
       _isActionInProgress = false;
       notifyListeners();

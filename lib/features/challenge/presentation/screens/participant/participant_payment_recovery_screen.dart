@@ -78,7 +78,7 @@ class _ParticipantPaymentRecoveryScreenState extends State<ParticipantPaymentRec
             .ref()
             .child('payments')
             .child('${_participant!.id}_${DateTime.now().millisecondsSinceEpoch}.jpg');
-        await ref.putFile(_image!);
+        await ref.putFile(_image!, SettableMetadata(contentType: 'image/jpeg'));
         proofUrl = await ref.getDownloadURL();
       }
 

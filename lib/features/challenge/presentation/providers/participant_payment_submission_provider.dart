@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:elefit_app/features/challenge/presentation/providers/challenge_error_text.dart';
 import 'dart:io';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
@@ -115,7 +116,7 @@ class ParticipantPaymentSubmissionProvider with ChangeNotifier {
             .child(challengeId)
             .child('$userId-${DateTime.now().millisecondsSinceEpoch}.jpg');
             
-        final uploadTask = await storageRef.putFile(_proofImage!);
+        final uploadTask = await storageRef.putFile(_proofImage!, SettableMetadata(contentType: 'image/jpeg'));
         finalUrl = await uploadTask.ref.getDownloadURL();
         
         _isUploading = false;
@@ -132,7 +133,7 @@ class ParticipantPaymentSubmissionProvider with ChangeNotifier {
       );
 
     } catch (e) {
-      _errorMessage = e.toString();
+      _errorMessage = friendlyChallengeError(e);
     } finally {
       _isSubmitting = false;
       notifyListeners();

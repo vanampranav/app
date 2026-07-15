@@ -7,6 +7,9 @@ import 'package:elefit_app/features/challenge/presentation/widgets/admin/admin_g
 import 'package:elefit_app/features/challenge/presentation/providers/admin_challenge_list_provider.dart';
 import 'package:elefit_app/features/challenge/data/repositories/challenge_repository.dart';
 import 'package:elefit_app/features/challenge/data/models/challenge.dart';
+import 'package:elefit_app/features/challenge/domain/services/challenge_service.dart';
+import 'package:elefit_app/features/challenge/domain/services/auth_service.dart';
+import 'package:elefit_app/features/challenge/presentation/challenge_status_label.dart';
 import 'package:elefit_app/features/challenge/presentation/screens/admin/admin_challenge_detail_screen.dart';
 import 'package:elefit_app/features/challenge/presentation/screens/admin/admin_create_edit_challenge_screen.dart';
 
@@ -133,7 +136,25 @@ class _ChallengeAdminCard extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              _StatusBadge(status: challenge.status),
+              _StatusBadge(challenge: challenge),
+              const SizedBox(width: 4),
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.more_vert_rounded, color: AppTheme.textSecondary, size: 20),
+                color: AppTheme.surface2,
+                onSelected: (v) {
+                  if (v == 'delete') _confirmDelete(context);
+                },
+                itemBuilder: (_) => [
+                  PopupMenuItem(
+                    value: 'delete',
+                    child: Row(children: const [
+                      Icon(Icons.delete_outline_rounded, color: AppTheme.error, size: 18),
+                      SizedBox(width: 8),
+                      Text('Delete challenge', style: TextStyle(color: AppTheme.error)),
+                    ]),
+                  ),
+                ],
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -161,6 +182,46 @@ class _ChallengeAdminCard extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _confirmDelete(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surface1,
+        title: const Text('Delete challenge?', style: TextStyle(color: Colors.white)),
+        content: Text(
+          'This permanently deletes "${challenge.title}". This cannot be undone.',
+          style: const TextStyle(color: AppTheme.textSecondary),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete', style: TextStyle(color: AppTheme.error, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    try {
+      final adminId = context.read<AuthService>().currentUser?.id ?? '';
+      await context.read<ChallengeService>().deleteChallenge(challenge.id, adminId);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Deleted "${challenge.title}"'), backgroundColor: AppTheme.surface2),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not delete: ${e.toString().replaceFirst('Exception: ', '')}'),
+            backgroundColor: AppTheme.error,
+          ),
+        );
+      }
+    }
   }
 }
 
@@ -190,43 +251,25 @@ class _InfoRow extends StatelessWidget {
 }
 
 class _StatusBadge extends StatelessWidget {
-  final String status;
+  final Challenge challenge;
 
-  const _StatusBadge({Key? key, required this.status}) : super(key: key);
+  const _StatusBadge({Key? key, required this.challenge}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    Color color;
-    switch (status) {
-      case 'draft':
-        color = Colors.grey;
-        break;
-      case 'registrationOpen':
-        color = AppTheme.lime;
-        break;
-      case 'active':
-        color = Colors.blue;
-        break;
-      case 'completed':
-        color = Colors.green;
-        break;
-      case 'cancelled':
-        color = AppTheme.error;
-        break;
-      default:
-        color = Colors.white;
-    }
+    final view = challengeStatusView(challenge);
+    final color = view.color;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(6),
         border: Border.all(color: color.withValues(alpha: 0.5)),
       ),
       child: Text(
-        status.toUpperCase(),
-        style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold),
+        view.label.toUpperCase(),
+        style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.3),
       ),
     );
   }

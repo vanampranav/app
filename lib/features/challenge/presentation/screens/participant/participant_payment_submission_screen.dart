@@ -424,8 +424,32 @@ class _ParticipantPaymentSubmissionContentState extends State<_ParticipantPaymen
     );
 
     if (mounted && provider.errorMessage == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Payment proof submitted successfully!'), backgroundColor: AppTheme.lime));
-      Navigator.pop(context);
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: AppTheme.surface1,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.radiusXl)),
+          title: Row(children: [
+            const Icon(Icons.hourglass_top_rounded, color: AppTheme.lime),
+            const SizedBox(width: 10),
+            Expanded(child: Text('Payment submitted', style: AppTheme.headingSM)),
+          ]),
+          content: Text(
+            'Your payment proof has been submitted and is now pending review.\n\n'
+            'The challenge organizer will verify your payment and confirm your '
+            'participation. You\'ll be notified once you\'re approved.',
+            style: AppTheme.bodyMD.copyWith(color: AppTheme.textSecondary),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Got it', style: TextStyle(color: AppTheme.lime, fontWeight: FontWeight.w800)),
+            ),
+          ],
+        ),
+      );
+      if (mounted) Navigator.pop(context);
     }
   }
 }

@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="robots" content="noindex, nofollow" />
+<title>EleFit · Marketing Analytics</title>
+<style>
+  :root{
+    --bg:#0b0b0d; --surface:#141418; --surface2:#1c1c22; --border:#26262e;
+    --text:#f5f5f7; --muted:#9a9aa5; --lime:#E8FF3A; --lime-dim:#c7dd2f;
+    --red:#ff5c5c; --radius:14px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  body{background:var(--bg);color:var(--text);min-height:100vh}
+  a{color:var(--lime)}
+  .hidden{display:none!important}
+
+  /* Login */
+  #loginView{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+  .login-card{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:36px;width:100%;max-width:380px}
+  .brand{font-weight:900;font-size:26px;letter-spacing:-0.5px}
+  .brand span{color:var(--lime)}
+  .sub{color:var(--muted);font-size:13px;margin:6px 0 26px}
+  label{display:block;font-size:11px;letter-spacing:1px;color:var(--muted);text-transform:uppercase;margin:14px 0 6px;font-weight:700}
+  input{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;color:var(--text);font-size:14px}
+  input:focus{outline:none;border-color:var(--lime)}
+  button{cursor:pointer;border:none;font-weight:800;border-radius:10px}
+  .btn-primary{background:var(--lime);color:#0b0b0d;padding:13px;width:100%;font-size:14px;margin-top:22px}
+  .btn-primary:disabled{opacity:.5;cursor:default}
+  .error{color:var(--red);font-size:13px;margin-top:14px;min-height:18px}
+
+  /* App */
+  header{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg);z-index:5}
+  .who{color:var(--muted);font-size:12px}
+  .btn-ghost{background:transparent;color:var(--muted);border:1px solid var(--border);padding:8px 14px;font-size:12px}
+  main{padding:24px;max-width:1400px;margin:0 auto}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:22px}
+  .stat{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px}
+  .stat .n{font-size:30px;font-weight:900}
+  .stat .l{color:var(--muted);font-size:12px;margin-top:4px;text-transform:uppercase;letter-spacing:.5px}
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
+  .tabs{display:flex;gap:8px}
+  .tab{background:var(--surface);border:1px solid var(--border);color:var(--muted);padding:9px 16px;font-size:13px;font-weight:700;border-radius:999px}
+  .tab.active{background:var(--lime);color:#0b0b0d;border-color:var(--lime)}
+  #search{flex:1;min-width:200px;max-width:340px}
+  .btn-line{background:var(--surface);color:var(--text);border:1px solid var(--border);padding:9px 14px;font-size:13px}
+  .count{color:var(--muted);font-size:13px;margin-left:auto}
+  .table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:auto}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;padding:12px 14px;color:var(--muted);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border);white-space:nowrap;position:sticky;top:0;background:var(--surface)}
+  td{padding:12px 14px;border-bottom:1px solid var(--border);white-space:nowrap}
+  tr:hover td{background:var(--surface2)}
+  .pill{display:inline-block;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:700}
+  .pill.yes{background:rgba(232,255,58,.15);color:var(--lime)}
+  .pill.no{background:var(--surface2);color:var(--muted)}
+  .email{color:var(--lime)}
+  .empty{padding:50px;text-align:center;color:var(--muted)}
+  .spinner{display:inline-block;width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--lime);border-radius:50%;animation:spin .7s linear infinite;vertical-align:-3px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .note{color:var(--muted);font-size:11px;margin-top:16px;text-align:center}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="loginView">
+  <form class="login-card" id="loginForm">
+    <div class="brand">Ele<span>Fit</span></div>
+    <div class="sub">Marketing Analytics · staff sign-in required</div>
+    <label>Email</label>
+    <input id="email" type="email" autocomplete="username" placeholder="you@theelefit.com" required />
+    <label>Password</label>
+    <input id="password" type="password" autocomplete="current-password" placeholder="••••••••" required />
+    <button class="btn-primary" id="loginBtn" type="submit">Sign in</button>
+    <div class="error" id="loginError"></div>
+    <div class="note">Access is restricted. Use an authorized EleFit account.</div>
+  </form>
+</div>
+
+<!-- APP -->
+<div id="appView" class="hidden">
+  <header>
+    <div class="brand" style="font-size:20px">Ele<span>Fit</span> <span style="color:var(--muted);font-weight:600;font-size:13px">Analytics</span></div>
+    <div style="display:flex;align-items:center;gap:14px">
+      <span class="who" id="whoami"></span>
+      <button class="btn-ghost" id="logoutBtn">Sign out</button>
+    </div>
+  </header>
+  <main>
+    <div class="stats" id="stats"></div>
+    <div class="toolbar">
+      <div class="tabs">
+        <button class="tab active" data-tab="all">All Users</button>
+        <button class="tab" data-tab="basic">App Users</button>
+        <button class="tab" data-tab="ai">AI Coach Users</button>
+      </div>
+      <input id="search" placeholder="Search name or email…" />
+      <button class="btn-line" id="copyEmails">Copy emails</button>
+      <button class="btn-line" id="exportCsv">Export CSV</button>
+      <span class="count" id="count"></span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead id="thead"></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+      <div class="empty hidden" id="empty">No users found.</div>
+      <div class="empty" id="loading"><span class="spinner"></span> Loading users…</div>
+    </div>
+  </main>
+</div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
+    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+  import { getFirestore, collection, getDocs }
+    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+  // ── Firebase config ────────────────────────────────────────────────────────
+  // Project: getfit-with-elefit. The apiKey is NOT a secret (it only identifies
+  // the project); your Firestore security rules protect the actual data.
+  // If sign-in fails with "api-key-not-valid" or "requests blocked", register a
+  // WEB app in Firebase Console (Project settings → Add app → Web) and paste that
+  // config here — especially the apiKey and appId.
+  const firebaseConfig = {
+    apiKey: "AIzaSyAqeG-3oPRaS8kw_2YojhU51EpTbCUXmjQ",
+    authDomain: "getfit-with-elefit.firebaseapp.com",
+    projectId: "getfit-with-elefit",
+    storageBucket: "getfit-with-elefit.firebasestorage.app",
+    messagingSenderId: "302421573042",
+    appId: "1:302421573042:web:d8a8be74b733e48d5338ab",
+    measurementId: "G-21PC99T602"
+  };
+
+  // ── Access allowlist ─────────────────────────────────────────────────────
+  // Only these emails may use the dashboard. Anyone else who signs in is
+  // immediately signed out with an "not authorized" message. To add/remove
+  // people, edit this list and re-deploy.
+  const ALLOWED_EMAILS = [
+    "akshayakuhikar1998@gmail.com",
+    "vanam.pranav03@gmail.com",
+    "vanam.pranav200003@gmail.com",
+    "prakash.elefitstore@gmail.com",
+    "vanam413@gmail.com",
+    "sudheeravanam@gmail.com",
+    "gsjjw789@gmail.com",
+  ].map(e => e.toLowerCase());
+
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+
+  const $ = (id) => document.getElementById(id);
+  let allUsers = [];
+  let activeTab = "all";
+
+  // ── Auth ───────────────────────────────────────────────────────────────────
+  $("loginForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    $("loginError").textContent = "";
+    $("loginBtn").disabled = true;
+    $("loginBtn").textContent = "Signing in…";
+    try {
+      await signInWithEmailAndPassword(auth, $("email").value.trim(), $("password").value);
+    } catch (err) {
+      $("loginError").textContent = friendly(err);
+    } finally {
+      $("loginBtn").disabled = false;
+      $("loginBtn").textContent = "Sign in";
+    }
+  });
+
+  $("logoutBtn").addEventListener("click", () => signOut(auth));
+
+  onAuthStateChanged(auth, async (user) => {
+    if (user) {
+      // Enforce the access allowlist.
+      if (!ALLOWED_EMAILS.includes((user.email || "").toLowerCase())) {
+        await signOut(auth);
+        $("loginError").textContent = "This account isn't authorized for the analytics dashboard.";
+        return;
+      }
+      $("loginView").classList.add("hidden");
+      $("appView").classList.remove("hidden");
+      $("whoami").textContent = user.email;
+      await loadUsers();
+    } else {
+      $("appView").classList.add("hidden");
+      $("loginView").classList.remove("hidden");
+      allUsers = [];
+    }
+  });
+
+  function friendly(err){
+    const c = (err && err.code) || "";
+    if (c.includes("invalid-credential") || c.includes("wrong-password") || c.includes("user-not-found"))
+      return "Incorrect email or password — or this account doesn't exist in Firebase Auth yet. Create it in Firebase Console → Authentication → Add user.";
+    if (c.includes("unauthorized-domain"))
+      return "This website's domain isn't authorized. In Firebase Console → Authentication → Settings → Authorized domains, add this site's domain (e.g. your-site.netlify.app).";
+    if (c.includes("api-key-not-valid") || c.includes("requests-from") || c.includes("app-not-authorized"))
+      return "Firebase web config needed — register a Web app in the console (Project settings → Add app → Web) and paste its config (apiKey + appId) into index.html.";
+    if (c.includes("operation-not-allowed"))
+      return "Email/Password sign-in isn't enabled. Firebase Console → Authentication → Sign-in method → enable Email/Password.";
+    if (c.includes("too-many-requests")) return "Too many attempts. Try again later.";
+    return `Sign-in failed [${c || "unknown"}]: ${(err && err.message) || ""}`;
+  }
+
+  // ── Data ─────────────────────────────────────────────────────────────────────
+  // App users live in `profiles/{uid}` (onboarding data: name, age, gender, etc.).
+  // `users/{uid}` holds email + AI-Coach plan + credits. We read BOTH and merge by
+  // uid so every app user appears, enriched with their email/plan where available.
+  async function loadUsers(){
+    $("loading").classList.remove("hidden");
+    $("empty").classList.add("hidden");
+    let profErr = null, userErr = null;
+    const profSnap = await getDocs(collection(db, "profiles")).catch(e => { profErr = e; return { docs: [] }; });
+    const userSnap = await getDocs(collection(db, "users")).catch(e => { userErr = e; return { docs: [] }; });
+
+    // Both reads failed → hard error (permission / config).
+    if (profErr && userErr) {
+      $("loading").classList.add("hidden");
+      $("empty").textContent = "Could not load users: " + (profErr.message || profErr.code || "");
+      $("empty").classList.remove("hidden");
+      return;
+    }
+
+    const map = new Map();
+    // `inProfiles` marks records that exist in the profiles collection (real app
+    // users who completed onboarding). The App Users tab shows only these.
+    profSnap.docs.forEach(d => map.set(d.id, { id: d.id, p: d.data() || {}, u: {}, inProfiles: true }));
+    userSnap.docs.forEach(d => {
+      const cur = map.get(d.id) || { id: d.id, p: {}, u: {}, inProfiles: false };
+      cur.u = d.data() || {};
+      map.set(d.id, cur);
+    });
+
+    allUsers = [...map.values()].map(({ id, p, u, inProfiles }) => {
+      const first = p.firstName || u.firstName || "";
+      const last  = p.lastName  || u.lastName  || "";
+      let goal = "";
+      if (u.fitnessPlan) { try { goal = (JSON.parse(u.fitnessPlan).goal) || ""; } catch(_) {} }
+      return {
+        id,
+        inProfiles,
+        name: [first, last].filter(Boolean).join(" ") || "—",
+        email: u.email || p.email || "—",
+        hasAi: !!u.fitnessPlan,
+        goal,
+        gender: p.gender || u.gender || "—",
+        age: p.age ?? u.age ?? "—",
+        credits: u.credits ?? 0,
+        created: u.createdAt || p.createdAt || p.updatedAt || u.updatedAt || "",
+      };
+    });
+
+    // Surface a soft warning if one source couldn't be read (rules).
+    if (profErr) console.warn("profiles read blocked (add admin read rule):", profErr.code);
+    if (userErr) console.warn("users read blocked:", userErr.code);
+    render();
+    if (profErr) {
+      $("count").textContent += "  ⚠︎ profiles not readable — add admin rule";
+    }
+  }
+
+  // ── Render ───────────────────────────────────────────────────────────────────
+  $("search").addEventListener("input", render);
+  document.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () => {
+    document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
+    t.classList.add("active");
+    activeTab = t.dataset.tab;
+    render();
+  }));
+
+  // Column definitions — each has a header label and a cell renderer.
+  const COLUMNS = {
+    name:    { label:"Name",     cell: u => esc(u.name) },
+    email:   { label:"Email",    cell: u => `<span class="email">${esc(u.email)}</span>` },
+    ai:      { label:"AI Coach", cell: u => u.hasAi ? '<span class="pill yes">Yes</span>' : '<span class="pill no">No</span>' },
+    goal:    { label:"Goal",     cell: u => esc(u.goal || "—") },
+    gender:  { label:"Gender",   cell: u => esc(String(u.gender)) },
+    age:     { label:"Age",      cell: u => esc(String(u.age)) },
+    credits: { label:"Credits",  cell: u => esc(String(u.credits)) },
+    joined:  { label:"Joined",   cell: u => fmtDate(u.created) },
+  };
+  // Which columns each tab shows. "App Users" = basic details only.
+  const TAB_COLUMNS = {
+    all:   ["name","email","ai","goal","gender","age","credits","joined"],
+    ai:    ["name","email","ai","goal","gender","age","credits","joined"],
+    basic: ["name","email","gender","age","joined"],
+  };
+  function activeCols(){ return TAB_COLUMNS[activeTab] || TAB_COLUMNS.all; }
+
+  function filtered(){
+    const q = $("search").value.trim().toLowerCase();
+    return allUsers.filter(u => {
+      if (activeTab === "ai" && !u.hasAi) return false;         // AI Coach tab: only users with a plan
+      if (activeTab === "basic" && !u.inProfiles) return false; // App Users tab: only profiles-collection users
+      // "all" shows every record (profiles ∪ users)
+      if (!q) return true;
+      return u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q);
+    });
+  }
+
+  function fmtDate(v){
+    if(!v) return "—";
+    try { const d = new Date(v); return isNaN(d) ? v : d.toISOString().slice(0,10); } catch(_){ return v; }
+  }
+
+  function render(){
+    $("loading").classList.add("hidden");
+    const rows = filtered();
+    const cols = activeCols();
+
+    // stats (always over the FULL set, not the filter)
+    const total = allUsers.length;
+    const ai = allUsers.filter(u => u.hasAi).length;
+    const withCredits = allUsers.filter(u => (u.credits||0) > 0).length;
+    $("stats").innerHTML = `
+      ${statCard(total, "Total users")}
+      ${statCard(ai, "AI Coach users")}
+      ${statCard(total - ai, "No AI plan yet")}
+      ${statCard(withCredits, "Have credits")}
+    `;
+
+    // header (rebuilt per tab)
+    $("thead").innerHTML = "<tr>" + cols.map(c => `<th>${COLUMNS[c].label}</th>`).join("") + "</tr>";
+
+    $("count").textContent = rows.length + (rows.length === 1 ? " user" : " users");
+    const tb = $("tbody");
+    if (!rows.length){ tb.innerHTML=""; $("empty").classList.remove("hidden"); return; }
+    $("empty").classList.add("hidden");
+    tb.innerHTML = rows.map(u =>
+      "<tr>" + cols.map(c => `<td>${COLUMNS[c].cell(u)}</td>`).join("") + "</tr>"
+    ).join("");
+  }
+
+  function statCard(n,l){ return `<div class="stat"><div class="n">${n}</div><div class="l">${l}</div></div>`; }
+  function esc(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+  // ── Export / copy ────────────────────────────────────────────────────────────
+  $("copyEmails").addEventListener("click", () => {
+    const emails = filtered().map(u => u.email).filter(e => e && e !== "—");
+    navigator.clipboard.writeText(emails.join(", "));
+    $("copyEmails").textContent = `Copied ${emails.length}!`;
+    setTimeout(() => $("copyEmails").textContent = "Copy emails", 1500);
+  });
+
+  // Plain-text cell value for CSV (mirrors the on-screen columns, without HTML).
+  const CSV_CELL = {
+    name: u => u.name, email: u => u.email, ai: u => u.hasAi?"Yes":"No",
+    goal: u => u.goal, gender: u => u.gender, age: u => u.age,
+    credits: u => u.credits, joined: u => fmtDate(u.created),
+  };
+  $("exportCsv").addEventListener("click", () => {
+    const rows = filtered();
+    const cols = activeCols();
+    const head = cols.map(c => COLUMNS[c].label);
+    const lines = [head.join(",")].concat(rows.map(u =>
+      cols.map(c => csv(CSV_CELL[c](u))).join(",")
+    ));
+    const blob = new Blob([lines.join("\n")], {type:"text/csv"});
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `elefit-users-${activeTab}-${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+  });
+  function csv(v){ const s=String(v??""); return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s; }
+</script>
+</body>
+</html>

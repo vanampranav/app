@@ -271,7 +271,10 @@ class _ParticipantChallengeDashboardContent extends StatelessWidget {
     // Availability Rules
     final canSubmitInitialPayment = paymentStatus == PaymentStatus.pending;
     final canSubmitRecoveryPayment = paymentStatus == PaymentStatus.failed;
-    final canSubmitBaseline = participantStatus == ParticipantStatus.active || participantStatus == ParticipantStatus.joined;
+    // Baseline requires the participant to be APPROVED (active). The service
+    // rejects any other status, so the button must stay locked until then —
+    // otherwise the user taps and gets a raw exception.
+    final canSubmitBaseline = participantStatus == ParticipantStatus.active;
     final canSubmitWeekly = baseline != null && baseline.reviewStatus == ReviewStatus.approved;
     
     final now = DateTime.now();
@@ -307,7 +310,9 @@ class _ParticipantChallengeDashboardContent extends StatelessWidget {
           icon: Icons.straighten_rounded,
           isEnabled: canSubmitBaseline,
           status: baseline?.reviewStatus,
-          subtitle: baseline == null ? 'Photos & initial weight' : 'Status: ${baseline.reviewStatus}',
+          subtitle: !canSubmitBaseline
+              ? 'Available after the organizer approves your entry'
+              : (baseline == null ? 'Photos & initial weight' : 'Status: ${baseline.reviewStatus}'),
           onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ParticipantBaselineSubmissionScreen(challengeId: challenge.id))),
         ),
         const SizedBox(height: 12),

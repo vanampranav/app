@@ -502,6 +502,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   const SizedBox(height: AppTheme.lg),
                   _buildAiCoachBanner(),
                   const SizedBox(height: AppTheme.lg),
+                  _buildChallengeBanner(),
+                  const SizedBox(height: AppTheme.lg),
                   _buildStatsRow(),
                   const SizedBox(height: AppTheme.lg),
                   _buildFeaturedProducts(),
@@ -742,10 +744,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   // ─── Quick actions ────────────────────────────────────────────────────────────
 
   Widget _buildQuickActions() {
-    final challengeEntry = context.watch<HomeChallengeEntryProvider>();
-    final hasActive = challengeEntry.hasActiveChallenge;
-    final activeId = challengeEntry.activeParticipation?.challengeId;
-
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppTheme.md),
       child: Column(
@@ -768,27 +766,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       ),
                     ),
                   ),
-                ),
-              ),
-              const SizedBox(width: AppTheme.sm),
-              Expanded(
-                child: EFQuickAction(
-                  icon: hasActive ? Icons.dashboard_customize_rounded : Icons.emoji_events_rounded,
-                  label: hasActive ? 'My\nChallenge' : 'Join\nChallenge',
-                  accentColor: AppTheme.lime,
-                  onTap: () {
-                    if (hasActive && activeId != null) {
-                      Navigator.push(
-                        context,
-                        EFPageRoute(page: ParticipantChallengeDashboardScreen(challengeId: activeId)),
-                      );
-                    } else {
-                      Navigator.push(
-                        context,
-                        EFPageRoute(page: const ChallengeDiscoveryScreen()),
-                      );
-                    }
-                  },
                 ),
               ),
               const SizedBox(width: AppTheme.sm),
@@ -886,6 +863,103 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               ),
               child: const Icon(Icons.auto_awesome_rounded,
                   color: AppTheme.lime, size: 32),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ─── Challenges banner ───────────────────────────────────────────────────────
+
+  Widget _buildChallengeBanner() {
+    final challengeEntry = context.watch<HomeChallengeEntryProvider>();
+    final hasActive = challengeEntry.hasActiveChallenge;
+    final activeId = challengeEntry.activeParticipation?.challengeId;
+
+    const gold = Color(0xFFFFC53D);
+    const goldDeep = Color(0xFFFF9F1C);
+
+    return GestureDetector(
+      onTap: () {
+        if (hasActive && activeId != null) {
+          Navigator.push(context,
+              EFPageRoute(page: ParticipantChallengeDashboardScreen(challengeId: activeId)));
+        } else {
+          Navigator.push(context, EFPageRoute(page: const ChallengeDiscoveryScreen()));
+        }
+      },
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: AppTheme.md),
+        padding: const EdgeInsets.all(AppTheme.lg),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF2A2410), Color(0xFF15130A)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+          border: Border.all(color: gold.withValues(alpha: 0.35)),
+          boxShadow: [
+            BoxShadow(color: gold.withValues(alpha: 0.15), blurRadius: 20, offset: const Offset(0, 8)),
+          ],
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  EFTag(label: hasActive ? 'Active' : 'New', color: gold),
+                  const SizedBox(height: AppTheme.sm),
+                  Text(hasActive ? 'YOUR CHALLENGE' : 'JOIN THE\nCHALLENGE',
+                      style: AppTheme.headingMD),
+                  const SizedBox(height: AppTheme.sm),
+                  Text(
+                    hasActive
+                        ? 'Track your progress and climb the leaderboard.'
+                        : 'Compete, transform your body & win prizes.',
+                    style: AppTheme.bodyMD,
+                  ),
+                  const SizedBox(height: AppTheme.md),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: AppTheme.md, vertical: AppTheme.sm),
+                    decoration: BoxDecoration(
+                      color: gold,
+                      borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          hasActive
+                              ? Icons.dashboard_customize_rounded
+                              : Icons.emoji_events_rounded,
+                          color: Colors.black,
+                          size: 14,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(hasActive ? 'View Progress' : 'Join Now',
+                            style: AppTheme.labelMD.copyWith(color: Colors.black)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: AppTheme.md),
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(colors: [gold, goldDeep]),
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(color: gold.withValues(alpha: 0.4), blurRadius: 16),
+                ],
+              ),
+              child: const Icon(Icons.emoji_events_rounded, color: Colors.black, size: 32),
             ),
           ],
         ),

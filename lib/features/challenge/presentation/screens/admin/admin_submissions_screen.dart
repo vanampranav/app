@@ -279,26 +279,18 @@ class _SubmissionCard extends StatelessWidget {
               onTap: () => _confirmApproval(context, provider, submission, adminId),
             ),
             const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: EFButton(
-                    label: 'Request Resubmission',
-                    variant: EFButtonVariant.secondary,
-                    height: 40,
-                    onTap: () => _showReviewDialog(context, provider, submission, adminId, 'request_resubmission'),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: EFButton(
-                    label: 'Reject',
-                    variant: EFButtonVariant.danger,
-                    height: 40,
-                    onTap: () => _showReviewDialog(context, provider, submission, adminId, 'reject'),
-                  ),
-                ),
-              ],
+            EFButton(
+              label: 'Request Resubmission',
+              variant: EFButtonVariant.secondary,
+              height: 44,
+              onTap: () => _showReviewDialog(context, provider, submission, adminId, 'request_resubmission'),
+            ),
+            const SizedBox(height: 8),
+            EFButton(
+              label: 'Reject',
+              variant: EFButtonVariant.danger,
+              height: 44,
+              onTap: () => _showReviewDialog(context, provider, submission, adminId, 'reject'),
             ),
           ],
           

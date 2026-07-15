@@ -15,9 +15,11 @@ service firebase.storage {
       return isSignedIn()
         && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.get('isAdmin', false) == true;
     }
+    // Size guard only. We intentionally do NOT require an image content-type:
+    // Flutter's putFile() often uploads without setting one, which made valid
+    // photo/proof uploads fail with storage/unauthorized. Auth + size are enough.
     function isImageUnder(maxBytes) {
-      return request.resource.size < maxBytes
-        && request.resource.contentType.matches('image/.*');
+      return request.resource.size < maxBytes;
     }
 
     // Progress / body-composition photos (baseline, weekly, final).

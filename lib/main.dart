@@ -142,10 +142,11 @@ void main() async {
             submissionRepository: repoS,
           ),
         ),
-        ProxyProvider2<ChallengeRepository, AdminAuditService, ChallengeService>(
-          update: (_, repo, auditS, __) => ChallengeService(
+        ProxyProvider3<ChallengeRepository, AdminAuditService, ChallengePackageRepository, ChallengeService>(
+          update: (_, repo, auditS, pkgRepo, __) => ChallengeService(
             challengeRepository: repo,
             auditService: auditS,
+            packageRepository: pkgRepo,
           ),
         ),
         ProxyProvider4<

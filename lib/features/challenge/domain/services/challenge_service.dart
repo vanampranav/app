@@ -1,17 +1,21 @@
 import 'package:elefit_app/features/challenge/data/models/challenge.dart';
 import 'package:elefit_app/features/challenge/data/repositories/challenge_repository.dart';
+import 'package:elefit_app/features/challenge/data/repositories/challenge_package_repository.dart';
 import 'package:elefit_app/features/challenge/data/constants/firestore_collections.dart';
 import 'admin_audit_service.dart';
 
 class ChallengeService {
   final ChallengeRepository _challengeRepository;
   final AdminAuditService _auditService;
+  final ChallengePackageRepository _packageRepository;
 
   ChallengeService({
     required ChallengeRepository challengeRepository,
     required AdminAuditService auditService,
+    required ChallengePackageRepository packageRepository,
   })  : _challengeRepository = challengeRepository,
-        _auditService = auditService;
+        _auditService = auditService,
+        _packageRepository = packageRepository;
 
   Future<void> createDraftChallenge({
     required String title,
@@ -75,6 +79,14 @@ class ChallengeService {
       throw Exception('End date must be after start date.');
     }
 
+    // A challenge can't be joined without an active package to select, so block
+    // opening registration until at least one exists (prevents the participant
+    // "No Packages" dead-end).
+    final activePackages = await _packageRepository.getActivePackages(challengeId);
+    if (activePackages.isEmpty) {
+      throw Exception('Please connect the challenge to a package to make it active.');
+    }
+
     final updatedChallenge = challenge.copyWith(
       status: ChallengeStatus.registrationOpen,
       lastUpdatedByAdminId: adminId,
@@ -91,6 +103,23 @@ class ChallengeService {
       targetId: challengeId,
       previousData: challenge.toMap(),
       newData: updatedChallenge.toMap(),
+    );
+  }
+
+  /// Permanently deletes a challenge (used for cleaning up test challenges).
+  /// Note: this removes the challenge document; its participant/package
+  /// subcollections are not recursively deleted (fine for test cleanup).
+  Future<void> deleteChallenge(String challengeId, String adminId) async {
+    final challenge = await _challengeRepository.getChallengeById(challengeId);
+    await _challengeRepository.deleteChallenge(challengeId);
+    await _auditService.logAction(
+      adminId: adminId,
+      challengeId: challengeId,
+      action: 'delete_challenge',
+      targetCollection: FirestoreCollections.challenges,
+      targetId: challengeId,
+      previousData: challenge?.toMap(),
+      newData: null,
     );
   }
 
