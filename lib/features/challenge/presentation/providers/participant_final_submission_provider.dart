@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:elefit_app/features/challenge/presentation/providers/challenge_error_text.dart';
+import 'package:elefit_app/features/challenge/challenge_auth_guard.dart';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:elefit_app/features/challenge/data/models/challenge.dart';
@@ -101,13 +103,19 @@ class ParticipantFinalSubmissionProvider with ChangeNotifier {
     }
   }
 
-  void addPhoto(File file) {
+  // Bytes captured at pick time, kept in lock-step with _newPhotos, so uploads
+  // never depend on image_picker's temp file still existing at submit time.
+  final List<Uint8List> _newPhotoBytes = [];
+
+  void addPhoto(File file, Uint8List bytes) {
     _newPhotos.add(file);
+    _newPhotoBytes.add(bytes);
     notifyListeners();
   }
 
   void removeNewPhoto(int index) {
     _newPhotos.removeAt(index);
+    _newPhotoBytes.removeAt(index);
     notifyListeners();
   }
 
@@ -136,13 +144,14 @@ class ParticipantFinalSubmissionProvider with ChangeNotifier {
     notifyListeners();
 
     try {
+      await ensureFirebaseSdkSignedIn();
       List<String> finalPhotoUrls = List.from(_existingPhotoUrls);
 
       if (_newPhotos.isNotEmpty) {
         _isUploading = true;
         notifyListeners();
 
-        for (var file in _newPhotos) {
+        for (var bytes in _newPhotoBytes) {
           final timestamp = DateTime.now().millisecondsSinceEpoch;
           final storageRef = FirebaseStorage.instance
               .ref()
@@ -152,7 +161,7 @@ class ParticipantFinalSubmissionProvider with ChangeNotifier {
               .child('final')
               .child('$timestamp.jpg');
 
-          final uploadTask = await storageRef.putFile(file, SettableMetadata(contentType: 'image/jpeg'));
+          final uploadTask = await storageRef.putData(bytes, SettableMetadata(contentType: 'image/jpeg'));
           final url = await uploadTask.ref.getDownloadURL();
           finalPhotoUrls.add(url);
         }

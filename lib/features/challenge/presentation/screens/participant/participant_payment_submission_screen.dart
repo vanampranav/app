@@ -89,7 +89,10 @@ class _ParticipantPaymentSubmissionContentState extends State<_ParticipantPaymen
     if (source != null) {
       final pickedFile = await _picker.pickImage(source: source, imageQuality: 70);
       if (pickedFile != null) {
-        provider.setProofImage(File(pickedFile.path));
+        // Read the bytes now — the picker's temp file can be cleaned up before
+        // upload, so we don't rely on the file path surviving.
+        final bytes = await pickedFile.readAsBytes();
+        provider.setProofImage(File(pickedFile.path), bytes);
       }
     }
   }

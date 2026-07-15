@@ -8,18 +8,18 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:302421573042:android:10c93693281925215338ab",
+        "mobilesdk_app_id": "1:302421573042:android:c4296edd42737b2a5338ab",
         "android_client_info": {
-          "package_name": "com.example.elefit"
+          "package_name": "com.theelefit.app"
         }
       },
       "oauth_client": [
         {
-          "client_id": "302421573042-d7luhm4ti9cdf5ludgvunm000m8dm36q.apps.googleusercontent.com",
+          "client_id": "302421573042-s1fk2pefittoid42ivhrrfi7umgnclsp.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
-            "package_name": "com.example.elefit",
-            "certificate_hash": "3d3a87c72bf173c872a020dddf4c8e439871d8c2"
+            "package_name": "com.theelefit.app",
+            "certificate_hash": "703eeacc80a5c9407e0c76bdd37101b72121cdbd"
           }
         },
         {
@@ -38,35 +38,13 @@
             {
               "client_id": "302421573042-soa0nek04tp566dopuealt1nn6d3qr95.apps.googleusercontent.com",
               "client_type": 3
-            }
-          ]
-        }
-      }
-    },
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:302421573042:android:c4296edd42737b2a5338ab",
-        "android_client_info": {
-          "package_name": "com.theelefit.app"
-        }
-      },
-      "oauth_client": [
-        {
-          "client_id": "302421573042-su11rtncnta243h4gv49590mmidjkg43.apps.googleusercontent.com",
-          "client_type": 3
-        }
-      ],
-      "api_key": [
-        {
-          "current_key": "AIzaSyA2zu144EAVw0j7lC9uTyjPfBmSW7jHEbU"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": [
+            },
             {
-              "client_id": "302421573042-soa0nek04tp566dopuealt1nn6d3qr95.apps.googleusercontent.com",
-              "client_type": 3
+              "client_id": "302421573042-720ns4c42bf8nr036iegkrdcdmsupoo8.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.elefitApp"
+              }
             }
           ]
         }

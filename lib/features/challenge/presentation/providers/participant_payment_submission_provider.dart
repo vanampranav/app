@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:elefit_app/features/challenge/presentation/providers/challenge_error_text.dart';
+import 'package:elefit_app/features/challenge/challenge_auth_guard.dart';
 import 'dart:io';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
@@ -29,6 +30,7 @@ class ParticipantPaymentSubmissionProvider with ChangeNotifier {
   String? _errorMessage;
   
   File? _proofImage;
+  Uint8List? _proofBytes; // captured at pick time so upload never depends on a temp file
   String? _proofImageUrl;
 
   Challenge? get challenge => _challenge;
@@ -39,6 +41,7 @@ class ParticipantPaymentSubmissionProvider with ChangeNotifier {
   bool get isSubmitting => _isSubmitting;
   String? get errorMessage => _errorMessage;
   File? get proofImage => _proofImage;
+  Uint8List? get proofBytes => _proofBytes;
   String? get proofImageUrl => _proofImageUrl;
 
   ParticipantPaymentSubmissionProvider({
@@ -83,8 +86,9 @@ class ParticipantPaymentSubmissionProvider with ChangeNotifier {
     }
   }
 
-  void setProofImage(File file) {
+  void setProofImage(File file, Uint8List bytes) {
     _proofImage = file;
+    _proofBytes = bytes;
     notifyListeners();
   }
 
@@ -104,21 +108,28 @@ class ParticipantPaymentSubmissionProvider with ChangeNotifier {
     notifyListeners();
 
     try {
+      // Make sure the Firebase Auth SDK session is live before touching Storage,
+      // otherwise the upload fails with storage/unauthorized.
+      await ensureFirebaseSdkSignedIn();
+
       String? finalUrl = _proofImageUrl;
 
-      if (_proofImage != null) {
+      if (_proofBytes != null) {
         _isUploading = true;
         notifyListeners();
-        
+
         final storageRef = FirebaseStorage.instance
             .ref()
             .child('payment_proofs')
             .child(challengeId)
             .child('$userId-${DateTime.now().millisecondsSinceEpoch}.jpg');
-            
-        final uploadTask = await storageRef.putFile(_proofImage!, SettableMetadata(contentType: 'image/jpeg'));
+
+        // Upload the in-memory bytes (captured at pick time) rather than a temp
+        // file path — image_picker's cache file can be gone by submit time,
+        // which triggered the "file.absolute.existsSync() is not true" assertion.
+        final uploadTask = await storageRef.putData(_proofBytes!, SettableMetadata(contentType: 'image/jpeg'));
         finalUrl = await uploadTask.ref.getDownloadURL();
-        
+
         _isUploading = false;
         notifyListeners();
       }

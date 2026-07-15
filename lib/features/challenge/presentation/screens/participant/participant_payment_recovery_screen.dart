@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:elefit_app/features/challenge/data/constants/firestore_collections.dart';
+import 'package:elefit_app/features/challenge/challenge_auth_guard.dart';
 import 'package:elefit_app/theme/app_theme.dart';
 import 'package:elefit_app/widgets/ef_components.dart';
 import 'package:elefit_app/widgets/ef_error_components.dart';
@@ -28,6 +29,7 @@ class _ParticipantPaymentRecoveryScreenState extends State<ParticipantPaymentRec
   final _refController = TextEditingController();
   final _notesController = TextEditingController();
   File? _image;
+  Uint8List? _imageBytes; // captured at pick time so upload never depends on a temp file
   bool _isLoading = false;
   bool _isUploading = false;
   String? _errorMessage;
@@ -60,7 +62,11 @@ class _ParticipantPaymentRecoveryScreenState extends State<ParticipantPaymentRec
   Future<void> _pickImage() async {
     final pickedFile = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
     if (pickedFile != null) {
-      setState(() => _image = File(pickedFile.path));
+      final bytes = await pickedFile.readAsBytes();
+      setState(() {
+        _image = File(pickedFile.path);
+        _imageBytes = bytes;
+      });
     }
   }
 
@@ -72,13 +78,16 @@ class _ParticipantPaymentRecoveryScreenState extends State<ParticipantPaymentRec
     final paymentService = context.read<PaymentApprovalService>();
 
     try {
+      await ensureFirebaseSdkSignedIn();
       String? proofUrl;
-      if (_image != null) {
+      if (_imageBytes != null) {
         final ref = FirebaseStorage.instance
             .ref()
             .child('payments')
             .child('${_participant!.id}_${DateTime.now().millisecondsSinceEpoch}.jpg');
-        await ref.putFile(_image!, SettableMetadata(contentType: 'image/jpeg'));
+        // Upload in-memory bytes, not the temp file path (image_picker's cache
+        // file can be gone by submit time → file.absolute.existsSync() assertion).
+        await ref.putData(_imageBytes!, SettableMetadata(contentType: 'image/jpeg'));
         proofUrl = await ref.getDownloadURL();
       }
 

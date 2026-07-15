@@ -30,16 +30,19 @@ service firebase.storage {
       allow write: if isSignedIn() && request.auth.uid == userId && isImageUnder(15 * 1024 * 1024);
     }
 
-    // Payment proofs (sensitive). The uploader's id is embedded in the file
-    // name, not the path, so we can't scope reads per-owner here — restrict
-    // reads to admins; any signed-in user may upload their own proof.
+    // Payment proofs. The uploader's id is in the file NAME (not a path segment),
+    // so we can't scope reads per-owner. Read must be allowed for signed-in users
+    // — the app calls getDownloadURL() (a read) right after uploading, so an
+    // admin-only read made the participant's own submission fail with 403.
+    // Paths carry a uid + timestamp and listing is not permitted, so enumeration
+    // is impractical.
     match /payment_proofs/{challengeId}/{fileName} {
-      allow read: if isAdmin();
+      allow read: if isSignedIn();
       allow write: if isSignedIn() && isImageUnder(15 * 1024 * 1024);
     }
     // Payment-recovery re-uploads.
     match /payments/{fileName} {
-      allow read: if isAdmin();
+      allow read: if isSignedIn();
       allow write: if isSignedIn() && isImageUnder(15 * 1024 * 1024);
     }
 

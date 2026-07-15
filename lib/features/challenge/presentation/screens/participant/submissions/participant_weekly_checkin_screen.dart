@@ -89,7 +89,8 @@ class _ParticipantWeeklyCheckinContentState extends State<_ParticipantWeeklyChec
     if (source != null) {
       final pickedFile = await _picker.pickImage(source: source, imageQuality: 70);
       if (pickedFile != null) {
-        provider.addPhoto(File(pickedFile.path));
+        final bytes = await pickedFile.readAsBytes();
+        provider.addPhoto(File(pickedFile.path), bytes);
       }
     }
   }
