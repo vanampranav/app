@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:elefit_app/features/challenge/data/models/app_user.dart';
 import 'package:elefit_app/features/challenge/data/constants/firestore_collections.dart';
 import 'package:elefit_app/services/analytics_service.dart';
+import 'package:elefit_app/services/onesignal_service.dart';
 
 class AuthService with ChangeNotifier {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -30,6 +31,10 @@ class AuthService with ChangeNotifier {
   Future<void> _onAuthStateChanged(User? firebaseUser) async {
     if (firebaseUser == null) {
       debugPrint('AuthService: Firebase SDK user is null');
+      // Stop targeting this device so it no longer receives this user's push.
+      try {
+        OneSignalService.clearUser();
+      } catch (_) {}
       _currentUser = null;
       _isLoading = false;
       notifyListeners();
@@ -37,6 +42,12 @@ class AuthService with ChangeNotifier {
     }
 
     debugPrint('AuthService: Firebase SDK user is logged in: ${firebaseUser.uid}');
+    // Identify this device to OneSignal by the SAME uid the challenge feature
+    // addresses notifications to (recipientUserId == Firebase uid), so a
+    // per-notification push reaches exactly this participant. Best-effort.
+    try {
+      OneSignalService.setUser(firebaseUser.uid, firebaseUser.email ?? '');
+    } catch (_) {}
     try {
       final doc = await _firestore
           .collection(FirestoreCollections.users)
