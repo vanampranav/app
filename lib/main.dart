@@ -35,6 +35,7 @@ import 'package:elefit_app/features/challenge/data/repositories/challenge_notifi
 import 'package:elefit_app/features/challenge/data/repositories/admin_audit_log_repository.dart';
 import 'package:elefit_app/features/challenge/data/repositories/challenge_package_repository.dart';
 import 'package:elefit_app/features/challenge/data/repositories/user_repository.dart';
+import 'package:elefit_app/features/challenge/data/repositories/leaderboard_repository.dart';
 import 'package:elefit_app/features/challenge/domain/services/admin_audit_service.dart';
 import 'package:elefit_app/features/challenge/domain/services/challenge_package_service.dart';
 import 'package:elefit_app/features/challenge/domain/services/challenge_notification_service.dart';
@@ -42,6 +43,8 @@ import 'package:elefit_app/features/challenge/domain/services/challenge_service.
 import 'package:elefit_app/features/challenge/domain/services/participant_enrollment_service.dart';
 import 'package:elefit_app/features/challenge/domain/services/payment_approval_service.dart';
 import 'package:elefit_app/features/challenge/domain/services/submission_review_service.dart';
+import 'package:elefit_app/features/challenge/domain/services/leaderboard_service.dart';
+import 'package:elefit_app/features/challenge/domain/services/winner_selection_service.dart';
 import 'package:elefit_app/features/challenge/domain/services/auth_service.dart';
 import 'package:elefit_app/features/challenge/presentation/providers/home_challenge_entry_provider.dart';
 import 'package:elefit_app/features/challenge/presentation/providers/notification_provider.dart';
@@ -120,6 +123,7 @@ void main() async {
         Provider(create: (_) => ChallengeNotificationRepository()),
         Provider(create: (_) => AdminAuditLogRepository()),
         Provider(create: (_) => UserRepository()),
+        Provider(create: (_) => LeaderboardRepository()),
 
         // Challenge feature — services
         ProxyProvider<AdminAuditLogRepository, AdminAuditService>(
@@ -177,6 +181,26 @@ void main() async {
             notificationService: notifyS,
           ),
         ),
+        Provider(
+          create: (ctx) => LeaderboardService(
+            challengeRepository: ctx.read<ChallengeRepository>(),
+            participantRepository: ctx.read<ChallengeParticipantRepository>(),
+            submissionRepository: ctx.read<ChallengeSubmissionRepository>(),
+            userRepository: ctx.read<UserRepository>(),
+            leaderboardRepository: ctx.read<LeaderboardRepository>(),
+          ),
+        ),
+        ProxyProvider2<AdminAuditService, ChallengeNotificationService,
+            WinnerSelectionService>(
+          update: (ctx, auditS, notifyS, __) => WinnerSelectionService(
+            challengeRepository: ctx.read<ChallengeRepository>(),
+            participantRepository: ctx.read<ChallengeParticipantRepository>(),
+            leaderboardRepository: ctx.read<LeaderboardRepository>(),
+            leaderboardService: ctx.read<LeaderboardService>(),
+            auditService: auditS,
+            notificationService: notifyS,
+          ),
+        ),
         ProxyProvider5<
             ChallengeSubmissionRepository,
             ChallengeParticipantRepository,
@@ -184,12 +208,13 @@ void main() async {
             AdminAuditService,
             ChallengeNotificationService,
             SubmissionReviewService>(
-          update: (_, repoS, repoP, repoC, auditS, notifyS, __) => SubmissionReviewService(
+          update: (ctx, repoS, repoP, repoC, auditS, notifyS, __) => SubmissionReviewService(
             submissionRepository: repoS,
             participantRepository: repoP,
             challengeRepository: repoC,
             auditService: auditS,
             notificationService: notifyS,
+            leaderboardService: ctx.read<LeaderboardService>(),
           ),
         ),
         ChangeNotifierProxyProvider<AuthService, HomeChallengeEntryProvider>(

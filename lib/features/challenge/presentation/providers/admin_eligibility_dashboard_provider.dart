@@ -6,6 +6,7 @@ import 'package:elefit_app/features/challenge/data/repositories/user_repository.
 import 'package:elefit_app/features/challenge/domain/services/admin_audit_service.dart';
 import 'package:elefit_app/features/challenge/data/constants/firestore_collections.dart';
 import 'package:elefit_app/services/analytics_service.dart';
+import 'challenge_error_text.dart';
 
 class ParticipantEligibilityViewModel {
   final ChallengeParticipant participant;
@@ -141,7 +142,7 @@ class AdminEligibilityDashboardProvider with ChangeNotifier {
 
           notifyListeners();
         } catch (e) {
-          _errorMessage = e.toString();
+          _errorMessage = friendlyChallengeError(e);
           _isLoading = false;
           notifyListeners();
         }
@@ -205,7 +206,7 @@ class AdminEligibilityDashboardProvider with ChangeNotifier {
 
       _errorMessage = null;
     } catch (e) {
-      _errorMessage = e.toString();
+      _errorMessage = friendlyChallengeError(e);
     } finally {
       _isActionInProgress = false;
       notifyListeners();
@@ -259,7 +260,7 @@ class AdminEligibilityDashboardProvider with ChangeNotifier {
 
       _errorMessage = null;
     } catch (e) {
-      _errorMessage = e.toString();
+      _errorMessage = friendlyChallengeError(e);
     } finally {
       _isActionInProgress = false;
       notifyListeners();
@@ -276,7 +277,7 @@ class AdminEligibilityDashboardProvider with ChangeNotifier {
         ));
       }
     } catch (e) {
-      _errorMessage = e.toString();
+      _errorMessage = friendlyChallengeError(e);
       notifyListeners();
     }
   }

@@ -5,6 +5,7 @@ import 'package:elefit_app/features/challenge/data/repositories/challenge_reposi
 import 'package:elefit_app/features/challenge/data/constants/firestore_collections.dart';
 import 'admin_audit_service.dart';
 import 'challenge_notification_service.dart';
+import 'leaderboard_service.dart';
 
 class SubmissionReviewService {
   final ChallengeSubmissionRepository _submissionRepository;
@@ -13,17 +14,28 @@ class SubmissionReviewService {
   final AdminAuditService _auditService;
   final ChallengeNotificationService _notificationService;
 
+  /// Optional: when present, the public leaderboard is recomputed after a
+  /// review changes scores. Nullable so tests can omit it.
+  final LeaderboardService? _leaderboardService;
+
   SubmissionReviewService({
     required ChallengeSubmissionRepository submissionRepository,
     required ChallengeParticipantRepository participantRepository,
     required ChallengeRepository challengeRepository,
     required AdminAuditService auditService,
     required ChallengeNotificationService notificationService,
+    LeaderboardService? leaderboardService,
   })  : _submissionRepository = submissionRepository,
         _participantRepository = participantRepository,
         _challengeRepository = challengeRepository,
         _auditService = auditService,
-        _notificationService = notificationService;
+        _notificationService = notificationService,
+        _leaderboardService = leaderboardService;
+
+  /// Best-effort refresh of the public leaderboard snapshot after a review.
+  Future<void> _refreshLeaderboard(String challengeId) async {
+    await _leaderboardService?.recomputeAndPublish(challengeId);
+  }
 
   Future<void> _submit(String userId, String challengeId, String type, Map<String, dynamic> data) async {
     // Check if participant is approved
@@ -32,12 +44,36 @@ class SubmissionReviewService {
       throw Exception('Participant must be approved before submitting.');
     }
 
-    // Check if baseline is needed
+    // Weekly / final submissions depend on THIS challenge's history. Fetch
+    // submissions scoped to (user, challenge) so an approved baseline in a
+    // DIFFERENT challenge can never satisfy these guards (the cross-challenge
+    // baseline-leak bug).
     if (type != SubmissionType.baseline) {
-      final submissions = await _submissionRepository.streamSubmissionsByParticipant(userId).first;
-      final hasBaseline = submissions.any((s) => s.type == SubmissionType.baseline && s.reviewStatus == ReviewStatus.approved);
+      final submissions = await _submissionRepository
+          .streamSubmissionsByParticipantAndChallenge(userId, challengeId)
+          .first;
+
+      final hasBaseline = submissions.any((s) =>
+          s.type == SubmissionType.baseline &&
+          s.reviewStatus == ReviewStatus.approved);
       if (!hasBaseline) {
         throw Exception('Baseline submission must be approved before weekly or final submissions.');
+      }
+
+      // Prevent a duplicate weekly check-in for the same week (the UI also
+      // gates this, but this is the server-side integrity guard). A pending or
+      // approved submission blocks re-submitting; a rejected / needs-clarification
+      // one is allowed through so the participant can resubmit.
+      if (type == SubmissionType.weeklyCheckIn) {
+        final weekNumber = data['weekNumber'];
+        final alreadySubmitted = submissions.any((s) =>
+            s.type == SubmissionType.weeklyCheckIn &&
+            s.data['weekNumber'] == weekNumber &&
+            (s.reviewStatus == ReviewStatus.submitted ||
+                s.reviewStatus == ReviewStatus.approved));
+        if (alreadySubmitted) {
+          throw Exception('You have already submitted your check-in for week $weekNumber.');
+        }
       }
     }
 
@@ -125,6 +161,8 @@ class SubmissionReviewService {
     if (challenge != null) {
       await _notificationService.notifySubmissionApproved(submission.userId, challenge.title, submission.type, submission.challengeId);
     }
+
+    await _refreshLeaderboard(submission.challengeId);
   }
 
   Future<void> rejectSubmission(String submissionId, String adminId, String reason) async {
@@ -178,6 +216,8 @@ class SubmissionReviewService {
     if (challenge != null) {
       await _notificationService.notifySubmissionRejected(submission.userId, challenge.title, submission.type, submission.challengeId);
     }
+
+    await _refreshLeaderboard(submission.challengeId);
   }
 
   Future<void> requestResubmission(String submissionId, String adminId, String reason) async {
@@ -231,5 +271,7 @@ class SubmissionReviewService {
     if (challenge != null) {
       await _notificationService.notifyResubmissionRequested(submission.userId, challenge.title, submission.type, submission.challengeId);
     }
+
+    await _refreshLeaderboard(submission.challengeId);
   }
 }

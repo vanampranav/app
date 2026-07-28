@@ -3,6 +3,7 @@ import 'package:elefit_app/features/challenge/data/models/app_user.dart';
 import 'package:elefit_app/features/challenge/data/models/challenge_participant.dart';
 import 'package:elefit_app/features/challenge/data/repositories/user_repository.dart';
 import 'package:elefit_app/features/challenge/data/repositories/challenge_participant_repository.dart';
+import 'challenge_error_text.dart';
 
 class AdminParticipantDetailProvider with ChangeNotifier {
   final String userId;
@@ -50,7 +51,7 @@ class AdminParticipantDetailProvider with ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     } catch (e) {
-      _errorMessage = e.toString();
+      _errorMessage = friendlyChallengeError(e);
       _isLoading = false;
       notifyListeners();
     }

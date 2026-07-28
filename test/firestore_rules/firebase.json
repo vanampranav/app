@@ -1,0 +1,12 @@
+{
+  "//": "Emulator-only config for RULES TESTING. The test (rules.test.mjs) loads the REAL ../../firestore.rules via readFileSync and pushes it to the emulator through initializeTestEnvironment, so the CLI itself does not need a rules reference. This does NOT affect the app's top-level firebase.json.",
+  "emulators": {
+    "singleProjectMode": true,
+    "firestore": {
+      "port": 8080
+    },
+    "ui": {
+      "enabled": false
+    }
+  }
+}

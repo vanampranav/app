@@ -7,6 +7,7 @@ import 'package:elefit_app/features/challenge/data/constants/firestore_collectio
 import 'package:elefit_app/features/challenge/data/models/challenge.dart';
 import 'package:elefit_app/features/challenge/data/repositories/challenge_repository.dart';
 import 'package:elefit_app/features/challenge/domain/services/challenge_service.dart';
+import 'package:elefit_app/features/challenge/domain/services/leaderboard_service.dart';
 import 'package:elefit_app/features/challenge/domain/services/auth_service.dart';
 import 'package:elefit_app/features/challenge/presentation/widgets/admin/admin_guard.dart';
 import 'package:elefit_app/features/challenge/presentation/providers/admin_challenge_detail_provider.dart';
@@ -18,6 +19,7 @@ import 'package:elefit_app/features/challenge/presentation/screens/admin/admin_c
 import 'package:elefit_app/features/challenge/presentation/screens/admin/admin_challenge_payments_screen.dart';
 import 'package:elefit_app/features/challenge/presentation/screens/admin/admin_challenge_eligibility_dashboard_screen.dart';
 import 'package:elefit_app/features/challenge/presentation/screens/admin/admin_audit_logs_screen.dart';
+import 'package:elefit_app/features/challenge/presentation/screens/admin/admin_winner_selection_screen.dart';
 
 import 'package:elefit_app/features/challenge/domain/services/challenge_notification_service.dart';
 
@@ -273,7 +275,44 @@ class _AdminChallengeDetailContent extends StatelessWidget {
           label: 'Manage Packages',
           onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AdminChallengePackagesScreen(challengeId: challenge.id))),
         ),
+        const SizedBox(height: 12),
+        _buildActionButton(
+          context,
+          icon: Icons.leaderboard_outlined,
+          label: 'Refresh Leaderboard',
+          onTap: () => _refreshLeaderboard(context, challenge.id),
+        ),
+        if (challenge.status == ChallengeStatus.completed) ...[
+          const SizedBox(height: 12),
+          _buildActionButton(
+            context,
+            icon: Icons.emoji_events_outlined,
+            label: challenge.resultsPublished ? 'Edit Winners' : 'Select Winners',
+            onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) =>
+                        AdminWinnerSelectionScreen(challengeId: challenge.id))),
+          ),
+        ],
       ],
+    );
+  }
+
+  /// Recomputes and republishes the sanitized public leaderboard. Needed to
+  /// backfill challenges whose submissions were approved before auto-publish,
+  /// or to force a refresh. Auto-refresh already runs on each submission review.
+  Future<void> _refreshLeaderboard(BuildContext context, String challengeId) async {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
+      const SnackBar(content: Text('Refreshing leaderboard…')),
+    );
+    await context.read<LeaderboardService>().recomputeAndPublish(challengeId);
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text('Leaderboard updated.'),
+        backgroundColor: AppTheme.lime,
+      ),
     );
   }
 

@@ -6,6 +6,7 @@ import 'package:elefit_app/features/challenge/data/repositories/challenge_partic
 import 'package:elefit_app/features/challenge/data/repositories/user_repository.dart';
 import 'package:elefit_app/features/challenge/domain/services/submission_review_service.dart';
 import 'package:elefit_app/features/challenge/data/constants/firestore_collections.dart';
+import 'challenge_error_text.dart';
 
 class SubmissionViewModel {
   final ChallengeSubmission submission;
@@ -135,7 +136,7 @@ class AdminSubmissionsProvider with ChangeNotifier {
       await _submissionService.approveSubmission(submissionId, adminId);
       _errorMessage = null;
     } catch (e) {
-      _errorMessage = e.toString();
+      _errorMessage = friendlyChallengeError(e);
     } finally {
       _isActionInProgress = false;
       notifyListeners();
@@ -150,7 +151,7 @@ class AdminSubmissionsProvider with ChangeNotifier {
       await _submissionService.rejectSubmission(submissionId, adminId, reason);
       _errorMessage = null;
     } catch (e) {
-      _errorMessage = e.toString();
+      _errorMessage = friendlyChallengeError(e);
     } finally {
       _isActionInProgress = false;
       notifyListeners();
@@ -165,7 +166,7 @@ class AdminSubmissionsProvider with ChangeNotifier {
       await _submissionService.requestResubmission(submissionId, adminId, reason);
       _errorMessage = null;
     } catch (e) {
-      _errorMessage = e.toString();
+      _errorMessage = friendlyChallengeError(e);
     } finally {
       _isActionInProgress = false;
       notifyListeners();

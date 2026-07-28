@@ -5,6 +5,7 @@ import 'package:elefit_app/features/challenge/data/repositories/challenge_partic
 import 'package:elefit_app/features/challenge/data/repositories/user_repository.dart';
 import 'package:elefit_app/features/challenge/domain/services/payment_approval_service.dart';
 import 'package:elefit_app/features/challenge/data/constants/firestore_collections.dart';
+import 'challenge_error_text.dart';
 
 class ParticipantPaymentViewModel {
   final ChallengeParticipant participant;
@@ -113,7 +114,7 @@ class AdminChallengePaymentsProvider with ChangeNotifier {
           _errorMessage = null;
           notifyListeners();
         } catch (e) {
-          _errorMessage = e.toString();
+          _errorMessage = friendlyChallengeError(e);
           _isLoading = false;
           notifyListeners();
         }
@@ -165,7 +166,7 @@ class AdminChallengePaymentsProvider with ChangeNotifier {
       );
       _errorMessage = null;
     } catch (e) {
-      _errorMessage = e.toString();
+      _errorMessage = friendlyChallengeError(e);
     } finally {
       _isActionInProgress = false;
       notifyListeners();

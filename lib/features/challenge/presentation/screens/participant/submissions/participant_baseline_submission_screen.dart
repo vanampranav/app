@@ -160,7 +160,9 @@ class _ParticipantBaselineSubmissionContentState extends State<_ParticipantBasel
             leading: const BackButton(color: AppTheme.textPrimary),
           ),
           body: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: EdgeInsets.fromLTRB(
+                24, 24, 24, 24 + MediaQuery.of(context).viewInsets.bottom),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -409,6 +411,7 @@ class _ParticipantBaselineSubmissionContentState extends State<_ParticipantBasel
             label: 'Notes (Optional)',
             controller: _notesController,
             maxLines: 2,
+            maxLength: 500,
             hint: 'Any details about your measurements...',
           ),
           const SizedBox(height: 32),
@@ -552,7 +555,8 @@ class _ParticipantBaselineSubmissionContentState extends State<_ParticipantBasel
     );
   }
 
-  Widget _buildTextField({required String label, required TextEditingController controller, String? hint, int maxLines = 1, TextInputType? keyboardType, String? Function(String?)? validator}) {
+  Widget _buildTextField({required String label, required TextEditingController controller, String? hint, int maxLines = 1, int? maxLength, TextInputType? keyboardType, String? Function(String?)? validator}) {
+    final bool multiline = maxLines != 1;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -560,8 +564,11 @@ class _ParticipantBaselineSubmissionContentState extends State<_ParticipantBasel
         const SizedBox(height: 8),
         TextFormField(
           controller: controller,
-          maxLines: maxLines,
-          keyboardType: keyboardType,
+          minLines: multiline ? maxLines : 1,
+          maxLines: multiline ? null : 1,
+          maxLength: maxLength,
+          keyboardType: multiline ? TextInputType.multiline : keyboardType,
+          textInputAction: multiline ? TextInputAction.newline : null,
           style: const TextStyle(color: Colors.white),
           decoration: InputDecoration(
             hintText: hint,

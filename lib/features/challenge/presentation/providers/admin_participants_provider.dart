@@ -4,6 +4,7 @@ import 'package:elefit_app/features/challenge/data/models/challenge_participant.
 import 'package:elefit_app/features/challenge/data/repositories/challenge_participant_repository.dart';
 import 'package:elefit_app/features/challenge/data/repositories/user_repository.dart';
 import 'package:elefit_app/features/challenge/domain/services/participant_enrollment_service.dart';
+import 'challenge_error_text.dart';
 
 class ParticipantViewModel {
   final ChallengeParticipant participant;
@@ -119,7 +120,7 @@ class AdminParticipantsProvider with ChangeNotifier {
       await _enrollmentService.approveParticipant(challengeId, userId, adminId);
       _errorMessage = null;
     } catch (e) {
-      _errorMessage = e.toString();
+      _errorMessage = friendlyChallengeError(e);
     } finally {
       _isActionInProgress = false;
       notifyListeners();
@@ -134,7 +135,7 @@ class AdminParticipantsProvider with ChangeNotifier {
       await _enrollmentService.rejectParticipant(challengeId, userId, adminId, reason);
       _errorMessage = null;
     } catch (e) {
-      _errorMessage = e.toString();
+      _errorMessage = friendlyChallengeError(e);
     } finally {
       _isActionInProgress = false;
       notifyListeners();

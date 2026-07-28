@@ -20,8 +20,20 @@ String friendlyChallengeError(Object e) {
   if (lower.contains('network') || lower.contains('unavailable') || lower.contains('socketexception')) {
     return 'Connection issue. Please check your internet and try again.';
   }
-  if (lower.contains('object-not-found') || lower.contains('not-found')) {
+  if (lower.contains('object-not-found') || lower.contains('not-found') || lower.contains('not_found')) {
     return "We couldn't find that. Please try again.";
+  }
+  if (lower.contains('failed-precondition') && lower.contains('requires an index')) {
+    return 'This section is still being set up. Please try again shortly or contact EleFit support.';
+  }
+  if (lower.contains('deadline-exceeded') || lower.contains('timeout') || lower.contains('timed out')) {
+    return 'This is taking longer than expected. Please try again.';
+  }
+  if (lower.contains('already-exists') || lower.contains('already_exists')) {
+    return 'That already exists.';
+  }
+  if (lower.contains('resource-exhausted') || lower.contains('quota')) {
+    return "The server is busy right now. Please try again in a moment.";
   }
 
   // Business-rule message — drop the "Exception:" prefix so it reads cleanly.

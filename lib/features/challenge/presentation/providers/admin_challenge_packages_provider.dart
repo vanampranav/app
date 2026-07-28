@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:elefit_app/features/challenge/data/models/challenge_package.dart';
 import 'package:elefit_app/features/challenge/domain/services/challenge_package_service.dart';
 import 'package:elefit_app/features/challenge/domain/services/admin_audit_service.dart';
+import 'challenge_error_text.dart';
 
 class AdminChallengePackagesProvider with ChangeNotifier {
   final String challengeId;
@@ -37,7 +38,7 @@ class AdminChallengePackagesProvider with ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     } catch (e) {
-      _errorMessage = e.toString();
+      _errorMessage = friendlyChallengeError(e);
       _isLoading = false;
       notifyListeners();
     }
@@ -63,7 +64,7 @@ class AdminChallengePackagesProvider with ChangeNotifier {
       await fetchPackages();
       _errorMessage = null;
     } catch (e) {
-      _errorMessage = e.toString();
+      _errorMessage = friendlyChallengeError(e);
     } finally {
       _isActionInProgress = false;
       notifyListeners();
@@ -91,7 +92,7 @@ class AdminChallengePackagesProvider with ChangeNotifier {
       await fetchPackages();
       _errorMessage = null;
     } catch (e) {
-      _errorMessage = e.toString();
+      _errorMessage = friendlyChallengeError(e);
     } finally {
       _isActionInProgress = false;
       notifyListeners();

@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'firestore_parsing.dart';
+import 'challenge_winner.dart';
 
 class Challenge {
   final String id;
@@ -19,6 +20,11 @@ class Challenge {
   final List<String> prizeDetails;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+
+  // Results / winner selection
+  final List<ChallengeWinner> winners;
+  final bool resultsPublished;
+  final DateTime? resultsPublishedAt;
 
   // Admin fields
   final String createdByAdminId;
@@ -44,6 +50,9 @@ class Challenge {
     this.prizeDetails = const [],
     this.createdAt,
     this.updatedAt,
+    this.winners = const [],
+    this.resultsPublished = false,
+    this.resultsPublishedAt,
     required this.createdByAdminId,
     this.lastUpdatedByAdminId,
     this.adminNotes,
@@ -68,6 +77,9 @@ class Challenge {
     List<String>? prizeDetails,
     DateTime? createdAt,
     DateTime? updatedAt,
+    List<ChallengeWinner>? winners,
+    bool? resultsPublished,
+    DateTime? resultsPublishedAt,
     String? createdByAdminId,
     String? lastUpdatedByAdminId,
     String? adminNotes,
@@ -91,6 +103,9 @@ class Challenge {
       prizeDetails: prizeDetails ?? this.prizeDetails,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      winners: winners ?? this.winners,
+      resultsPublished: resultsPublished ?? this.resultsPublished,
+      resultsPublishedAt: resultsPublishedAt ?? this.resultsPublishedAt,
       createdByAdminId: createdByAdminId ?? this.createdByAdminId,
       lastUpdatedByAdminId: lastUpdatedByAdminId ?? this.lastUpdatedByAdminId,
       adminNotes: adminNotes ?? this.adminNotes,
@@ -116,6 +131,9 @@ class Challenge {
       'prizeDetails': prizeDetails,
       'createdAt': createdAt != null ? Timestamp.fromDate(createdAt!) : FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
+      'winners': winners.map((w) => w.toMap()).toList(),
+      'resultsPublished': resultsPublished,
+      'resultsPublishedAt': resultsPublishedAt != null ? Timestamp.fromDate(resultsPublishedAt!) : null,
       'createdByAdminId': createdByAdminId,
       'lastUpdatedByAdminId': lastUpdatedByAdminId,
       'adminNotes': adminNotes,
@@ -142,6 +160,12 @@ class Challenge {
       prizeDetails: List<String>.from(map['prizeDetails'] ?? []),
       createdAt: parseFirestoreDate(map['createdAt']),
       updatedAt: parseFirestoreDate(map['updatedAt']),
+      winners: (map['winners'] as List?)
+              ?.map((w) => ChallengeWinner.fromMap(Map<String, dynamic>.from(w)))
+              .toList() ??
+          const [],
+      resultsPublished: map['resultsPublished'] == true,
+      resultsPublishedAt: parseFirestoreDate(map['resultsPublishedAt']),
       createdByAdminId: map['createdByAdminId'] ?? '',
       lastUpdatedByAdminId: map['lastUpdatedByAdminId'],
       adminNotes: map['adminNotes'],

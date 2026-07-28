@@ -363,7 +363,11 @@ class _AiCoachWizardState extends State<AiCoachWizard> {
         color: Color(0xFF1B1B1B),
         borderRadius: BorderRadius.only(topLeft: Radius.circular(32), topRight: Radius.circular(32)),
       ),
-      child: Column(
+      // Tap anywhere outside a field to dismiss the keyboard.
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => FocusScope.of(context).unfocus(),
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Drag Handle
@@ -413,7 +417,15 @@ class _AiCoachWizardState extends State<AiCoachWizard> {
           const SizedBox(height: 32),
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
+              // Swipe down over the content to dismiss the keyboard, and add
+              // keyboard-height bottom padding so the submit button can be
+              // scrolled above the keyboard (this sheet has a fixed height).
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: EdgeInsets.only(
+                left: 24,
+                right: 24,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+              ),
               child: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 400),
                 transitionBuilder: (child, animation) {
@@ -433,6 +445,7 @@ class _AiCoachWizardState extends State<AiCoachWizard> {
             ),
           ),
         ],
+      ),
       ),
     );
   }
@@ -648,6 +661,7 @@ class _AiCoachWizardState extends State<AiCoachWizard> {
           _foodPrefsCtrl,
           hint: 'e.g. I eat idli for breakfast, rice-dal for lunch. I drink tea twice daily. Love biryani on weekends.',
           maxLines: 3,
+          maxLength: 600,
         ),
         const SizedBox(height: 32),
 
@@ -756,10 +770,12 @@ class _AiCoachWizardState extends State<AiCoachWizard> {
     );
   }
 
-  Widget _buildInput(TextEditingController ctrl, {String? hint, int maxLines = 1}) {
+  Widget _buildInput(TextEditingController ctrl,
+      {String? hint, int maxLines = 1, int? maxLength}) {
+    final bool multiline = maxLines != 1;
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
-      height: maxLines == 1 ? 48 : null,
+      height: multiline ? null : 48,
       decoration: BoxDecoration(
         color: const Color(0xFF111111),
         borderRadius: BorderRadius.circular(12),
@@ -767,7 +783,14 @@ class _AiCoachWizardState extends State<AiCoachWizard> {
       ),
       child: TextField(
         controller: ctrl,
-        maxLines: maxLines,
+        // Multiline fields grow to fit everything typed (min `maxLines` rows,
+        // then unbounded); single-line fields stay one row and submit on done.
+        minLines: multiline ? maxLines : 1,
+        maxLines: multiline ? null : 1,
+        maxLength: maxLength,
+        keyboardType: multiline ? TextInputType.multiline : TextInputType.text,
+        textInputAction:
+            multiline ? TextInputAction.newline : TextInputAction.done,
         style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
         decoration: InputDecoration(
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -776,6 +799,7 @@ class _AiCoachWizardState extends State<AiCoachWizard> {
           fillColor: Colors.transparent,
           hintText: hint,
           hintStyle: TextStyle(color: Colors.white.withOpacity(0.2), fontSize: 13),
+          counterStyle: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 10),
         ),
       ),
     );

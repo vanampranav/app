@@ -1,0 +1,15 @@
+{
+  "name": "elefit-firestore-rules-tests",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Firestore security-rules tests for the Elefit challenge feature (runs against the Firestore emulator).",
+  "scripts": {
+    "test": "firebase emulators:exec --only firestore --project demo-getfit \"node --test\""
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^3.0.4",
+    "firebase": "^10.8.0",
+    "firebase-tools": "^13.35.1"
+  }
+}

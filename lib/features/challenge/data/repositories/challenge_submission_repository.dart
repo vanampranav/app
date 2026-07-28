@@ -40,6 +40,10 @@ class ChallengeSubmissionRepository {
     }
   }
 
+  /// WARNING: returns the user's submissions across **every** challenge.
+  /// Any caller working within a single challenge MUST filter the result by
+  /// `challengeId`, or use [streamSubmissionsByParticipantAndChallenge] instead —
+  /// otherwise an approved baseline in one challenge can leak into another.
   Stream<List<ChallengeSubmission>> streamSubmissionsByParticipant(
       String userId) {
     // Note: The prompt asked for participantId, but the model uses userId.
@@ -47,6 +51,24 @@ class ChallengeSubmissionRepository {
     return _collection
         .where('userId', isEqualTo: userId)
         .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => ChallengeSubmission.fromFirestore(doc))
+            .toList());
+  }
+
+  /// Challenge-scoped variant: only the given user's submissions for ONE
+  /// challenge. Prefer this for any per-challenge logic (submission guards,
+  /// eligibility) so cross-challenge data can never leak in.
+  ///
+  /// Uses two equality filters and no `orderBy`, so it needs NO composite
+  /// index (equality-only queries are served by automatic single-field
+  /// indexes). Sort in memory if order matters.
+  Stream<List<ChallengeSubmission>> streamSubmissionsByParticipantAndChallenge(
+      String userId, String challengeId) {
+    return _collection
+        .where('userId', isEqualTo: userId)
+        .where('challengeId', isEqualTo: challengeId)
         .snapshots()
         .map((snapshot) => snapshot.docs
             .map((doc) => ChallengeSubmission.fromFirestore(doc))

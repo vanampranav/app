@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:elefit_app/theme/app_theme.dart';
 import 'package:elefit_app/widgets/ef_components.dart';
+import 'package:elefit_app/features/challenge/data/models/challenge.dart';
 import 'package:elefit_app/features/challenge/data/repositories/challenge_repository.dart';
-import 'package:elefit_app/features/challenge/data/repositories/challenge_participant_repository.dart';
 import 'package:elefit_app/features/challenge/data/repositories/challenge_submission_repository.dart';
-import 'package:elefit_app/features/challenge/data/repositories/user_repository.dart';
+import 'package:elefit_app/features/challenge/data/repositories/leaderboard_repository.dart';
 import 'package:elefit_app/features/challenge/domain/services/auth_service.dart';
 import 'package:elefit_app/features/challenge/presentation/providers/participant_leaderboard_provider.dart';
 import 'package:elefit_app/features/challenge/presentation/providers/leaderboard_insights_provider.dart';
@@ -28,9 +28,7 @@ class ParticipantLeaderboardScreen extends StatelessWidget {
           create: (ctx) => ParticipantLeaderboardProvider(
             challengeId: challengeId,
             challengeRepository: ctx.read<ChallengeRepository>(),
-            participantRepository: ctx.read<ChallengeParticipantRepository>(),
-            submissionRepository: ctx.read<ChallengeSubmissionRepository>(),
-            userRepository: ctx.read<UserRepository>(),
+            leaderboardRepository: ctx.read<LeaderboardRepository>(),
           ),
         ),
         ChangeNotifierProvider(
@@ -38,9 +36,8 @@ class ParticipantLeaderboardScreen extends StatelessWidget {
             challengeId: challengeId,
             userId: userId,
             challengeRepository: ctx.read<ChallengeRepository>(),
-            participantRepository: ctx.read<ChallengeParticipantRepository>(),
             submissionRepository: ctx.read<ChallengeSubmissionRepository>(),
-            userRepository: ctx.read<UserRepository>(),
+            leaderboardRepository: ctx.read<LeaderboardRepository>(),
           ),
         ),
       ],
@@ -85,6 +82,13 @@ class _ParticipantLeaderboardContent extends StatelessWidget {
               SliverToBoxAdapter(
                 child: _buildHeader(leaderboardProvider.challenge?.title ?? ''),
               ),
+
+              // Published winners (only after the admin declares results)
+              if (leaderboardProvider.challenge?.resultsPublished == true &&
+                  (leaderboardProvider.challenge?.winners.isNotEmpty ?? false))
+                SliverToBoxAdapter(
+                  child: _buildWinnersBanner(leaderboardProvider.challenge!),
+                ),
 
               // Personal Insights
               if (insights != null)
@@ -145,6 +149,61 @@ class _ParticipantLeaderboardContent extends StatelessWidget {
 
   Widget _buildSectionTitle(String title) {
     return Text(title, style: AppTheme.labelMD.copyWith(letterSpacing: 2.0));
+  }
+
+  Widget _buildWinnersBanner(Challenge challenge) {
+    final podium = challenge.winners.where((w) => !w.isSpecialAward).toList()
+      ..sort((a, b) => a.place.compareTo(b.place));
+    final special = challenge.winners.where((w) => w.isSpecialAward).toList();
+
+    Color medal(int place) => place == 1
+        ? const Color(0xFFFFD700)
+        : place == 2
+            ? const Color(0xFFC0C0C0)
+            : const Color(0xFFCD7F32);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+      child: EFCard(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              const Icon(Icons.emoji_events, color: Color(0xFFFFD700), size: 22),
+              const SizedBox(width: 8),
+              Text('WINNERS',
+                  style: AppTheme.labelMD.copyWith(letterSpacing: 2.0)),
+            ]),
+            const SizedBox(height: 14),
+            ...podium.map((w) => Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Row(children: [
+                    Icon(Icons.emoji_events, color: medal(w.place), size: 18),
+                    const SizedBox(width: 10),
+                    Expanded(
+                        child: Text(w.displayName, style: AppTheme.bodyLG)),
+                    Text(w.awardLabel,
+                        style: AppTheme.bodySM
+                            .copyWith(color: AppTheme.textSecondary)),
+                  ]),
+                )),
+            ...special.map((w) => Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Row(children: [
+                    const Icon(Icons.workspace_premium_outlined,
+                        color: AppTheme.lime, size: 18),
+                    const SizedBox(width: 10),
+                    Expanded(
+                        child: Text(w.displayName, style: AppTheme.bodyLG)),
+                    Text(w.awardLabel,
+                        style: AppTheme.bodySM.copyWith(color: AppTheme.lime)),
+                  ]),
+                )),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildHeader(String title) {

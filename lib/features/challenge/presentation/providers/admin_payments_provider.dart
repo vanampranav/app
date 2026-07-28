@@ -6,6 +6,7 @@ import 'package:elefit_app/features/challenge/data/repositories/challenge_partic
 import 'package:elefit_app/features/challenge/data/repositories/user_repository.dart';
 import 'package:elefit_app/features/challenge/domain/services/payment_approval_service.dart';
 import 'package:elefit_app/features/challenge/data/constants/firestore_collections.dart';
+import 'challenge_error_text.dart';
 
 class PaymentViewModel {
   final PaymentRecord payment;
@@ -115,7 +116,7 @@ class AdminPaymentsProvider with ChangeNotifier {
       await _paymentService.approvePayment(paymentId, adminId);
       _errorMessage = null;
     } catch (e) {
-      _errorMessage = e.toString();
+      _errorMessage = friendlyChallengeError(e);
     } finally {
       _isActionInProgress = false;
       notifyListeners();
@@ -130,7 +131,7 @@ class AdminPaymentsProvider with ChangeNotifier {
       await _paymentService.rejectPayment(paymentId, adminId, reason);
       _errorMessage = null;
     } catch (e) {
-      _errorMessage = e.toString();
+      _errorMessage = friendlyChallengeError(e);
     } finally {
       _isActionInProgress = false;
       notifyListeners();

@@ -182,7 +182,9 @@ class _ParticipantPaymentSubmissionContentState extends State<_ParticipantPaymen
             leading: const BackButton(color: AppTheme.textPrimary),
           ),
           body: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: EdgeInsets.fromLTRB(
+                24, 24, 24, 24 + MediaQuery.of(context).viewInsets.bottom),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

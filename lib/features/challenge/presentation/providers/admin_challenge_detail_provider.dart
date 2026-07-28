@@ -4,6 +4,7 @@ import 'package:elefit_app/features/challenge/data/models/challenge.dart';
 import 'package:elefit_app/features/challenge/data/repositories/challenge_repository.dart';
 import 'package:elefit_app/features/challenge/domain/services/challenge_service.dart';
 import 'package:elefit_app/features/challenge/domain/services/challenge_notification_service.dart';
+import 'challenge_error_text.dart';
 
 class AdminChallengeDetailProvider with ChangeNotifier {
   final String challengeId;
@@ -62,7 +63,7 @@ class AdminChallengeDetailProvider with ChangeNotifier {
       await _notificationService.createWeeklyCheckInOpenNotifications(challengeId, weekNumber, _challenge!.title);
       _errorMessage = null;
     } catch (e) {
-      _errorMessage = e.toString().replaceFirst('Exception: ', '');
+      _errorMessage = friendlyChallengeError(e);
     } finally {
       _isActionInProgress = false;
       notifyListeners();
@@ -78,7 +79,7 @@ class AdminChallengeDetailProvider with ChangeNotifier {
       await _notificationService.createWeeklyCheckInDueReminders(challengeId, weekNumber, _challenge!.title);
       _errorMessage = null;
     } catch (e) {
-      _errorMessage = e.toString().replaceFirst('Exception: ', '');
+      _errorMessage = friendlyChallengeError(e);
     } finally {
       _isActionInProgress = false;
       notifyListeners();
@@ -94,7 +95,7 @@ class AdminChallengeDetailProvider with ChangeNotifier {
       await _notificationService.createFinalSubmissionOpenNotifications(challengeId, _challenge!.title);
       _errorMessage = null;
     } catch (e) {
-      _errorMessage = e.toString().replaceFirst('Exception: ', '');
+      _errorMessage = friendlyChallengeError(e);
     } finally {
       _isActionInProgress = false;
       notifyListeners();
@@ -110,7 +111,7 @@ class AdminChallengeDetailProvider with ChangeNotifier {
       await _notificationService.createFinalSubmissionDueReminders(challengeId, _challenge!.title);
       _errorMessage = null;
     } catch (e) {
-      _errorMessage = e.toString().replaceFirst('Exception: ', '');
+      _errorMessage = friendlyChallengeError(e);
     } finally {
       _isActionInProgress = false;
       notifyListeners();
@@ -125,7 +126,7 @@ class AdminChallengeDetailProvider with ChangeNotifier {
       await _challengeService.activateChallenge(challengeId, adminId);
       _errorMessage = null;
     } catch (e) {
-      _errorMessage = e.toString().replaceFirst('Exception: ', '');
+      _errorMessage = friendlyChallengeError(e);
     } finally {
       _isActionInProgress = false;
       notifyListeners();
@@ -140,7 +141,7 @@ class AdminChallengeDetailProvider with ChangeNotifier {
       await _challengeService.closeChallenge(challengeId, adminId);
       _errorMessage = null;
     } catch (e) {
-      _errorMessage = e.toString().replaceFirst('Exception: ', '');
+      _errorMessage = friendlyChallengeError(e);
     } finally {
       _isActionInProgress = false;
       notifyListeners();

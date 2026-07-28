@@ -120,6 +120,16 @@ class FirebaseRestService {
       }),
     );
     if (response.statusCode != 200) {
+      String reason = '';
+      try {
+        reason = (jsonDecode(response.body)['error']?['message'] ?? '').toString();
+      } catch (_) {}
+      if (reason.contains('EMAIL_NOT_FOUND')) {
+        throw Exception('No account found with that email address.');
+      }
+      if (reason.contains('INVALID_EMAIL')) {
+        throw Exception('That email address looks invalid.');
+      }
       throw Exception('Failed to send reset email. Please try again.');
     }
   }

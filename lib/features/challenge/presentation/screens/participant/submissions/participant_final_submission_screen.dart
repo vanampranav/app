@@ -158,7 +158,9 @@ class _ParticipantFinalSubmissionContentState extends State<_ParticipantFinalSub
             leading: const BackButton(color: AppTheme.textPrimary),
           ),
           body: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: EdgeInsets.fromLTRB(
+                24, 24, 24, 24 + MediaQuery.of(context).viewInsets.bottom),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -356,6 +358,7 @@ class _ParticipantFinalSubmissionContentState extends State<_ParticipantFinalSub
             label: 'Transformation Notes (Optional)',
             controller: _notesController,
             maxLines: 3,
+            maxLength: 500,
             hint: 'Tell us about your results and journey...',
           ),
           const SizedBox(height: 32),
@@ -501,7 +504,8 @@ class _ParticipantFinalSubmissionContentState extends State<_ParticipantFinalSub
     );
   }
 
-  Widget _buildTextField({required String label, required TextEditingController controller, String? hint, int maxLines = 1, TextInputType? keyboardType, String? Function(String?)? validator}) {
+  Widget _buildTextField({required String label, required TextEditingController controller, String? hint, int maxLines = 1, int? maxLength, TextInputType? keyboardType, String? Function(String?)? validator}) {
+    final bool multiline = maxLines != 1;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -509,8 +513,11 @@ class _ParticipantFinalSubmissionContentState extends State<_ParticipantFinalSub
         const SizedBox(height: 8),
         TextFormField(
           controller: controller,
-          maxLines: maxLines,
-          keyboardType: keyboardType,
+          minLines: multiline ? maxLines : 1,
+          maxLines: multiline ? null : 1,
+          maxLength: maxLength,
+          keyboardType: multiline ? TextInputType.multiline : keyboardType,
+          textInputAction: multiline ? TextInputAction.newline : null,
           style: const TextStyle(color: Colors.white),
           decoration: InputDecoration(
             hintText: hint,

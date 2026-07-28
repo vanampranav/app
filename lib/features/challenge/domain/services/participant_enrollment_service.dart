@@ -70,7 +70,16 @@ class ParticipantEnrollmentService {
     );
 
     await _participantRepository.joinChallenge(participant);
-    await _notificationService.notifyParticipantJoined(userId, challenge.title, challengeId);
+
+    // Notification is a best-effort side effect: a successful join must never
+    // fail because the notification write was rejected (e.g. Firestore rules).
+    try {
+      await _notificationService.notifyParticipantJoined(userId, challenge.title, challengeId);
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Enrollment: join notification failed (non-fatal): $e');
+      }
+    }
   }
 
   Future<void> cancelParticipation(String userId, String challengeId) async {

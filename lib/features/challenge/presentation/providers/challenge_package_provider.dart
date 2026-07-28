@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:elefit_app/features/challenge/data/models/challenge_package.dart';
 import 'package:elefit_app/features/challenge/domain/services/challenge_package_service.dart';
+import 'challenge_error_text.dart';
 
 class ChallengePackageProvider with ChangeNotifier {
   final String challengeId;
@@ -37,7 +38,7 @@ class ChallengePackageProvider with ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     } catch (e) {
-      _errorMessage = e.toString();
+      _errorMessage = friendlyChallengeError(e);
       _isLoading = false;
       notifyListeners();
     }

@@ -51,6 +51,24 @@ class ParticipantWeeklyCheckinProvider with ChangeNotifier {
   List<String> get existingPhotoUrls => _existingPhotoUrls;
   int get currentWeekNumber => _currentWeekNumber;
 
+  /// True once the participant has a submission for the CURRENT week window.
+  bool get hasSubmittedThisWeek => _existingWeeklyForCurrentWeek != null;
+
+  /// The moment the current 7-day check-in window closes and the next week
+  /// opens (challenge start + weekNumber * 7 days). Null until the challenge
+  /// (with its startDate) has loaded.
+  DateTime? get currentWeekEnds =>
+      _challenge?.startDate.add(Duration(days: _currentWeekNumber * 7));
+
+  /// Whole days from now until the next check-in window opens. Clamped to 0 so
+  /// it never goes negative on the last day. Null until the challenge loads.
+  int? get daysUntilNextCheckIn {
+    final ends = currentWeekEnds;
+    if (ends == null) return null;
+    final d = ends.difference(DateTime.now()).inDays;
+    return d < 0 ? 0 : d;
+  }
+
   ParticipantWeeklyCheckinProvider({
     required this.challengeId,
     required this.userId,

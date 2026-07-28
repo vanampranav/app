@@ -25,6 +25,8 @@ class ChallengeParticipant {
   final String? paymentProofNotes;
   final DateTime? paymentReviewedAt;
   final bool eligibleForPrizes;
+  final int? finalPlacement; // 1/2/3 podium; null if not a winner
+  final String? awardLabel; // e.g. "1st Place" / "Most Consistent"
   final bool disqualified;
   final String? disqualificationReason;
   final DateTime? disqualifiedAt;
@@ -74,6 +76,8 @@ class ChallengeParticipant {
     this.paymentProofNotes,
     this.paymentReviewedAt,
     this.eligibleForPrizes = false,
+    this.finalPlacement,
+    this.awardLabel,
     this.disqualified = false,
     this.disqualificationReason,
     this.disqualifiedAt,
@@ -122,6 +126,10 @@ class ChallengeParticipant {
     String? paymentProofNotes,
     DateTime? paymentReviewedAt,
     bool? eligibleForPrizes,
+    int? finalPlacement,
+    String? awardLabel,
+    bool clearPlacement = false,
+    bool clearAward = false,
     bool? disqualified,
     String? disqualificationReason,
     DateTime? disqualifiedAt,
@@ -169,6 +177,8 @@ class ChallengeParticipant {
       paymentProofNotes: paymentProofNotes ?? this.paymentProofNotes,
       paymentReviewedAt: paymentReviewedAt ?? this.paymentReviewedAt,
       eligibleForPrizes: eligibleForPrizes ?? this.eligibleForPrizes,
+      finalPlacement: clearPlacement ? null : (finalPlacement ?? this.finalPlacement),
+      awardLabel: clearAward ? null : (awardLabel ?? this.awardLabel),
       disqualified: disqualified ?? this.disqualified,
       disqualificationReason: disqualificationReason ?? this.disqualificationReason,
       disqualifiedAt: disqualifiedAt ?? this.disqualifiedAt,
@@ -218,6 +228,8 @@ class ChallengeParticipant {
       'paymentProofNotes': paymentProofNotes,
       'paymentReviewedAt': paymentReviewedAt != null ? Timestamp.fromDate(paymentReviewedAt!) : null,
       'eligibleForPrizes': eligibleForPrizes,
+      'finalPlacement': finalPlacement,
+      'awardLabel': awardLabel,
       'disqualified': disqualified,
       'disqualificationReason': disqualificationReason,
       'disqualifiedAt': disqualifiedAt != null ? Timestamp.fromDate(disqualifiedAt!) : null,
@@ -268,6 +280,8 @@ class ChallengeParticipant {
       paymentProofNotes: map['paymentProofNotes'],
       paymentReviewedAt: parseFirestoreDate(map['paymentReviewedAt']),
       eligibleForPrizes: map['eligibleForPrizes'] ?? false,
+      finalPlacement: map['finalPlacement'] == null ? null : parseIntOr(map['finalPlacement'], 0),
+      awardLabel: map['awardLabel']?.toString(),
       disqualified: map['disqualified'] ?? false,
       disqualificationReason: map['disqualificationReason'],
       disqualifiedAt: parseFirestoreDate(map['disqualifiedAt']),

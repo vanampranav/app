@@ -6,6 +6,7 @@ import 'package:elefit_app/features/challenge/data/models/challenge_package.dart
 import 'package:elefit_app/features/challenge/data/repositories/challenge_repository.dart';
 import 'package:elefit_app/features/challenge/data/repositories/challenge_participant_repository.dart';
 import 'package:elefit_app/features/challenge/domain/services/participant_enrollment_service.dart';
+import 'challenge_error_text.dart';
 
 class ParticipantChallengeDetailProvider with ChangeNotifier {
   final String challengeId;
@@ -90,7 +91,7 @@ class ParticipantChallengeDetailProvider with ChangeNotifier {
         package: package,
       );
     } catch (e) {
-      _errorMessage = e.toString();
+      _errorMessage = friendlyChallengeError(e);
     } finally {
       _isJoining = false;
       notifyListeners();

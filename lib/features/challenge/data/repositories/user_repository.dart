@@ -53,7 +53,10 @@ class UserRepository {
       if (adminView && user?.email != null && user!.email.isNotEmpty) {
         return user.email;
       }
-      return fallbackId.isNotEmpty ? 'User ${fallbackId.substring(0, 4)}' : 'Participant';
+      if (fallbackId.isEmpty) return 'Participant';
+      final suffix =
+          fallbackId.length >= 4 ? fallbackId.substring(0, 4) : fallbackId;
+      return 'User $suffix';
     }
     
     final firstName = user.firstName ?? '';

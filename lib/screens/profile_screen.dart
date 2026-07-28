@@ -235,8 +235,75 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 child: const Text('Sign In', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15)),
               ),
             ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: _showPasswordResetDialog,
+              child: const Text('Forgot password?', style: TextStyle(color: AppTheme.accentColor, fontWeight: FontWeight.w700, fontSize: 13)),
+            ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// Sends a Firebase password-reset email. Available from the re-login form
+  /// shown after a user signs out from this screen.
+  Future<void> _showPasswordResetDialog() async {
+    final resetCtrl = TextEditingController(text: _emailCtrl.text.trim());
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A1A),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Reset Password', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 18)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              "Enter your email and we'll send you a link to reset your password.",
+              style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: resetCtrl,
+              autofocus: true,
+              style: const TextStyle(color: Colors.white, fontSize: 14),
+              keyboardType: TextInputType.emailAddress,
+              decoration: _inputDeco('EMAIL', 'you@email.com', Icons.email_outlined),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancel', style: TextStyle(color: Colors.white.withOpacity(0.5))),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accentColor, foregroundColor: Colors.black),
+            onPressed: () async {
+              final email = resetCtrl.text.trim();
+              if (email.isEmpty) return;
+              Navigator.pop(ctx);
+              try {
+                await _fbService.sendPasswordReset(email);
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Reset link sent to $email. Check your inbox.'), backgroundColor: Colors.green),
+                );
+              } catch (e) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(e.toString().replaceFirst('Exception: ', '')),
+                    backgroundColor: Colors.redAccent,
+                  ),
+                );
+              }
+            },
+            child: const Text('Send Link', style: TextStyle(fontWeight: FontWeight.w900)),
+          ),
+        ],
       ),
     );
   }

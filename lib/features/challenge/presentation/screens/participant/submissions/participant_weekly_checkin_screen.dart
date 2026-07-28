@@ -162,13 +162,16 @@ class _ParticipantWeeklyCheckinContentState extends State<_ParticipantWeeklyChec
             leading: const BackButton(color: AppTheme.textPrimary),
           ),
           body: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: EdgeInsets.fromLTRB(
+                24, 24, 24, 24 + MediaQuery.of(context).viewInsets.bottom),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _buildProgressHeader(baseline, submission),
                 const SizedBox(height: 24),
-                
+                _buildCadenceBanner(provider),
+
                 if (submission != null) ...[
                   _buildStatusBanner(submission.reviewStatus, submission.adminReviewNotes),
                   const SizedBox(height: 24),
@@ -184,6 +187,52 @@ class _ParticipantWeeklyCheckinContentState extends State<_ParticipantWeeklyChec
           ),
         );
       },
+    );
+  }
+
+  /// Shows the weekly cadence at a glance: either how long is left to submit
+  /// this week, or — once submitted — when the next check-in opens.
+  Widget _buildCadenceBanner(ParticipantWeeklyCheckinProvider provider) {
+    final days = provider.daysUntilNextCheckIn;
+    if (days == null) return const SizedBox.shrink();
+
+    final submitted = provider.hasSubmittedThisWeek;
+    String label(int d) => d == 1 ? '1 day' : '$d days';
+
+    final IconData icon;
+    final Color accent;
+    final String text;
+    if (submitted) {
+      icon = Icons.check_circle_outline_rounded;
+      accent = AppTheme.lime;
+      text = days <= 0
+          ? 'Week ${provider.currentWeekNumber} done — your next check-in opens today.'
+          : 'Week ${provider.currentWeekNumber} done. Your next check-in opens in ${label(days)}.';
+    } else {
+      icon = Icons.schedule_rounded;
+      accent = AppTheme.textSecondary;
+      text = days <= 0
+          ? 'Week ${provider.currentWeekNumber} check-in is open — last day to submit.'
+          : 'Week ${provider.currentWeekNumber} check-in is open — ${label(days)} left to submit.';
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 24),
+      child: EFCard(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            Icon(icon, color: accent, size: 22),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                text,
+                style: AppTheme.bodyMD.copyWith(color: AppTheme.textSecondary),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -354,6 +403,7 @@ class _ParticipantWeeklyCheckinContentState extends State<_ParticipantWeeklyChec
             label: 'Notes (Optional)',
             controller: _notesController,
             maxLines: 2,
+            maxLength: 500,
             hint: 'How was your week?',
           ),
           const SizedBox(height: 32),
@@ -493,7 +543,8 @@ class _ParticipantWeeklyCheckinContentState extends State<_ParticipantWeeklyChec
     );
   }
 
-  Widget _buildTextField({required String label, required TextEditingController controller, String? hint, int maxLines = 1, TextInputType? keyboardType, String? Function(String?)? validator}) {
+  Widget _buildTextField({required String label, required TextEditingController controller, String? hint, int maxLines = 1, int? maxLength, TextInputType? keyboardType, String? Function(String?)? validator}) {
+    final bool multiline = maxLines != 1;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -501,8 +552,11 @@ class _ParticipantWeeklyCheckinContentState extends State<_ParticipantWeeklyChec
         const SizedBox(height: 8),
         TextFormField(
           controller: controller,
-          maxLines: maxLines,
-          keyboardType: keyboardType,
+          minLines: multiline ? maxLines : 1,
+          maxLines: multiline ? null : 1,
+          maxLength: maxLength,
+          keyboardType: multiline ? TextInputType.multiline : keyboardType,
+          textInputAction: multiline ? TextInputAction.newline : null,
           style: const TextStyle(color: Colors.white),
           decoration: InputDecoration(
             hintText: hint,
