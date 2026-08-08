@@ -10,6 +10,8 @@ import 'package:elefit_app/features/challenge/domain/services/challenge_service.
 import 'package:elefit_app/features/challenge/domain/services/leaderboard_service.dart';
 import 'package:elefit_app/features/challenge/domain/services/auth_service.dart';
 import 'package:elefit_app/features/challenge/presentation/widgets/admin/admin_guard.dart';
+import 'package:elefit_app/features/challenge/presentation/challenge_status_label.dart';
+import 'package:elefit_app/features/challenge/presentation/screens/admin/admin_adjust_standings_screen.dart';
 import 'package:elefit_app/features/challenge/presentation/providers/admin_challenge_detail_provider.dart';
 import 'package:elefit_app/features/challenge/presentation/screens/admin/admin_create_edit_challenge_screen.dart';
 import 'package:elefit_app/features/challenge/presentation/screens/admin/admin_participants_screen.dart';
@@ -125,15 +127,9 @@ class _AdminChallengeDetailContent extends StatelessWidget {
   }
 
   Widget _buildStatusBanner(Challenge challenge) {
-    Color color;
-    switch (challenge.status) {
-      case 'draft': color = Colors.grey; break;
-      case 'registrationOpen': color = AppTheme.lime; break;
-      case 'active': color = Colors.blue; break;
-      case 'completed': color = Colors.green; break;
-      case 'cancelled': color = AppTheme.error; break;
-      default: color = Colors.white;
-    }
+    // Use the SAME derived status as the admin list so the two never disagree.
+    final view = challengeStatusView(challenge);
+    final color = view.color;
 
     return Container(
       width: double.infinity,
@@ -149,7 +145,7 @@ class _AdminChallengeDetailContent extends StatelessWidget {
           Icon(Icons.info_outline, size: 18, color: color),
           const SizedBox(width: 8),
           Text(
-            'STATUS: ${challenge.status.toUpperCase()}',
+            'STATUS: ${view.label.toUpperCase()}',
             style: TextStyle(color: color, fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 1.0),
           ),
         ],
@@ -281,6 +277,17 @@ class _AdminChallengeDetailContent extends StatelessWidget {
           icon: Icons.leaderboard_outlined,
           label: 'Refresh Leaderboard',
           onTap: () => _refreshLeaderboard(context, challenge.id),
+        ),
+        const SizedBox(height: 12),
+        _buildActionButton(
+          context,
+          icon: Icons.tune_rounded,
+          label: 'Adjust Standings',
+          onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                  builder: (_) =>
+                      AdminAdjustStandingsScreen(challengeId: challenge.id))),
         ),
         if (challenge.status == ChallengeStatus.completed) ...[
           const SizedBox(height: 12),

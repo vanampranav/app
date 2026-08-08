@@ -51,14 +51,33 @@ class ParticipantWeeklyCheckinProvider with ChangeNotifier {
   List<String> get existingPhotoUrls => _existingPhotoUrls;
   int get currentWeekNumber => _currentWeekNumber;
 
-  /// True once the participant has a submission for the CURRENT week window.
-  bool get hasSubmittedThisWeek => _existingWeeklyForCurrentWeek != null;
+  /// True once the participant has an ACCEPTED submission (pending review or
+  /// approved) for the CURRENT week. A rejected / needs-clarification submission
+  /// does NOT count — the week isn't "done" until they resubmit.
+  bool get hasSubmittedThisWeek =>
+      _existingWeeklyForCurrentWeek != null &&
+      (_existingWeeklyForCurrentWeek!.reviewStatus == ReviewStatus.submitted ||
+          _existingWeeklyForCurrentWeek!.reviewStatus == ReviewStatus.approved);
 
   /// The moment the current 7-day check-in window closes and the next week
   /// opens (challenge start + weekNumber * 7 days). Null until the challenge
   /// (with its startDate) has loaded.
   DateTime? get currentWeekEnds =>
-      _challenge?.startDate.add(Duration(days: _currentWeekNumber * 7));
+      _challenge?.startDate.add(Duration(days: (_currentWeekNumber + 1) * 7));
+
+  /// The final-results window (the last 3 days before the end date). Weekly
+  /// check-ins close once it opens so the last check-in never collides with the
+  /// final submission — the final IS the finishing measurement.
+  bool get finalWindowOpen {
+    final c = _challenge;
+    return c != null &&
+        !DateTime.now().isBefore(c.endDate.subtract(const Duration(days: 3)));
+  }
+
+  /// Whether weekly check-ins have opened yet. NOT during the baseline week
+  /// (days 0-6, week 0 — the baseline covers that), and NOT once the final
+  /// window has opened (the final submission replaces the last check-in).
+  bool get checkInsOpen => _currentWeekNumber >= 1 && !finalWindowOpen;
 
   /// Whole days from now until the next check-in window opens. Clamped to 0 so
   /// it never goes negative on the last day. Null until the challenge loads.
@@ -95,8 +114,10 @@ class ParticipantWeeklyCheckinProvider with ChangeNotifier {
       if (_challenge != null) {
         final now = DateTime.now();
         final diff = now.difference(_challenge!.startDate).inDays;
-        _currentWeekNumber = (diff / 7).floor() + 1;
-        if (_currentWeekNumber < 1) _currentWeekNumber = 1;
+        // Week 0 = the "baseline week" (days 0-6): no check-in yet, because the
+        // baseline already captured the day-0 measurements. Week 1 opens on day 7.
+        _currentWeekNumber = (diff / 7).floor();
+        if (_currentWeekNumber < 0) _currentWeekNumber = 0;
       }
 
       final submissions = await _submissionRepository.streamSubmissionsByParticipant(userId).first;
@@ -154,6 +175,7 @@ class ParticipantWeeklyCheckinProvider with ChangeNotifier {
     required double weight,
     required String unit,
     double? bodyFat,
+    double? muscleMass,
     required String source,
     String? notes,
   }) async {
@@ -194,6 +216,7 @@ class ParticipantWeeklyCheckinProvider with ChangeNotifier {
         'weight': weight,
         'unit': unit,
         'bodyFat': bodyFat,
+        'muscleMass': muscleMass,
         'source': source,
         'notes': notes,
         'photos': finalPhotoUrls,

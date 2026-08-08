@@ -11,9 +11,8 @@ import 'package:elefit_app/features/challenge/domain/services/leaderboard_servic
 
 /// The result of ranking a challenge for winner selection.
 class WinnerRanking {
-  /// Prize-eligible finalists, already ordered: body-fat-metric finalists first
-  /// (the PRIMARY metric per the Rule Book), then weight-loss-fallback finalists,
-  /// each group sorted by score descending.
+  /// Prize-eligible finalists, ordered by the weighted composite Participant
+  /// Score descending (50% body-fat % change, 30% weight loss %, 20% muscle gain %).
   final List<LeaderboardStanding> ranked;
 
   /// Everyone else on the leaderboard, with a reason they are not rankable.
@@ -24,9 +23,9 @@ class WinnerRanking {
 
 /// Ranks eligible finalists and publishes the admin-declared winners.
 ///
-/// Ranking is automatic (body-fat primary, weight fallback) but the admin makes
-/// the final call — [computeRanking] proposes an order; [declareWinners] persists
-/// whatever the admin confirms.
+/// Ranking is automatic (by the weighted composite Participant Score) but the
+/// admin makes the final call — [computeRanking] proposes an order;
+/// [declareWinners] persists whatever the admin confirms.
 class WinnerSelectionService {
   final ChallengeRepository _challengeRepository;
   final ChallengeParticipantRepository _participantRepository;

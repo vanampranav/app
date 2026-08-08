@@ -49,6 +49,10 @@ class _ParticipantPaymentRecoveryScreenState extends State<ParticipantPaymentRec
     try {
       final repo = context.read<ChallengeParticipantRepository>();
       _participant = await repo.getParticipantByUserAndChallenge(userId, widget.challengeId);
+      // Pre-fill what the participant submitted last time so they can see what
+      // to fix instead of starting from empty fields.
+      _refController.text = _participant?.paymentReference ?? '';
+      _notesController.text = _participant?.paymentProofNotes ?? '';
       if (kDebugMode) {
         debugPrint('RecoveryScreen: Loaded participant. paymentStatus: ${_participant?.paymentStatus}');
       }
@@ -73,6 +77,15 @@ class _ParticipantPaymentRecoveryScreenState extends State<ParticipantPaymentRec
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     if (_participant == null) return;
+    if (_imageBytes == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please add a new payment screenshot.'),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+      return;
+    }
 
     setState(() => _isUploading = true);
     final paymentService = context.read<PaymentApprovalService>();
@@ -183,7 +196,24 @@ class _ParticipantPaymentRecoveryScreenState extends State<ParticipantPaymentRec
                 ),
               ),
               const SizedBox(height: 32),
-              _buildLabel('Screenshot (Optional)'),
+              _buildLabel('Screenshot *'),
+              if (_participant?.paymentProofUrl != null) ...[
+                const SizedBox(height: 8),
+                Text('Previously submitted (rejected) — upload a clearer one:',
+                    style: AppTheme.bodySM.copyWith(color: AppTheme.textTertiary)),
+                const SizedBox(height: 8),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.network(
+                    _participant!.paymentProofUrl!,
+                    height: 90,
+                    width: 90,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
               GestureDetector(
                 onTap: _pickImage,
                 child: Container(

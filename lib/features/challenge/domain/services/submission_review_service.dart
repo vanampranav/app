@@ -37,6 +37,10 @@ class SubmissionReviewService {
     await _leaderboardService?.recomputeAndPublish(challengeId);
   }
 
+  /// Max times a participant may resubmit the SAME slot (a rejected / fix-required
+  /// baseline, or a given week's check-in) before they are blocked.
+  static const int maxResubmissions = 3;
+
   Future<void> _submit(String userId, String challengeId, String type, Map<String, dynamic> data) async {
     // Check if participant is approved
     final participant = await _participantRepository.getParticipantByUserAndChallenge(userId, challengeId);
@@ -44,51 +48,98 @@ class SubmissionReviewService {
       throw Exception('Participant must be approved before submitting.');
     }
 
-    // Weekly / final submissions depend on THIS challenge's history. Fetch
-    // submissions scoped to (user, challenge) so an approved baseline in a
-    // DIFFERENT challenge can never satisfy these guards (the cross-challenge
+    // Fetch this (user, challenge)'s submissions — scoped so an approved baseline
+    // in a DIFFERENT challenge can never satisfy these guards (cross-challenge
     // baseline-leak bug).
-    if (type != SubmissionType.baseline) {
-      final submissions = await _submissionRepository
-          .streamSubmissionsByParticipantAndChallenge(userId, challengeId)
-          .first;
+    final submissions = await _submissionRepository
+        .streamSubmissionsByParticipantAndChallenge(userId, challengeId)
+        .first;
 
+    // Weekly / final require an approved baseline for THIS challenge.
+    if (type != SubmissionType.baseline) {
       final hasBaseline = submissions.any((s) =>
           s.type == SubmissionType.baseline &&
           s.reviewStatus == ReviewStatus.approved);
       if (!hasBaseline) {
         throw Exception('Baseline submission must be approved before weekly or final submissions.');
       }
-
-      // Prevent a duplicate weekly check-in for the same week (the UI also
-      // gates this, but this is the server-side integrity guard). A pending or
-      // approved submission blocks re-submitting; a rejected / needs-clarification
-      // one is allowed through so the participant can resubmit.
-      if (type == SubmissionType.weeklyCheckIn) {
-        final weekNumber = data['weekNumber'];
-        final alreadySubmitted = submissions.any((s) =>
-            s.type == SubmissionType.weeklyCheckIn &&
-            s.data['weekNumber'] == weekNumber &&
-            (s.reviewStatus == ReviewStatus.submitted ||
-                s.reviewStatus == ReviewStatus.approved));
-        if (alreadySubmitted) {
-          throw Exception('You have already submitted your check-in for week $weekNumber.');
-        }
-      }
     }
 
-    // Final submission check
-    if (type == SubmissionType.finalSubmission) {
+    // Timing guards that need the challenge dates.
+    if (type == SubmissionType.weeklyCheckIn || type == SubmissionType.finalSubmission) {
       final challenge = await _challengeRepository.getChallengeById(challengeId);
-      if (challenge != null) {
-        final now = DateTime.now();
-        // Allow final submission up to 3 days before end date
-        if (now.isBefore(challenge.endDate.subtract(const Duration(days: 3)))) {
+      final now = DateTime.now();
+      final finalWindowOpen = challenge != null &&
+          !now.isBefore(challenge.endDate.subtract(const Duration(days: 3)));
+
+      if (type == SubmissionType.weeklyCheckIn) {
+        // Week 0 is the "baseline week" — no check-in until week 1 (day 7).
+        final wk = data['weekNumber'];
+        final weekNum = wk is num ? wk.toInt() : 0;
+        if (weekNum < 1) {
+          throw Exception('Weekly check-ins open after your first week.');
+        }
+        // Weekly check-ins close once the final window opens, so the last one
+        // never collides with the final submission.
+        if (finalWindowOpen) {
+          throw Exception('Weekly check-ins are closed. Please submit your final results instead.');
+        }
+      } else {
+        // Final submission: only near / after the end date.
+        if (challenge != null && !finalWindowOpen) {
           throw Exception('Final submission can only be submitted near or after the challenge end date.');
         }
       }
     }
 
+    // Find the ONE submission this would replace. A weekly is keyed by its week;
+    // baseline / final are singletons per (user, challenge). Newest first so we
+    // update the most recent if legacy duplicate docs already exist.
+    final weekNumber = data['weekNumber'];
+    final slotDocs = submissions.where((s) {
+      if (s.type != type) return false;
+      if (type == SubmissionType.weeklyCheckIn) {
+        return s.data['weekNumber'] == weekNumber;
+      }
+      return true; // baseline / final: one per participant
+    }).toList()
+      ..sort((a, b) =>
+          (b.createdAt ?? DateTime(0)).compareTo(a.createdAt ?? DateTime(0)));
+
+    if (slotDocs.isNotEmpty) {
+      // A pending or approved submission already occupies this slot → nothing to
+      // resubmit over.
+      final occupied = slotDocs.any((s) =>
+          s.reviewStatus == ReviewStatus.submitted ||
+          s.reviewStatus == ReviewStatus.approved);
+      if (occupied) {
+        if (type == SubmissionType.weeklyCheckIn) {
+          throw Exception('You have already submitted your check-in for week $weekNumber.');
+        }
+        throw Exception('This submission is already pending review or approved.');
+      }
+
+      // Otherwise it was rejected / needs-clarification → this is a RESUBMISSION.
+      // Update the SAME document in place (no new doc) and reset it to pending,
+      // so the admin only ever reviews the current version and there is never a
+      // stale copy to approve.
+      final existing = slotDocs.first;
+      if (existing.resubmitCount >= maxResubmissions) {
+        throw Exception(
+            'You have reached the maximum of $maxResubmissions resubmissions for this submission. Please contact support.');
+      }
+
+      final updated = existing.copyWith(
+        data: data,
+        reviewStatus: ReviewStatus.submitted,
+        resubmitCount: existing.resubmitCount + 1,
+        updatedAt: DateTime.now(),
+      );
+      await _submissionRepository.updateSubmission(updated);
+      return;
+    }
+
+    // First submission for this slot → create a new document.
     final submission = ChallengeSubmission(
       id: '',
       challengeId: challengeId,

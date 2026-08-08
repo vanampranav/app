@@ -246,6 +246,9 @@ class LeaderboardInsightsProvider with ChangeNotifier {
           metric: myStanding.officialMetric,
           isEligible: myStanding.officialEligible,
           ineligibilityReason: myStanding.officialIneligibilityReason,
+          bodyFatChangePercent: myStanding.bodyFatChangePercent,
+          weightLossPercent: myStanding.weightLossPercent,
+          muscleGainPercent: myStanding.muscleGainPercent,
         ),
         isProjectedOfficialRanking: !isCompleted,
       );

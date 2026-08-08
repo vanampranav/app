@@ -82,20 +82,53 @@ class _ChallengePackageSelectionContentState extends State<_ChallengePackageSele
   }
 
   Widget _buildPackageList(BuildContext context, ChallengePackageProvider provider) {
-    return ListView.separated(
-      padding: const EdgeInsets.all(24),
-      itemCount: provider.packages.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 16),
-      itemBuilder: (ctx, i) {
-        final package = provider.packages[i];
-        final isSelected = provider.selectedPackage?.id == package.id;
+    return Column(
+      children: [
+        _buildInstructionBanner(),
+        Expanded(
+          child: ListView.separated(
+            padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+            itemCount: provider.packages.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 16),
+            itemBuilder: (ctx, i) {
+              final package = provider.packages[i];
+              final isSelected = provider.selectedPackage?.id == package.id;
 
-        return _PackageCard(
-          package: package,
-          isSelected: isSelected,
-          onTap: () => provider.selectPackage(package),
-        );
-      },
+              return _PackageCard(
+                package: package,
+                isSelected: isSelected,
+                onTap: () => provider.selectPackage(package),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildInstructionBanner() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(24, 16, 24, 8),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.lime.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+        border: Border.all(color: AppTheme.lime.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.info_outline_rounded, color: AppTheme.lime, size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Select one package for this challenge — tap it and a check mark '
+              'appears on the right. Then tap Continue at the bottom to join.',
+              style: AppTheme.bodyMD.copyWith(color: AppTheme.textSecondary, height: 1.4),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -166,8 +199,14 @@ class _PackageCard extends StatelessWidget {
                   style: AppTheme.headingSM.copyWith(color: isSelected ? AppTheme.lime : AppTheme.textPrimary),
                 ),
               ),
-              if (isSelected)
-                const Icon(Icons.check_circle_rounded, color: AppTheme.lime, size: 24),
+              const SizedBox(width: 12),
+              // Always-visible selection checkbox: empty circle when unselected,
+              // filled check when selected, so it's clear the card is selectable.
+              Icon(
+                isSelected ? Icons.check_circle_rounded : Icons.radio_button_unchecked,
+                color: isSelected ? AppTheme.lime : AppTheme.textTertiary,
+                size: 26,
+              ),
             ],
           ),
           const SizedBox(height: 8),

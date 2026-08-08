@@ -6,6 +6,7 @@ import '../services/health_service.dart';
 import 'add_member_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({Key? key}) : super(key: key);
@@ -16,11 +17,23 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _notificationsEnabled = true;
-  bool _emailMarketing = false;
+  bool _emailMarketing = true;
   String? _userEmail;
   bool _healthConnected = false;
   bool _healthLoading   = false;
   DateTime? _lastSyncTime;
+
+  Future<void> _openUrl(String url) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final ok = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+      if (!ok) {
+        messenger.showSnackBar(const SnackBar(content: Text('Could not open the link.')));
+      }
+    } catch (_) {
+      messenger.showSnackBar(const SnackBar(content: Text('Could not open the link.')));
+    }
+  }
 
   @override
   void initState() {
@@ -38,7 +51,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       setState(() {
         _userEmail = email;
         _notificationsEnabled = prefs.getBool('notifications_enabled') ?? true;
-        _emailMarketing = prefs.getBool('email_marketing') ?? false;
+        _emailMarketing = prefs.getBool('email_marketing') ?? true;
         _healthConnected = healthConnected;
         _lastSyncTime = lastSync;
       });
@@ -475,12 +488,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               Icon(Icons.sync_rounded,
                                   size: 14, color: Colors.grey[500]),
                               const SizedBox(width: 6),
-                              Text(
-                                _lastSyncTime != null
-                                    ? 'Last synced ${_formatSyncTime(_lastSyncTime!)}'
-                                    : 'Not yet synced — connect your scale or log a meal',
-                                style: TextStyle(
-                                    fontSize: 12, color: Colors.grey[600]),
+                              Expanded(
+                                child: Text(
+                                  _lastSyncTime != null
+                                      ? 'Last synced ${_formatSyncTime(_lastSyncTime!)}'
+                                      : 'Not yet synced — connect your scale or log a meal',
+                                  style: TextStyle(
+                                      fontSize: 12, color: Colors.grey[600]),
+                                ),
                               ),
                             ],
                           ),
@@ -623,27 +638,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     leading: const Icon(Icons.privacy_tip_outlined),
                     title: const Text('Privacy Policy'),
                     trailing: const Icon(Icons.arrow_forward_ios),
-                    onTap: () {
-                      // Navigate to privacy policy
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Privacy Policy - Coming Soon'),
-                        ),
-                      );
-                    },
+                    onTap: () => _openUrl('https://theelefit.com/policies/privacy-policy'),
                   ),
                   ListTile(
                     leading: const Icon(Icons.description_outlined),
                     title: const Text('Terms of Service'),
                     trailing: const Icon(Icons.arrow_forward_ios),
-                    onTap: () {
-                      // Navigate to terms of service
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Terms of Service - Coming Soon'),
-                        ),
-                      );
-                    },
+                    onTap: () => _openUrl('https://theelefit.com/policies/terms-of-service'),
                   ),
                 ],
               ),

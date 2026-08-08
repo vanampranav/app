@@ -12,10 +12,11 @@ import 'firestore_parsing.dart';
 class LeaderboardStanding {
   final String userId;
   final String displayName;
-  final double motivationalScore;
+  final double motivationalScore; // includes bonusPoints below
   final double weightLossPercent;
   final double bodyFatLossPoints;
   final double consistencyScore;
+  final double bonusPoints; // admin manual adjustment folded into motivationalScore
   final String latestSubmissionType; // raw: baseline | weeklyCheckIn | finalSubmission
   final String latestSubmissionLabel; // display: "Week 3" / "Final" / "Baseline"
   final int? latestWeekNumber;
@@ -27,6 +28,10 @@ class LeaderboardStanding {
   final bool officialEligible;
   final String? officialIneligibilityReason;
 
+  // Normalized components of the composite official score (relative % changes).
+  final double bodyFatChangePercent;
+  final double muscleGainPercent;
+
   final DateTime? updatedAt;
 
   LeaderboardStanding({
@@ -36,6 +41,7 @@ class LeaderboardStanding {
     required this.weightLossPercent,
     required this.bodyFatLossPoints,
     required this.consistencyScore,
+    this.bonusPoints = 0,
     required this.latestSubmissionType,
     required this.latestSubmissionLabel,
     this.latestWeekNumber,
@@ -44,6 +50,8 @@ class LeaderboardStanding {
     this.officialMetric = 'insufficientData',
     this.officialEligible = false,
     this.officialIneligibilityReason,
+    this.bodyFatChangePercent = 0,
+    this.muscleGainPercent = 0,
     this.updatedAt,
   });
 
@@ -55,6 +63,7 @@ class LeaderboardStanding {
       'weightLossPercent': weightLossPercent,
       'bodyFatLossPoints': bodyFatLossPoints,
       'consistencyScore': consistencyScore,
+      'bonusPoints': bonusPoints,
       'latestSubmissionType': latestSubmissionType,
       'latestSubmissionLabel': latestSubmissionLabel,
       'latestWeekNumber': latestWeekNumber,
@@ -63,6 +72,8 @@ class LeaderboardStanding {
       'officialMetric': officialMetric,
       'officialEligible': officialEligible,
       'officialIneligibilityReason': officialIneligibilityReason,
+      'bodyFatChangePercent': bodyFatChangePercent,
+      'muscleGainPercent': muscleGainPercent,
       'updatedAt': FieldValue.serverTimestamp(),
     };
   }
@@ -75,6 +86,7 @@ class LeaderboardStanding {
       weightLossPercent: parseDoubleOr(map['weightLossPercent'], 0),
       bodyFatLossPoints: parseDoubleOr(map['bodyFatLossPoints'], 0),
       consistencyScore: parseDoubleOr(map['consistencyScore'], 0),
+      bonusPoints: parseDoubleOr(map['bonusPoints'], 0),
       latestSubmissionType: (map['latestSubmissionType'] ?? 'baseline').toString(),
       latestSubmissionLabel: (map['latestSubmissionLabel'] ?? 'Baseline').toString(),
       latestWeekNumber: map['latestWeekNumber'] == null
@@ -86,6 +98,8 @@ class LeaderboardStanding {
       officialMetric: (map['officialMetric'] ?? 'insufficientData').toString(),
       officialEligible: map['officialEligible'] == true,
       officialIneligibilityReason: map['officialIneligibilityReason']?.toString(),
+      bodyFatChangePercent: parseDoubleOr(map['bodyFatChangePercent'], 0),
+      muscleGainPercent: parseDoubleOr(map['muscleGainPercent'], 0),
       updatedAt: parseFirestoreDate(map['updatedAt']),
     );
   }

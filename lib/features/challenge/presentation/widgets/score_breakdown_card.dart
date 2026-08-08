@@ -70,6 +70,14 @@ class ScoreBreakdownCard extends StatelessWidget {
               const SizedBox(height: 20),
               if (official.isEligible) ...[
                 _buildOfficialMetricRow(official),
+                if (official.metric == 'compositeScore') ...[
+                  const SizedBox(height: 16),
+                  _buildComponentRow('Body Fat % Change (50%)', official.bodyFatChangePercent),
+                  const SizedBox(height: 8),
+                  _buildComponentRow('Weight Loss (30%)', official.weightLossPercent),
+                  const SizedBox(height: 8),
+                  _buildComponentRow('Muscle Gain (20%)', official.muscleGainPercent),
+                ],
                 const SizedBox(height: 12),
                 Text(
                   insights.isProjectedOfficialRanking 
@@ -113,10 +121,30 @@ class ScoreBreakdownCard extends StatelessWidget {
     );
   }
 
+  Widget _buildComponentRow(String label, double percent) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Expanded(
+          child: Text(label,
+              style: AppTheme.bodySM.copyWith(color: AppTheme.textSecondary),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis),
+        ),
+        const SizedBox(width: 8),
+        Text('${percent.toStringAsFixed(1)}%',
+            style: AppTheme.numericMD.copyWith(fontSize: 14)),
+      ],
+    );
+  }
+
   Widget _buildOfficialMetricRow(OfficialWinnerData data) {
     String label = 'Official Score';
     String unit = '';
-    if (data.metric == 'bodyFatLossPoints') {
+    if (data.metric == 'compositeScore') {
+      label = 'Participant Score';
+      unit = '';
+    } else if (data.metric == 'bodyFatLossPoints') {
       label = 'Body Fat Points Lost';
       unit = ' pts';
     } else if (data.metric == 'weightLossPercent') {

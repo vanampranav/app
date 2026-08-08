@@ -427,7 +427,10 @@ class _EFMacroBarState extends State<EFMacroBar>
             Text(widget.label, style: AppTheme.labelMD),
             Text(
               '${widget.current}/${widget.target}${widget.unit}',
-              style: AppTheme.labelMD.copyWith(color: widget.color),
+              // Turn red once the macro goal is exceeded, for a clear over-goal cue.
+              style: AppTheme.labelMD.copyWith(
+                color: widget.current > widget.target ? AppTheme.error : widget.color,
+              ),
             ),
           ],
         ),

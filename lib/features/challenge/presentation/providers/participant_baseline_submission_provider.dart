@@ -156,6 +156,7 @@ class ParticipantBaselineSubmissionProvider with ChangeNotifier {
     required double weight,
     required String unit,
     double? bodyFat,
+    double? muscleMass,
     required String source,
     String? notes,
   }) async {
@@ -201,6 +202,7 @@ class ParticipantBaselineSubmissionProvider with ChangeNotifier {
         'weight': weight,
         'unit': unit,
         'bodyFat': bodyFat,
+        'muscleMass': muscleMass,
         'source': source,
         'notes': notes,
         'photos': finalPhotoUrls,

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/fitdays_service.dart';
@@ -510,7 +511,8 @@ class _DevicesScreenState extends State<DevicesScreen> {
               ),
             ),
             const SizedBox(height: 48),
-            _buildDebugLog(),
+            // Dev-only diagnostic panel — hidden in release/TestFlight builds.
+            if (kDebugMode) _buildDebugLog(),
           ],
         ),
       ),

@@ -92,6 +92,12 @@ class ParticipantChallengeDashboardProvider with ChangeNotifier {
         _submissions = list.where((s) => s.challengeId == challengeId).toList();
         notifyListeners();
       },
+      // Non-fatal: if submissions can't be read, still show the dashboard with
+      // whatever else loaded rather than crashing on an unhandled stream error.
+      onError: (err) {
+        _submissions = [];
+        notifyListeners();
+      },
     );
 
     _paymentSub = _paymentRepository.streamPaymentsByUser(userId).listen(
@@ -101,6 +107,11 @@ class ParticipantChallengeDashboardProvider with ChangeNotifier {
         } catch (_) {
           _paymentRecord = null;
         }
+        notifyListeners();
+      },
+      // Non-fatal: a denied/failed payment read must not blow up the dashboard.
+      onError: (err) {
+        _paymentRecord = null;
         notifyListeners();
       },
     );

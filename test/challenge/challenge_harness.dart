@@ -260,6 +260,7 @@ class ChallengeHarness {
     required String userId,
     double weight = 200.0,
     double bodyFat = 30.0,
+    double? muscle,
   }) async {
     await enrollment.joinChallenge(userId: userId, challengeId: challengeId);
     await enrollment.approveParticipant(challengeId, userId, adminId);
@@ -276,6 +277,7 @@ class ChallengeHarness {
       'weight': weight,
       'unit': 'lbs',
       'bodyFat': bodyFat,
+      if (muscle != null) 'muscleMass': muscle,
       'source': 'manualEntry',
       'photos': <String>['https://example.com/baseline.jpg'],
     });

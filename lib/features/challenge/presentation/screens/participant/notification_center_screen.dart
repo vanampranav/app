@@ -240,8 +240,23 @@ class _NotificationCard extends StatelessWidget {
       case 'paymentApproved':
         iconData = Icons.payments_outlined;
         break;
+      case 'paymentFailed':
+        iconData = Icons.error_outline_rounded;
+        color = AppTheme.error;
+        break;
       case 'challengeJoined':
         iconData = Icons.emoji_events_outlined;
+        break;
+      case 'participantApproved':
+        iconData = Icons.how_to_reg_rounded;
+        break;
+      case 'participantRejected':
+        iconData = Icons.person_off_rounded;
+        color = AppTheme.error;
+        break;
+      case 'adminReviewNeeded':
+        iconData = Icons.rate_review_rounded;
+        color = AppTheme.purple;
         break;
       case 'weeklyCheckInOpen':
         iconData = Icons.event_available_rounded;
@@ -277,7 +292,11 @@ class _NotificationCard extends StatelessWidget {
       case 'submissionRejected': return '✕ REJECTED';
       case 'resubmissionRequested': return '⚠ ACTION REQUIRED';
       case 'paymentApproved': return '💰 PAYMENT';
+      case 'paymentFailed': return '⚠ PAYMENT ISSUE';
       case 'challengeJoined': return '🏆 CHALLENGE';
+      case 'participantApproved': return '✅ ACCEPTED';
+      case 'participantRejected': return '✕ NOT APPROVED';
+      case 'adminReviewNeeded': return '📋 NEEDS REVIEW';
       case 'weeklyCheckInOpen': return '📅 CHECK-IN OPEN';
       case 'weeklyCheckInDue': return '⚠ DUE SOON';
       case 'finalSubmissionOpen': return '🏁 FINAL OPEN';
@@ -289,6 +308,9 @@ class _NotificationCard extends StatelessWidget {
   Color _getTypeColor() {
     switch (notification.type) {
       case 'submissionRejected': return AppTheme.error;
+      case 'paymentFailed': return AppTheme.error;
+      case 'participantRejected': return AppTheme.error;
+      case 'adminReviewNeeded': return AppTheme.purple;
       case 'resubmissionRequested': return AppTheme.purple;
       case 'weeklyCheckInDue': return AppTheme.purple;
       case 'finalSubmissionDue': return AppTheme.purple;

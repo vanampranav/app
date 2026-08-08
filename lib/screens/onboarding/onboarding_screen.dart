@@ -4,6 +4,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/main_layout.dart';
 import '../../services/firebase_rest_service.dart';
+import '../../services/shopify_service.dart';
+import '../../services/auth_bridge.dart';
 import 'package:provider/provider.dart';
 import 'package:elefit_app/features/challenge/domain/services/auth_service.dart';
 import '../../services/health_service.dart';
@@ -155,6 +157,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   }
 
   Future<void> _doAuth() async {
+    final shopify = context.read<ShopifyService>();
     setState(() { _authLoading = true; _authError = null; });
     try {
       if (_isSignUp) {
@@ -169,10 +172,23 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         await _signInFirebaseSdk(_authEmail.trim(), _authPassword);
         setState(() { _name = _authFirstName.trim(); });
       } else {
-        // Sign in
-        await _fb.signIn(_authEmail.trim(), _authPassword);
-        // Also sign into the Firebase Auth SDK (needed by the Challenge feature).
-        await _signInFirebaseSdk(_authEmail.trim(), _authPassword);
+        // Sign in — with Shopify bridge fallback for store / AI-coach users
+        // whose Firebase password differs from what they type.
+        final bridgeToken = await bridgeSignIn(
+          email: _authEmail.trim(),
+          password: _authPassword,
+          fb: _fb,
+          shopify: shopify,
+        );
+        // Also sign into the Firebase Auth SDK (needed by the Challenge feature):
+        // via the custom token if the bridge ran, otherwise with the password.
+        if (bridgeToken != null) {
+          try {
+            await context.read<AuthService>().signInWithCustomToken(bridgeToken);
+          } catch (_) {}
+        } else {
+          await _signInFirebaseSdk(_authEmail.trim(), _authPassword);
+        }
         // Check if this user already completed onboarding
         final existing = await _fb.getOnboardingProfile();
         if (existing != null && existing['dailyCalorieTarget'] != null) {

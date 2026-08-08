@@ -263,8 +263,12 @@ class _ParticipantCard extends StatelessWidget {
 
     if (confirmed == true) {
       await provider.approveParticipant(participant.id, adminId);
-      if (context.mounted && provider.errorMessage != null) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(provider.errorMessage!), backgroundColor: AppTheme.error));
+      if (context.mounted) {
+        if (provider.errorMessage != null) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(provider.errorMessage!), backgroundColor: AppTheme.error));
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Participant approved.'), backgroundColor: AppTheme.lime));
+        }
       }
     }
   }
@@ -307,8 +311,12 @@ class _ParticipantCard extends StatelessWidget {
 
     if (confirmed == true) {
       await provider.rejectParticipant(participant.id, adminId, reasonController.text);
-      if (context.mounted && provider.errorMessage != null) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(provider.errorMessage!), backgroundColor: AppTheme.error));
+      if (context.mounted) {
+        if (provider.errorMessage != null) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(provider.errorMessage!), backgroundColor: AppTheme.error));
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Participant rejected.'), backgroundColor: AppTheme.lime));
+        }
       }
     }
   }

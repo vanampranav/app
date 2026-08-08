@@ -159,6 +159,13 @@ class PaymentApprovalService {
       newData: updatedPayment.toMap(),
       reason: reason,
     );
+
+    // Notify the participant that their payment was rejected and needs resubmission.
+    final challenge = await _challengeRepository.getChallengeById(payment.challengeId);
+    if (challenge != null) {
+      await _notificationService.notifyPaymentFailed(
+          payment.userId, challenge.title, challenge.id, reason);
+    }
   }
 
   Stream<List<PaymentRecord>> streamPendingPayments(String challengeId) {

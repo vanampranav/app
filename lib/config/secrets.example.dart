@@ -10,4 +10,7 @@ class Secrets {
 
   // OneSignal push notifications app ID
   static const String oneSignalAppId = 'your-onesignal-app-id';
+
+  // Must match the coach web app's SHOPIFY_BRIDGE_SALT exactly.
+  static const String shopifyBridgeSalt = 'your-shopify-bridge-salt';
 }

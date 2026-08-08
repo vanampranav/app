@@ -47,8 +47,16 @@ class ChallengeRepository {
           ChallengeStatus.active
         ])
         .snapshots()
-        .map((snapshot) =>
-            snapshot.docs.map((doc) => Challenge.fromFirestore(doc)).toList());
+        .map((snapshot) {
+      final challenges =
+          snapshot.docs.map((doc) => Challenge.fromFirestore(doc)).toList();
+      // Newest challenges first. Sorted client-side so we don't need a
+      // composite (status + createdAt) Firestore index for this query.
+      final epoch = DateTime.fromMillisecondsSinceEpoch(0);
+      challenges.sort((a, b) =>
+          (b.createdAt ?? epoch).compareTo(a.createdAt ?? epoch));
+      return challenges;
+    });
   }
 
   Stream<List<Challenge>> streamAllChallenges() {

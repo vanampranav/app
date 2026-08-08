@@ -102,6 +102,12 @@ class ChallengeParticipant {
     this.adminMetaData,
   });
 
+  /// Admin-applied manual score adjustment (bonus / penalty points), stored in
+  /// adminMetaData['bonusPoints']. Added to this participant's leaderboard score
+  /// so an organizer can nudge ranking / decide the winner.
+  double get bonusPoints =>
+      (adminMetaData?['bonusPoints'] as num?)?.toDouble() ?? 0.0;
+
   ChallengeParticipant copyWith({
     String? id,
     String? challengeId,

@@ -583,7 +583,7 @@ class _NutritionLogScreenState extends State<NutritionLogScreen> {
   // ── Calorie + macro summary card ──────────────────────────────────────────
   Widget _buildSummaryCard() {
     final consumed  = _summary.totalCalories;
-    final remaining = (_calGoal - consumed).clamp(0, _calGoal).toInt();
+    final remaining = (_calGoal - consumed).toInt(); // negative once over goal
     final progress  = _calGoal > 0
         ? (consumed / _calGoal).clamp(0.0, 1.0)
         : 0.0;
@@ -604,10 +604,18 @@ class _NutritionLogScreenState extends State<NutritionLogScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    '$remaining',
-                    style: AppTheme.numericLG.copyWith(fontSize: 28),
+                    '${remaining.abs()}',
+                    style: AppTheme.numericLG.copyWith(
+                      fontSize: 28,
+                      color: remaining < 0 ? AppTheme.error : null,
+                    ),
                   ),
-                  Text('left', style: AppTheme.labelSM),
+                  Text(
+                    remaining < 0 ? 'over' : 'left',
+                    style: AppTheme.labelSM.copyWith(
+                      color: remaining < 0 ? AppTheme.error : null,
+                    ),
+                  ),
                 ],
               ),
             ),

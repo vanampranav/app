@@ -78,6 +78,30 @@ class LeaderboardService {
     }
   }
 
+  /// Sets an admin bonus/penalty (manual points) on a participant and republishes
+  /// the leaderboard so their rank updates. Adjusts an EXISTING participant only —
+  /// it can never create a winner from a non-participant.
+  Future<void> setBonusPoints(
+    String challengeId,
+    String userId,
+    double bonusPoints, {
+    String? adminId,
+  }) async {
+    final participant = await _participantRepository
+        .getParticipantByUserAndChallenge(userId, challengeId);
+    if (participant == null) {
+      throw Exception('Participant not found.');
+    }
+    final meta = Map<String, dynamic>.from(participant.adminMetaData ?? {});
+    meta['bonusPoints'] = bonusPoints;
+    await _participantRepository.updateParticipant(participant.copyWith(
+      adminMetaData: meta,
+      lastUpdatedByAdminId: adminId,
+      updatedAt: DateTime.now(),
+    ));
+    await recomputeAndPublish(challengeId);
+  }
+
   /// Pure computation, shared with the admin live view / tests. `users` is a
   /// list of AppUser (typed dynamic here only to avoid importing the model in
   /// callers); [UserRepository.formatName] handles the lookup.
@@ -133,8 +157,28 @@ class LeaderboardService {
         final double lostBF =
             _scoring.calculateBodyFatLossPoints(startBF, latestBF);
 
+        // Composite-score components (relative % changes) for the official metric.
+        final double? startMuscle = baseline.data['muscleMass'] != null
+            ? (baseline.data['muscleMass'] as num).toDouble()
+            : null;
+        final double? latestMuscle = latest.data['muscleMass'] != null
+            ? (latest.data['muscleMass'] as num).toDouble()
+            : null;
+        final double bfChangePct =
+            _scoring.calculateBodyFatChangePercent(startBF, latestBF);
+        final double muscleGainPct =
+            _scoring.calculateMuscleGainPercent(startMuscle, latestMuscle);
+
+        // Consistency counts DISTINCT weeks with an approved check-in — not the
+        // raw submission count — so resubmissions / duplicate docs can't inflate it.
+        final int distinctWeeklyWeeks = subs
+            .where((s) => s.type == SubmissionType.weeklyCheckIn)
+            .map((s) => s.data['weekNumber'])
+            .where((w) => w != null)
+            .toSet()
+            .length;
         final double consistency =
-            _scoring.calculateConsistencyScore(subs.length);
+            _scoring.calculateConsistencyScore(distinctWeeklyWeeks);
         final double motivational =
             _scoring.calculateMotivationalLeaderboardScore(
           weightLossPercent: pctW,
@@ -169,7 +213,9 @@ class LeaderboardService {
         standings.add(LeaderboardStanding(
           userId: userId,
           displayName: displayName,
-          motivationalScore: motivational,
+          // Fold in the admin's manual bonus/penalty so it affects ranking.
+          motivationalScore: motivational + participant.bonusPoints,
+          bonusPoints: participant.bonusPoints,
           weightLossPercent: pctW,
           bodyFatLossPoints: lostBF,
           consistencyScore: consistency,
@@ -181,13 +227,50 @@ class LeaderboardService {
           officialMetric: official.metric,
           officialEligible: official.isEligible,
           officialIneligibilityReason: official.ineligibilityReason,
+          bodyFatChangePercent: bfChangePct,
+          muscleGainPercent: muscleGainPct,
         ));
       } catch (_) {
         // Skip participants without an approved baseline / malformed data.
       }
     });
 
-    standings.sort((a, b) => b.motivationalScore.compareTo(a.motivationalScore));
+    // Include participants who have joined but don't yet have a scored entry
+    // (no approved submission, or no approved baseline) so the leaderboard shows
+    // EVERY challenger — not just those already scored. They appear at the
+    // bottom as "Not started".
+    final scoredUserIds = standings.map((s) => s.userId).toSet();
+    for (final p in activeParticipants) {
+      if (scoredUserIds.contains(p.userId)) continue;
+      standings.add(LeaderboardStanding(
+        userId: p.userId,
+        displayName: UserRepository.formatName(
+          userMap[p.userId],
+          fallbackId: p.userId,
+          leaderboardDisplayName: p.leaderboardDisplayName,
+        ),
+        motivationalScore: p.bonusPoints,
+        bonusPoints: p.bonusPoints,
+        weightLossPercent: 0,
+        bodyFatLossPoints: 0,
+        consistencyScore: 0,
+        latestSubmissionType: 'baseline',
+        latestSubmissionLabel: 'Not started',
+        officialMetric: 'insufficientData',
+        officialEligible: false,
+      ));
+    }
+
+    // Rank by score (which now includes the admin bonus, so a bonus can lift
+    // anyone). On ties, scored participants sit above "Not started", then by name.
+    standings.sort((a, b) {
+      final byScore = b.motivationalScore.compareTo(a.motivationalScore);
+      if (byScore != 0) return byScore;
+      final aScored = scoredUserIds.contains(a.userId);
+      final bScored = scoredUserIds.contains(b.userId);
+      if (aScored != bScored) return aScored ? -1 : 1;
+      return a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase());
+    });
     return standings;
   }
 }

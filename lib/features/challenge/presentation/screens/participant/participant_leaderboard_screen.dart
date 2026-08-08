@@ -362,16 +362,21 @@ class _LeaderboardRow extends StatelessWidget {
           // Stats
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                entry.motivationalScore.toStringAsFixed(1),
-                style: AppTheme.numericLG.copyWith(fontSize: 18, color: AppTheme.lime),
-              ),
-              Text(
-                '${entry.weightLossPercentage.toStringAsFixed(1)}% progress',
-                style: AppTheme.bodySM.copyWith(fontSize: 10, color: AppTheme.textSecondary),
-              ),
-            ],
+            children: entry.latestSubmissionType == 'Not started'
+                ? [
+                    Text('—', style: AppTheme.numericLG.copyWith(fontSize: 18, color: AppTheme.textTertiary)),
+                    Text('Not started', style: AppTheme.bodySM.copyWith(fontSize: 10, color: AppTheme.textSecondary)),
+                  ]
+                : [
+                    Text(
+                      entry.motivationalScore.toStringAsFixed(1),
+                      style: AppTheme.numericLG.copyWith(fontSize: 18, color: AppTheme.lime),
+                    ),
+                    Text(
+                      '${entry.weightLossPercentage.toStringAsFixed(1)}% progress',
+                      style: AppTheme.bodySM.copyWith(fontSize: 10, color: AppTheme.textSecondary),
+                    ),
+                  ],
           ),
         ],
       ),

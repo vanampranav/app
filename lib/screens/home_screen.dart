@@ -23,6 +23,7 @@ import '../models/member_model.dart';
 import '../widgets/device_scan_sheet.dart';
 import 'package:elefit_app/features/challenge/presentation/screens/participant/challenge_discovery_screen.dart';
 import 'package:elefit_app/features/challenge/presentation/screens/participant/participant_challenge_dashboard_screen.dart';
+import 'package:elefit_app/features/challenge/presentation/screens/participant/participant_my_challenges_screen.dart';
 import 'package:elefit_app/features/challenge/presentation/providers/home_challenge_entry_provider.dart';
 import 'package:elefit_app/features/challenge/presentation/widgets/notification_bell_icon.dart';
 
@@ -474,7 +475,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       ? (_caloriesConsumed / _caloriesGoal).clamp(0.0, 1.0)
       : 0.0;
 
-  int get _caloriesRemaining => (_caloriesGoal - _caloriesConsumed).clamp(0, _caloriesGoal);
+  // Can go negative once the goal is exceeded, so the UI can show "over".
+  int get _caloriesRemaining => _caloriesGoal - _caloriesConsumed;
 
   @override
   Widget build(BuildContext context) {
@@ -643,11 +645,19 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   duration: const Duration(milliseconds: 1000),
                   curve: Curves.easeOutCubic,
                   builder: (_, val, __) => Text(
-                    '$val',
-                    style: AppTheme.numericLG.copyWith(fontSize: 28),
+                    '${val.abs()}',
+                    style: AppTheme.numericLG.copyWith(
+                      fontSize: 28,
+                      color: _caloriesRemaining < 0 ? AppTheme.error : null,
+                    ),
                   ),
                 ),
-                Text('left', style: AppTheme.labelSM),
+                Text(
+                  _caloriesRemaining < 0 ? 'over' : 'left',
+                  style: AppTheme.labelSM.copyWith(
+                    color: _caloriesRemaining < 0 ? AppTheme.error : null,
+                  ),
+                ),
               ],
             ),
           ),
@@ -772,7 +782,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               Expanded(
                 child: EFQuickAction(
                   icon: Icons.auto_awesome_rounded,
-                  label: 'AI\nCoach',
+                  label: 'Ask\nEle',
                   accentColor: AppTheme.lime,
                   onTap: () => Navigator.push(
                       context, EFPageRoute(page: const ai_coach.AiCoachScreen())),
@@ -882,7 +892,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
     return GestureDetector(
       onTap: () {
-        if (hasActive && activeId != null) {
+        if (hasActive && challengeEntry.activeCount > 1) {
+          // In more than one challenge → let them pick from My Challenges.
+          Navigator.push(context,
+              EFPageRoute(page: const ParticipantMyChallengesScreen()));
+        } else if (hasActive && activeId != null) {
+          // Exactly one active challenge → go straight to it.
           Navigator.push(context,
               EFPageRoute(page: ParticipantChallengeDashboardScreen(challengeId: activeId)));
         } else {

@@ -9,10 +9,13 @@ class HomeChallengeEntryProvider with ChangeNotifier {
   final ChallengeParticipantRepository _participantRepository;
 
   ChallengeParticipant? _activeParticipation;
+  int _activeCount = 0;
   bool _isLoading = true;
   StreamSubscription? _subscription;
 
   ChallengeParticipant? get activeParticipation => _activeParticipation;
+  int get activeCount => _activeCount;
+  bool get hasMultipleActive => _activeCount > 1;
   bool get isLoading => _isLoading;
   bool get hasActiveChallenge => _activeParticipation != null;
 
@@ -31,15 +34,15 @@ class HomeChallengeEntryProvider with ChangeNotifier {
     }
 
     _subscription = _participantRepository.streamParticipantsByUser(userId).listen((participations) {
-      // Find the first participation that is joined or active
-      try {
-        _activeParticipation = participations.firstWhere(
-          (p) => p.status == ParticipantStatus.joined || p.status == ParticipantStatus.active,
-        );
-      } catch (_) {
-        _activeParticipation = null;
-      }
-      
+      // All challenges the user is currently joined/active in.
+      final active = participations
+          .where((p) =>
+              p.status == ParticipantStatus.joined ||
+              p.status == ParticipantStatus.active)
+          .toList();
+      _activeCount = active.length;
+      _activeParticipation = active.isNotEmpty ? active.first : null;
+
       _isLoading = false;
       notifyListeners();
     }, onError: (err) {

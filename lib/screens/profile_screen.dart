@@ -3,9 +3,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import '../theme/app_theme.dart';
 import '../services/firebase_rest_service.dart';
+import '../services/shopify_service.dart';
+import '../services/auth_bridge.dart';
 import 'package:provider/provider.dart';
 import 'package:elefit_app/features/challenge/domain/services/auth_service.dart';
 import 'package:elefit_app/features/challenge/presentation/screens/participant/challenge_discovery_screen.dart';
+import 'package:elefit_app/features/challenge/presentation/screens/participant/participant_my_challenges_screen.dart';
 import 'package:elefit_app/features/challenge/presentation/screens/admin/admin_challenge_list_screen.dart';
 import 'settings_screen.dart';
 import 'OrdersScreen.dart';
@@ -80,13 +83,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final password = _passwordCtrl.text.trim();
     if (email.isEmpty || password.isEmpty) return;
 
+    final shopify = context.read<ShopifyService>();
     setState(() { _isLoading = true; _error = null; });
     try {
-      // 1. Sign in to REST service (used by legacy components / AI Coach)
-      await _fbService.signIn(email, password);
-      // 2. Sign in to Firebase Auth SDK (used by the Challenge feature / Firestore)
+      // 1. Sign in to REST service — with Shopify bridge fallback for store /
+      //    AI-coach users whose Firebase password differs from what they type.
+      final bridgeToken = await bridgeSignIn(
+        email: email, password: password, fb: _fbService, shopify: shopify);
+      // 2. Sign in to Firebase Auth SDK (used by the Challenge feature / Firestore):
+      //    via the custom token if the bridge ran, otherwise with the password.
       if (mounted) {
-        await context.read<AuthService>().signIn(email, password);
+        if (bridgeToken != null) {
+          await context.read<AuthService>().signInWithCustomToken(bridgeToken);
+        } else {
+          await context.read<AuthService>().signIn(email, password);
+        }
       }
       await _fetchProfile();
     } catch (e) {
@@ -104,6 +115,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_cacheKey);
+    // Clear this user's locally-cached nutrition goals/consumption + the
+    // onboarding flag so the NEXT account that signs in doesn't inherit them
+    // (these keys are not namespaced per user).
+    for (final key in prefs.getKeys().toList()) {
+      if (key == 'cal_goal' ||
+          key == 'user_daily_calories' ||
+          key == 'onboarded' ||
+          key.startsWith('protein_') ||
+          key.startsWith('carbs_') ||
+          key.startsWith('fat_') ||
+          key.startsWith('cal_consumed_')) {
+        await prefs.remove(key);
+      }
+    }
     setState(() { _profile = null; });
   }
 
@@ -763,6 +788,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _sectionHeader('CHALLENGES'),
         const SizedBox(height: 12),
         _settingsTile(Icons.emoji_events_outlined, 'Find Challenges', () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ChallengeDiscoveryScreen()))),
+        _settingsTile(Icons.workspace_premium_outlined, 'My Challenges', () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ParticipantMyChallengesScreen()))),
         if (p['isAdmin'] == true || p['role'] == 'admin' || p['role'] == 'superAdmin')
           _settingsTile(Icons.admin_panel_settings_outlined, 'Manage Challenges', () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminChallengeListScreen()))),
         const SizedBox(height: 32),

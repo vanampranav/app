@@ -1,5 +1,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:elefit_app/utils/decimal_input_formatter.dart';
+import 'package:elefit_app/features/challenge/presentation/widgets/challenge_scale_sync_button.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:elefit_app/theme/app_theme.dart';
@@ -48,6 +51,7 @@ class _ParticipantWeeklyCheckinContentState extends State<_ParticipantWeeklyChec
   final _formKey = GlobalKey<FormState>();
   final _weightController = TextEditingController();
   final _bodyFatController = TextEditingController();
+  final _muscleController = TextEditingController();
   final _notesController = TextEditingController();
   
   String _weightUnit = 'kg';
@@ -58,6 +62,7 @@ class _ParticipantWeeklyCheckinContentState extends State<_ParticipantWeeklyChec
   void dispose() {
     _weightController.dispose();
     _bodyFatController.dispose();
+    _muscleController.dispose();
     _notesController.dispose();
     super.dispose();
   }
@@ -106,7 +111,10 @@ class _ParticipantWeeklyCheckinContentState extends State<_ParticipantWeeklyChec
           );
         }
 
-        if (provider.errorMessage != null) {
+        // Only a LOAD failure (data never loaded) gets the full-screen error; a
+        // submission error (e.g. the resubmission cap) is shown inline on the
+        // form so the user stays on the check-in screen.
+        if (provider.errorMessage != null && provider.challenge == null) {
           return Scaffold(
             backgroundColor: AppTheme.bg,
             appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0, leading: const BackButton()),
@@ -140,14 +148,30 @@ class _ParticipantWeeklyCheckinContentState extends State<_ParticipantWeeklyChec
           return _buildLockedState('Your participation must be approved before you can submit progress.');
         }
 
+        // Weekly check-ins open only after the first week and close once the
+        // final window opens (so the last one doesn't collide with the final).
+        if (!provider.checkInsOpen) {
+          if (provider.finalWindowOpen) {
+            return _buildLockedState(
+                'Weekly check-ins are closed for this challenge.\n\nSubmit your Final results instead — they capture your finishing measurements.');
+          }
+          final days = provider.daysUntilNextCheckIn ?? 0;
+          final when = days <= 0
+              ? 'opens today'
+              : 'opens in ${days == 1 ? '1 day' : '$days days'}';
+          return _buildLockedState(
+              'Your first weekly check-in $when.\n\nYour baseline captured your starting measurements — weekly check-ins track your progress from there.');
+        }
+
         final isSubmitted = submission != null && 
             (submission.reviewStatus == ReviewStatus.submitted || submission.reviewStatus == ReviewStatus.approved);
         final isResubmissionRequired = submission?.reviewStatus == ReviewStatus.needsClarification;
 
         // Pre-fill form if existing submission exists
         if (_weightController.text.isEmpty && submission != null) {
-          _weightController.text = submission.data['weight']?.toString() ?? '';
-          _bodyFatController.text = submission.data['bodyFat']?.toString() ?? '';
+          _weightController.text = formatMeasurement(submission.data['weight'] as num?);
+          _bodyFatController.text = formatMeasurement(submission.data['bodyFat'] as num?);
+          _muscleController.text = formatMeasurement(submission.data['muscleMass'] as num?);
           _notesController.text = submission.data['notes'] ?? '';
           _weightUnit = submission.data['unit'] ?? 'kg';
           _measurementSource = submission.data['source'] ?? 'EleFit 4-electrode scale';
@@ -342,17 +366,32 @@ class _ParticipantWeeklyCheckinContentState extends State<_ParticipantWeeklyChec
   Widget _buildForm(ParticipantWeeklyCheckinProvider provider, challenge) {
     return Form(
       key: _formKey,
+      autovalidateMode: AutovalidateMode.onUserInteraction,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          ChallengeScaleSyncButton(
+            onReading: (m) => setState(() {
+              _weightController.text = m.weight.toStringAsFixed(1);
+              _weightUnit = m.unit.toLowerCase().startsWith('lb') ? 'lb' : 'kg';
+              if (m.bodyFat != null) {
+                _bodyFatController.text = m.bodyFat!.toStringAsFixed(1);
+              }
+              if (m.muscle != null) {
+                _muscleController.text = m.muscle!.toStringAsFixed(1);
+              }
+              _measurementSource = 'EleFit 4-electrode scale';
+            }),
+          ),
           Row(
             children: [
               Expanded(
                 flex: 2,
                 child: _buildTextField(
-                  label: 'Current Weight',
+                  label: 'Current Weight *',
                   controller: _weightController,
-                  keyboardType: TextInputType.number,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  inputFormatters: [DecimalTextInputFormatter(decimalRange: 1, maxIntegerDigits: 3)],
                   hint: '0.0',
                   validator: (v) {
                     if (v == null || v.isEmpty) return 'Required';
@@ -365,7 +404,7 @@ class _ParticipantWeeklyCheckinContentState extends State<_ParticipantWeeklyChec
               const SizedBox(width: 16),
               Expanded(
                 child: _buildDropdown(
-                  label: 'Unit',
+                  label: 'Unit *',
                   value: _weightUnit,
                   items: ['kg', 'lb'],
                   onChanged: (v) => setState(() => _weightUnit = v!),
@@ -375,20 +414,35 @@ class _ParticipantWeeklyCheckinContentState extends State<_ParticipantWeeklyChec
           ),
           const SizedBox(height: 20),
           _buildTextField(
-            label: 'Body Fat % (Optional)',
+            label: 'Body Fat % *',
             controller: _bodyFatController,
-            keyboardType: TextInputType.number,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: [DecimalTextInputFormatter(decimalRange: 1, maxIntegerDigits: 3)],
             hint: 'e.g. 15.5',
             validator: (v) {
-              if (v == null || v.isEmpty) return null;
+              if (v == null || v.isEmpty) return 'Required';
               final val = double.tryParse(v);
               if (val == null || val < 1 || val > 75) return '1-75 only';
               return null;
             },
           ),
           const SizedBox(height: 20),
+          _buildTextField(
+            label: 'Muscle Mass ($_weightUnit) *',
+            controller: _muscleController,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: [DecimalTextInputFormatter(decimalRange: 1, maxIntegerDigits: 3)],
+            hint: 'e.g. 32.4',
+            validator: (v) {
+              if (v == null || v.isEmpty) return 'Required';
+              final val = double.tryParse(v);
+              if (val == null || val <= 0) return 'Invalid';
+              return null;
+            },
+          ),
+          const SizedBox(height: 20),
           _buildDropdown(
-            label: 'Measurement Source',
+            label: 'Measurement Source *',
             value: _measurementSource,
             items: [
               'EleFit 4-electrode scale',
@@ -407,7 +461,7 @@ class _ParticipantWeeklyCheckinContentState extends State<_ParticipantWeeklyChec
             hint: 'How was your week?',
           ),
           const SizedBox(height: 32),
-          const Text('PROGRESS PHOTOS (OPTIONAL)', style: AppTheme.labelSM),
+          _fieldLabel('PROGRESS PHOTOS *'),
           const SizedBox(height: 12),
           _buildPhotoGrid(provider),
           const SizedBox(height: 40),
@@ -436,6 +490,7 @@ class _ParticipantWeeklyCheckinContentState extends State<_ParticipantWeeklyChec
               _buildReadOnlyRow('Weight', '${submission.data['weight']} ${submission.data['unit']}'),
               const Divider(height: 24, color: Colors.white10),
               _buildReadOnlyRow('Body Fat', '${submission.data['bodyFat'] ?? 'N/A'}%'),
+              _buildReadOnlyRow('Muscle Mass', submission.data['muscleMass'] != null ? '${submission.data['muscleMass']} ${submission.data['unit'] ?? ''}' : 'N/A'),
               const Divider(height: 24, color: Colors.white10),
               _buildReadOnlyRow('Source', submission.data['source']),
             ],
@@ -543,18 +598,35 @@ class _ParticipantWeeklyCheckinContentState extends State<_ParticipantWeeklyChec
     );
   }
 
-  Widget _buildTextField({required String label, required TextEditingController controller, String? hint, int maxLines = 1, int? maxLength, TextInputType? keyboardType, String? Function(String?)? validator}) {
+  // Renders a field label; a trailing " *" is shown as a red "required" marker.
+  Widget _fieldLabel(String label) {
+    if (label.endsWith(' *')) {
+      return Text.rich(
+        TextSpan(
+          style: AppTheme.labelSM,
+          children: [
+            TextSpan(text: label.substring(0, label.length - 2)),
+            const TextSpan(text: ' *', style: TextStyle(color: AppTheme.error, fontWeight: FontWeight.bold)),
+          ],
+        ),
+      );
+    }
+    return Text(label, style: AppTheme.labelSM);
+  }
+
+  Widget _buildTextField({required String label, required TextEditingController controller, String? hint, int maxLines = 1, int? maxLength, TextInputType? keyboardType, List<TextInputFormatter>? inputFormatters, String? Function(String?)? validator}) {
     final bool multiline = maxLines != 1;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: AppTheme.labelSM),
+        _fieldLabel(label),
         const SizedBox(height: 8),
         TextFormField(
           controller: controller,
           minLines: multiline ? maxLines : 1,
           maxLines: multiline ? null : 1,
           maxLength: maxLength,
+          inputFormatters: inputFormatters,
           keyboardType: multiline ? TextInputType.multiline : keyboardType,
           textInputAction: multiline ? TextInputAction.newline : null,
           style: const TextStyle(color: Colors.white),
@@ -575,7 +647,7 @@ class _ParticipantWeeklyCheckinContentState extends State<_ParticipantWeeklyChec
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: AppTheme.labelSM),
+        _fieldLabel(label),
         const SizedBox(height: 8),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -596,11 +668,23 @@ class _ParticipantWeeklyCheckinContentState extends State<_ParticipantWeeklyChec
 
   Future<void> _handleSubmit(ParticipantWeeklyCheckinProvider provider) async {
     if (!_formKey.currentState!.validate()) return;
-    
+
+    // A progress photo is required for a weekly check-in.
+    if (provider.newPhotos.isEmpty && provider.existingPhotoUrls.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please add at least one progress photo.'),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+      return;
+    }
+
     await provider.submitWeeklyCheckIn(
       weight: double.parse(_weightController.text),
       unit: _weightUnit,
       bodyFat: _bodyFatController.text.isNotEmpty ? double.parse(_bodyFatController.text) : null,
+      muscleMass: _muscleController.text.isNotEmpty ? double.parse(_muscleController.text) : null,
       source: _measurementSource,
       notes: _notesController.text,
     );

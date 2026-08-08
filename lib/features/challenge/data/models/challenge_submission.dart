@@ -11,6 +11,10 @@ class ChallengeSubmission {
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
+  // How many times the participant has resubmitted THIS slot (baseline, or a
+  // given week's check-in). Used to cap resubmissions.
+  final int resubmitCount;
+
   // Admin fields
   final String? lastUpdatedByAdminId;
   final String? adminReviewNotes;
@@ -25,6 +29,7 @@ class ChallengeSubmission {
     required this.reviewStatus,
     this.createdAt,
     this.updatedAt,
+    this.resubmitCount = 0,
     this.lastUpdatedByAdminId,
     this.adminReviewNotes,
     this.overrideFlags,
@@ -39,6 +44,7 @@ class ChallengeSubmission {
     String? reviewStatus,
     DateTime? createdAt,
     DateTime? updatedAt,
+    int? resubmitCount,
     String? lastUpdatedByAdminId,
     String? adminReviewNotes,
     Map<String, dynamic>? overrideFlags,
@@ -52,6 +58,7 @@ class ChallengeSubmission {
       reviewStatus: reviewStatus ?? this.reviewStatus,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      resubmitCount: resubmitCount ?? this.resubmitCount,
       lastUpdatedByAdminId: lastUpdatedByAdminId ?? this.lastUpdatedByAdminId,
       adminReviewNotes: adminReviewNotes ?? this.adminReviewNotes,
       overrideFlags: overrideFlags ?? this.overrideFlags,
@@ -67,6 +74,7 @@ class ChallengeSubmission {
       'reviewStatus': reviewStatus,
       'createdAt': createdAt != null ? Timestamp.fromDate(createdAt!) : FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
+      'resubmitCount': resubmitCount,
       'lastUpdatedByAdminId': lastUpdatedByAdminId,
       'adminReviewNotes': adminReviewNotes,
       'overrideFlags': overrideFlags,
@@ -83,6 +91,7 @@ class ChallengeSubmission {
       reviewStatus: map['reviewStatus'] ?? 'submitted',
       createdAt: parseFirestoreDate(map['createdAt']),
       updatedAt: parseFirestoreDate(map['updatedAt']),
+      resubmitCount: parseIntOr(map['resubmitCount'], 0),
       lastUpdatedByAdminId: map['lastUpdatedByAdminId'],
       adminReviewNotes: map['adminReviewNotes'],
       overrideFlags: map['overrideFlags'],

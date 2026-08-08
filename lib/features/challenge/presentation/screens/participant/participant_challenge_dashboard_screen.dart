@@ -14,6 +14,7 @@ import 'package:elefit_app/features/challenge/data/repositories/payment_record_r
 import 'package:elefit_app/features/challenge/domain/services/auth_service.dart';
 import 'package:elefit_app/features/challenge/presentation/providers/participant_challenge_dashboard_provider.dart';
 import 'package:elefit_app/features/challenge/presentation/screens/participant/participant_payment_submission_screen.dart';
+import 'package:elefit_app/features/challenge/presentation/screens/participant/participant_challenge_results_screen.dart';
 import 'package:elefit_app/features/challenge/presentation/screens/participant/participant_payment_recovery_screen.dart';
 import 'package:elefit_app/features/challenge/presentation/screens/participant/submissions/participant_baseline_submission_screen.dart';
 import 'package:elefit_app/features/challenge/presentation/screens/participant/submissions/participant_weekly_checkin_screen.dart';
@@ -235,6 +236,27 @@ class _ParticipantChallengeDashboardContent extends StatelessWidget {
               ],
             ),
           ],
+          if (participant.paymentStatus == PaymentStatus.partiallyPaid) ...[
+            const Divider(height: 24, color: Colors.white10),
+            Text(
+              'PARTIALLY PAID',
+              style: AppTheme.labelSM.copyWith(color: Colors.amber, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Remaining balance: ${participant.amountDue - participant.amountCollected} ${participant.currency ?? "USD"}',
+              style: AppTheme.bodySM.copyWith(color: AppTheme.textSecondary),
+            ),
+            const SizedBox(height: 16),
+            EFButton(
+              label: 'Pay Remaining Balance',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => ParticipantPaymentSubmissionScreen(challengeId: participant.challengeId)),
+              ),
+              height: 36,
+            ),
+          ],
         ],
       ),
     );
@@ -263,22 +285,114 @@ class _ParticipantChallengeDashboardContent extends StatelessWidget {
     );
   }
 
+  // Plain-English status for a submitted baseline, so "why is check-in locked?"
+  // is obvious from the Submit Baseline card itself.
+  String _baselineStatusText(String reviewStatus) {
+    switch (reviewStatus) {
+      case ReviewStatus.approved:
+        return 'Baseline approved';
+      case ReviewStatus.needsClarification:
+        return 'Needs changes — please resubmit';
+      case ReviewStatus.rejected:
+        return 'Rejected — please resubmit';
+      default:
+        return 'Submitted — awaiting organizer approval';
+    }
+  }
+
+  Widget _buildResultsBanner(BuildContext context, Challenge challenge) {
+    return GestureDetector(
+      onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+              builder: (_) => ParticipantChallengeResultsScreen(
+                  challengeId: challenge.id))),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(colors: [
+            const Color(0xFFFFD700).withValues(alpha: 0.18),
+            AppTheme.lime.withValues(alpha: 0.10),
+          ]),
+          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+          border: Border.all(color: const Color(0xFFFFD700).withValues(alpha: 0.4)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.emoji_events_rounded, color: Color(0xFFFFD700), size: 28),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Results are in!', style: AppTheme.headingSM),
+                  const SizedBox(height: 2),
+                  Text('See your final rank and the winners.',
+                      style: AppTheme.bodySM.copyWith(color: AppTheme.textSecondary)),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: AppTheme.textSecondary),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStepsBanner() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.lime.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+        border: Border.all(color: AppTheme.lime.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.info_outline_rounded, color: AppTheme.lime, size: 20),
+              SizedBox(width: 8),
+              Text('HOW THIS CHALLENGE WORKS', style: AppTheme.labelSM),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            '1. Submit your payment proof to start.\n'
+            '2. Submit your baseline (photos & weight) once the organizer approves your entry.\n'
+            '3. Log a weekly check-in each week after your baseline is approved.\n'
+            '4. Complete the final submission near the end date.',
+            style: AppTheme.bodyMD.copyWith(color: AppTheme.textSecondary, height: 1.6),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildActionCards(BuildContext context, ParticipantChallengeDashboardProvider provider, Challenge challenge, ChallengeParticipant participant) {
     final paymentStatus = participant.paymentStatus;
     final participantStatus = participant.status;
     final baseline = provider.baselineSubmission;
     
     // Availability Rules
-    final canSubmitInitialPayment = paymentStatus == PaymentStatus.pending;
+    final canSubmitInitialPayment = paymentStatus == PaymentStatus.pending ||
+        paymentStatus == PaymentStatus.partiallyPaid;
     final canSubmitRecoveryPayment = paymentStatus == PaymentStatus.failed;
     // Baseline requires the participant to be APPROVED (active). The service
     // rejects any other status, so the button must stay locked until then —
     // otherwise the user taps and gets a raw exception.
     final canSubmitBaseline = participantStatus == ParticipantStatus.active;
-    final canSubmitWeekly = baseline != null && baseline.reviewStatus == ReviewStatus.approved;
-    
     final now = DateTime.now();
-    final canSubmitFinal = canSubmitWeekly && now.isAfter(challenge.endDate.subtract(const Duration(days: 3)));
+    final baselineApproved = baseline != null && baseline.reviewStatus == ReviewStatus.approved;
+    // Weekly check-ins open after the first week and close once the final
+    // window (last 3 days) opens, so the last one doesn't collide with the final.
+    final firstCheckInOpen = now.isAfter(challenge.startDate.add(const Duration(days: 7)));
+    final finalWindowOpen = now.isAfter(challenge.endDate.subtract(const Duration(days: 3)));
+    final canSubmitWeekly = baselineApproved && firstCheckInOpen && !finalWindowOpen;
+    final canSubmitFinal = baselineApproved && finalWindowOpen;
 
     String paymentSubtitle = 'Required to start challenge';
     if (paymentStatus == PaymentStatus.paid || paymentStatus == PaymentStatus.waived) {
@@ -291,6 +405,13 @@ class _ParticipantChallengeDashboardContent extends StatelessWidget {
 
     return Column(
       children: [
+        if (challenge.status == 'completed') ...[
+          _buildResultsBanner(context, challenge),
+          const SizedBox(height: 16),
+        ] else ...[
+          _buildStepsBanner(),
+          const SizedBox(height: 16),
+        ],
         _ActionCard(
           title: 'Submit Payment Proof',
           icon: Icons.payments_outlined,
@@ -312,7 +433,7 @@ class _ParticipantChallengeDashboardContent extends StatelessWidget {
           status: baseline?.reviewStatus,
           subtitle: !canSubmitBaseline
               ? 'Available after the organizer approves your entry'
-              : (baseline == null ? 'Photos & initial weight' : 'Status: ${baseline.reviewStatus}'),
+              : (baseline == null ? 'Photos & initial weight' : _baselineStatusText(baseline.reviewStatus)),
           onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ParticipantBaselineSubmissionScreen(challengeId: challenge.id))),
         ),
         const SizedBox(height: 12),
@@ -320,7 +441,11 @@ class _ParticipantChallengeDashboardContent extends StatelessWidget {
           title: 'Weekly Check-In',
           icon: Icons.event_available_rounded,
           isEnabled: canSubmitWeekly,
-          subtitle: !canSubmitWeekly ? 'Available after baseline approval' : 'Log your progress',
+          subtitle: !baselineApproved
+              ? 'Locked until the organizer approves your baseline'
+              : (!firstCheckInOpen
+                  ? 'Opens after your first week'
+                  : (finalWindowOpen ? 'Closed — submit your Final results' : 'Log your progress')),
           onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ParticipantWeeklyCheckinScreen(challengeId: challenge.id))),
         ),
         const SizedBox(height: 12),
@@ -328,7 +453,7 @@ class _ParticipantChallengeDashboardContent extends StatelessWidget {
           title: 'Final Submission',
           icon: Icons.emoji_events_outlined,
           isEnabled: canSubmitFinal,
-          subtitle: !canSubmitFinal ? 'Available at end of challenge' : 'Final results',
+          subtitle: !canSubmitFinal ? 'Unlocks in the final days of the challenge' : 'Final results',
           onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ParticipantFinalSubmissionScreen(challengeId: challenge.id))),
         ),
         const SizedBox(height: 12),

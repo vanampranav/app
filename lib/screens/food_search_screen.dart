@@ -144,7 +144,21 @@ class _FoodSearchScreenState extends State<FoodSearchScreen> {
           children: [
             _buildHeader(accent),
             _buildSearchBar(keyboardOpen: keyboardOpen),
-            Expanded(child: _buildBody()),
+            // Tapping anywhere in the results area dismisses the suggestions
+            // dropdown and the keyboard (result cards keep their own taps).
+            Expanded(
+              child: GestureDetector(
+                onTap: () {
+                  if (_showSuggestions || _searchFocus.hasFocus) {
+                    _searchFocus.unfocus();
+                    setState(() {
+                      _showSuggestions = false;
+                    });
+                  }
+                },
+                child: _buildBody(),
+              ),
+            ),
             if (!(keyboardOpen && _showSuggestions)) _buildFatSecretBadge(),
             _buildBottomBar(accent),
           ],
@@ -316,7 +330,12 @@ class _FoodSearchScreenState extends State<FoodSearchScreen> {
                     _debounce?.cancel();
                     _debounce = Timer(const Duration(milliseconds: 350), () async {
                       final results = await widget.nutritionService.searchAutocomplete(v);
-                      if (mounted && _searchController.text == v) {
+                      // Only reopen suggestions if the field is still focused —
+                      // otherwise an in-flight autocomplete would re-show the
+                      // dropdown right after the user tapped Search / picked one.
+                      if (mounted &&
+                          _searchController.text == v &&
+                          _searchFocus.hasFocus) {
                         setState(() {
                           _suggestions = results;
                           _showSuggestions = results.isNotEmpty;

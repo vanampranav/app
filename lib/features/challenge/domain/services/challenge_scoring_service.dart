@@ -4,15 +4,24 @@ import 'package:elefit_app/features/challenge/data/constants/firestore_collectio
 
 class OfficialWinnerData {
   final double? score;
-  final String metric; // "bodyFatLossPoints", "weightLossPercent", "insufficientData"
+  final String metric; // "compositeScore", "insufficientData", "disqualified", ...
   final bool isEligible;
   final String? ineligibilityReason;
+
+  // Normalized component contributions that make up the composite score
+  // (each is a relative % change; see ChallengeScoringService for the weights).
+  final double bodyFatChangePercent; // (startBF - endBF)/startBF * 100
+  final double weightLossPercent; // (startWt - endWt)/startWt * 100
+  final double muscleGainPercent; // (endMuscle - startMuscle)/startMuscle * 100
 
   OfficialWinnerData({
     this.score,
     required this.metric,
     required this.isEligible,
     this.ineligibilityReason,
+    this.bodyFatChangePercent = 0,
+    this.weightLossPercent = 0,
+    this.muscleGainPercent = 0,
   });
 }
 
@@ -28,9 +37,42 @@ class ChallengeScoringService {
     return (bodyFatLossPoints * 10) + (weightLossPercent * 5) + (consistencyScore / 10);
   }
 
-  /// Calculates the Official Winner Score.
-  /// Used for final prize ranking.
-  /// Primary: Body Fat Loss Points. Fallback: Weight Loss Percent.
+  /// The weighted Participant Score used to decide winners.
+  ///
+  /// Winners are determined by normalized progress across three areas:
+  ///   • Body Fat % Change  (50%)  = (StartBF − EndBF) / StartBF × 100
+  ///   • Weight Loss        (30%)  = (StartWt − EndWt) / StartWt × 100
+  ///   • Muscle Gain        (20%)  = (EndMuscle − StartMuscle) / StartMuscle × 100
+  /// Final = (BF% × 0.5) + (WeightLoss% × 0.3) + (MuscleGain% × 0.2)
+  static const double bodyFatWeight = 0.5;
+  static const double weightLossWeight = 0.3;
+  static const double muscleGainWeight = 0.2;
+
+  double calculateCompositeScore({
+    required double bodyFatChangePercent,
+    required double weightLossPercent,
+    required double muscleGainPercent,
+  }) {
+    return (bodyFatChangePercent * bodyFatWeight) +
+        (weightLossPercent * weightLossWeight) +
+        (muscleGainPercent * muscleGainWeight);
+  }
+
+  /// Relative % body-fat change (positive = fat lost). Guards start ≤ 0.
+  double calculateBodyFatChangePercent(double? startBF, double? endBF) {
+    if (startBF == null || endBF == null || startBF <= 0) return 0.0;
+    return ((startBF - endBF) / startBF) * 100;
+  }
+
+  /// Relative % muscle gain (positive = muscle gained). Guards start ≤ 0.
+  double calculateMuscleGainPercent(double? startMuscle, double? endMuscle) {
+    if (startMuscle == null || endMuscle == null || startMuscle <= 0) return 0.0;
+    return ((endMuscle - startMuscle) / startMuscle) * 100;
+  }
+
+  /// Calculates the Official Winner Score (the weighted composite above).
+  /// Used for final prize ranking. Start = approved baseline, End = latest
+  /// approved progress (the final submission once the challenge completes).
   OfficialWinnerData calculateOfficialWinnerScore({
     required ChallengeParticipant participant,
     required ChallengeSubmission? baseline,
@@ -76,35 +118,43 @@ class ChallengeScoringService {
     // 2. Data Extraction (null-safe — never crash on missing/invalid values)
     final double? bWeightN = (baseline.data['weight'] as num?)?.toDouble();
     final double? bFat = (baseline.data['bodyFat'] as num?)?.toDouble();
+    final double? bMuscle = (baseline.data['muscleMass'] as num?)?.toDouble();
 
     final double? pWeightN = (latestProgress.data['weight'] as num?)?.toDouble();
     final double? pFat = (latestProgress.data['bodyFat'] as num?)?.toDouble();
+    final double? pMuscle = (latestProgress.data['muscleMass'] as num?)?.toDouble();
 
     final double bWeight = bWeightN ?? 0;
-    final double pWeight = pWeightN ?? 0;
 
-    // 3. Calculation Logic
-    if (bFat != null && pFat != null) {
-      final fatLoss = bFat - pFat;
+    // Weight is a required field, so a non-positive baseline weight means the
+    // measurement data is unusable — nothing to normalize against.
+    if (bWeight <= 0) {
       return OfficialWinnerData(
-        score: fatLoss,
-        metric: "bodyFatLossPoints",
-        isEligible: true,
-      );
-    } else if (bWeight > 0) {
-      final weightLossPercent = ((bWeight - pWeight) / bWeight) * 100;
-      return OfficialWinnerData(
-        score: weightLossPercent,
-        metric: "weightLossPercent",
-        isEligible: true,
-        ineligibilityReason: "Body fat measurements missing; using weight loss percentage as fallback.",
+        metric: "insufficientData",
+        isEligible: false,
+        ineligibilityReason: "Required measurement data is missing or invalid.",
       );
     }
 
+    // 3. Weighted composite score (each component is a relative % change; a
+    // missing body-fat / muscle pair contributes 0 for that component).
+    final double bfPercent = calculateBodyFatChangePercent(bFat, pFat);
+    final double weightPercent = calculateWeightLossPercent(bWeight, pWeightN ?? 0);
+    final double musclePercent = calculateMuscleGainPercent(bMuscle, pMuscle);
+
+    final double composite = calculateCompositeScore(
+      bodyFatChangePercent: bfPercent,
+      weightLossPercent: weightPercent,
+      muscleGainPercent: musclePercent,
+    );
+
     return OfficialWinnerData(
-      metric: "insufficientData",
-      isEligible: false,
-      ineligibilityReason: "Required measurement data is missing or invalid.",
+      score: composite,
+      metric: "compositeScore",
+      isEligible: true,
+      bodyFatChangePercent: bfPercent,
+      weightLossPercent: weightPercent,
+      muscleGainPercent: musclePercent,
     );
   }
 

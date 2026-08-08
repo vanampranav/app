@@ -98,7 +98,7 @@ class _ChallengeDetailContentState extends State<_ChallengeDetailContent> {
                               const SizedBox(height: 24),
                               _buildSection('Rules & Guidelines', challenge.rulesSummary),
                               const SizedBox(height: 24),
-                              _buildSection('Prizes', challenge.prizeDescription, isAccent: true),
+                              _buildSection('1st Prize', challenge.prizeDescription, isAccent: true),
                               const SizedBox(height: 32),
                               _buildRequirements(challenge),
                               const SizedBox(height: 40),
@@ -276,6 +276,11 @@ class _ChallengeDetailContentState extends State<_ChallengeDetailContent> {
       children: [
         Text('REGISTRATION', style: AppTheme.labelMD.copyWith(letterSpacing: 2.0)),
         const SizedBox(height: 12),
+        _buildInstructionBanner(
+          'Enter a nickname for the leaderboard, tick the box to agree to the rules, '
+          'then tap Join Challenge to choose your package and enter.',
+        ),
+        const SizedBox(height: 16),
         EFCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -323,19 +328,50 @@ class _ChallengeDetailContentState extends State<_ChallengeDetailContent> {
         const SizedBox(height: 24),
         EFButton(
           label: provider.isJoining ? 'Joining...' : 'Join Challenge',
-          onTap: (_agreedToRules && !provider.isJoining) ? () => _handleJoin(context, provider) : null,
+          // Stays tappable even when the rules box is unticked, so _handleJoin
+          // can surface a clear "please agree to the rules" message instead of
+          // the button silently doing nothing.
+          onTap: provider.isJoining ? null : () => _handleJoin(context, provider),
           loading: provider.isJoining,
         ),
       ],
     );
   }
 
+  Widget _buildInstructionBanner(String text) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.lime.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+        border: Border.all(color: AppTheme.lime.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.info_outline_rounded, color: AppTheme.lime, size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              text,
+              style: AppTheme.bodyMD.copyWith(color: AppTheme.textSecondary, height: 1.4),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _handleJoin(BuildContext context, ParticipantChallengeDetailProvider provider) async {
     final nickname = _nicknameController.text.trim();
-    
+
     // Validation
     if (nickname.isEmpty) {
       _showErrorSnackBar('Nickname is required.');
+      return;
+    }
+    if (!_agreedToRules) {
+      _showErrorSnackBar('Please agree to the challenge rules and submission guidelines to continue.');
       return;
     }
     if (nickname.length < 2 || nickname.length > 20) {

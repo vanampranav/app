@@ -223,17 +223,29 @@ class _ParticipantPaymentSubmissionContentState extends State<_ParticipantPaymen
   }
 
   Widget _buildInstructions() {
-    return const EFCard(
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.lime.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+        border: Border.all(color: AppTheme.lime.withValues(alpha: 0.25)),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('INSTRUCTIONS', style: AppTheme.labelSM),
-          SizedBox(height: 8),
+          const Row(
+            children: [
+              Icon(Icons.info_outline_rounded, color: AppTheme.lime, size: 20),
+              SizedBox(width: 8),
+              Text('HOW TO SUBMIT PAYMENT', style: AppTheme.labelSM),
+            ],
+          ),
+          const SizedBox(height: 12),
           Text(
             '1. Send the registration fee to the EleFit account.\n'
             '2. Capture a screenshot of the transaction.\n'
-            '3. Upload the screenshot and provide the reference ID below.',
-            style: AppTheme.bodyMD,
+            '3. Add the screenshot and payment reference ID below, then tap Submit.',
+            style: AppTheme.bodyMD.copyWith(color: AppTheme.textSecondary, height: 1.5),
           ),
         ],
       ),
@@ -282,14 +294,14 @@ class _ParticipantPaymentSubmissionContentState extends State<_ParticipantPaymen
           _buildDropdown(),
           const SizedBox(height: 20),
           _buildTextField(
-            label: 'Reference / Transaction ID',
+            label: 'Reference / Transaction ID *',
             controller: _referenceController,
             hint: 'e.g. 123456789',
             validator: (v) => (_selectedMethod != 'other' && (v == null || v.isEmpty)) ? 'Required' : null,
           ),
           const SizedBox(height: 20),
           _buildTextField(
-            label: 'Amount Paid (\$)',
+            label: 'Amount Paid (\$) *',
             controller: _amountController,
             keyboardType: TextInputType.number,
             validator: (v) {
@@ -301,7 +313,7 @@ class _ParticipantPaymentSubmissionContentState extends State<_ParticipantPaymen
             },
           ),
           const SizedBox(height: 32),
-          const Text('PAYMENT PROOF', style: AppTheme.labelSM),
+          _fieldLabel('PAYMENT PROOF *'),
           const SizedBox(height: 8),
           _buildImagePicker(provider),
           const SizedBox(height: 40),
@@ -324,7 +336,7 @@ class _ParticipantPaymentSubmissionContentState extends State<_ParticipantPaymen
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Payment Method', style: AppTheme.labelSM),
+        _fieldLabel('Payment Method *'),
         const SizedBox(height: 8),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -348,11 +360,27 @@ class _ParticipantPaymentSubmissionContentState extends State<_ParticipantPaymen
     );
   }
 
+  // Renders a field label; a trailing " *" is shown as a red "required" marker.
+  Widget _fieldLabel(String label) {
+    if (label.endsWith(' *')) {
+      return Text.rich(
+        TextSpan(
+          style: AppTheme.labelSM,
+          children: [
+            TextSpan(text: label.substring(0, label.length - 2)),
+            const TextSpan(text: ' *', style: TextStyle(color: AppTheme.error, fontWeight: FontWeight.bold)),
+          ],
+        ),
+      );
+    }
+    return Text(label, style: AppTheme.labelSM);
+  }
+
   Widget _buildTextField({required String label, required TextEditingController controller, String? hint, String? Function(String?)? validator, TextInputType? keyboardType}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: AppTheme.labelSM),
+        _fieldLabel(label),
         const SizedBox(height: 8),
         TextFormField(
           controller: controller,

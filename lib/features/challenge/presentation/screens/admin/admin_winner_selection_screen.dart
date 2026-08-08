@@ -34,6 +34,8 @@ class _WinnerSelectionContent extends StatelessWidget {
 
   static String _metricLabel(String metric) {
     switch (metric) {
+      case 'compositeScore':
+        return 'Participant Score';
       case 'bodyFatLossPoints':
         return 'Body-fat loss';
       case 'weightLossPercent':

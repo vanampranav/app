@@ -6,7 +6,14 @@ import 'package:elefit_app/widgets/ef_components.dart';
 import 'package:elefit_app/features/challenge/presentation/widgets/admin/admin_guard.dart';
 import 'package:elefit_app/features/challenge/presentation/providers/admin_challenge_list_provider.dart';
 import 'package:elefit_app/features/challenge/data/repositories/challenge_repository.dart';
+import 'package:elefit_app/features/challenge/data/repositories/challenge_participant_repository.dart';
+import 'package:elefit_app/features/challenge/data/repositories/payment_record_repository.dart';
+import 'package:elefit_app/features/challenge/data/repositories/challenge_submission_repository.dart';
 import 'package:elefit_app/features/challenge/data/models/challenge.dart';
+import 'package:elefit_app/features/challenge/data/models/challenge_participant.dart';
+import 'package:elefit_app/features/challenge/data/models/payment_record.dart';
+import 'package:elefit_app/features/challenge/data/models/challenge_submission.dart';
+import 'package:elefit_app/features/challenge/data/constants/firestore_collections.dart';
 import 'package:elefit_app/features/challenge/domain/services/challenge_service.dart';
 import 'package:elefit_app/features/challenge/domain/services/auth_service.dart';
 import 'package:elefit_app/features/challenge/presentation/challenge_status_label.dart';
@@ -179,6 +186,7 @@ class _ChallengeAdminCard extends StatelessWidget {
               ),
             ],
           ),
+          _ReviewBadge(challengeId: challenge.id),
         ],
       ),
     );
@@ -222,6 +230,93 @@ class _ChallengeAdminCard extends StatelessWidget {
         );
       }
     }
+  }
+}
+
+/// A small "needs your review" chip on an admin challenge card. Counts the
+/// items awaiting an admin action for that challenge — pending participants
+/// (joined/invited), pending payments, and submitted (unreviewed) submissions —
+/// and renders nothing when there's nothing to review. Best-effort: a read
+/// failure just hides the chip rather than breaking the list.
+class _ReviewBadge extends StatefulWidget {
+  final String challengeId;
+  const _ReviewBadge({Key? key, required this.challengeId}) : super(key: key);
+
+  @override
+  State<_ReviewBadge> createState() => _ReviewBadgeState();
+}
+
+class _ReviewBadgeState extends State<_ReviewBadge> {
+  int _count = 0;
+  bool _loaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    // Capture repos synchronously before the first await.
+    final participantRepo = context.read<ChallengeParticipantRepository>();
+    final paymentRepo = context.read<PaymentRecordRepository>();
+    final submissionRepo = context.read<ChallengeSubmissionRepository>();
+    try {
+      final results = await Future.wait([
+        participantRepo.streamParticipantsByChallenge(widget.challengeId).first,
+        paymentRepo.streamPaymentsByChallenge(widget.challengeId).first,
+        submissionRepo.streamSubmissionsByChallenge(widget.challengeId).first,
+      ]);
+      final participants = results[0] as List<ChallengeParticipant>;
+      final payments = results[1] as List<PaymentRecord>;
+      final submissions = results[2] as List<ChallengeSubmission>;
+
+      final pendingParticipants = participants
+          .where((p) => p.status == ParticipantStatus.joined || p.status == ParticipantStatus.invited)
+          .length;
+      final pendingPayments =
+          payments.where((p) => p.status == PaymentStatus.pending).length;
+      final pendingSubmissions = submissions
+          .where((s) => s.reviewStatus == ReviewStatus.submitted)
+          .length;
+
+      if (mounted) {
+        setState(() {
+          _count = pendingParticipants + pendingPayments + pendingSubmissions;
+          _loaded = true;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loaded = true); // silent: hide chip on error
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_loaded || _count == 0) return const SizedBox.shrink();
+    const amber = Color(0xFFF5A623);
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: amber.withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: amber.withValues(alpha: 0.45)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.notifications_active_rounded, size: 14, color: amber),
+            const SizedBox(width: 6),
+            Text(
+              '$_count ${_count == 1 ? 'item needs' : 'items need'} review',
+              style: const TextStyle(color: amber, fontSize: 11, fontWeight: FontWeight.w800),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

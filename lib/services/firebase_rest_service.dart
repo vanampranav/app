@@ -14,6 +14,8 @@ class FirebaseRestService {
   static const String _authUrl    = 'https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=$_apiKey';
   static const String _signUpUrl  = 'https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=$_apiKey';
   static const String _resetUrl   = 'https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=$_apiKey';
+  static const String _updateUrl  = 'https://identitytoolkit.googleapis.com/v1/accounts:update?key=$_apiKey';
+  static const String _customTokenUrl = 'https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=$_apiKey';
   static const String _firestoreUrl = 'https://firestore.googleapis.com/v1/projects/$_projectId/databases/(default)/documents';
   static const String _tokenRefreshUrl = 'https://securetoken.googleapis.com/v1/token?key=$_apiKey';
 
@@ -216,6 +218,105 @@ class FirebaseRestService {
     if (_refreshToken != null) await _secureStorage.write(key: _prefRefreshToken, value: _refreshToken!);
 
     return data;
+  }
+
+  /// Attempts sign-in; returns true on success (session established), false on a
+  /// credential error (bad password / no such user), and rethrows other errors
+  /// (network, too-many-attempts, disabled). Used by the Shopify bridge login.
+  Future<bool> trySignIn(String email, String password) async {
+    final response = await http.post(
+      Uri.parse(_authUrl),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'email': email.toLowerCase().trim(),
+        'password': password,
+        'returnSecureToken': true,
+      }),
+    );
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      _idToken = data['idToken'];
+      _uid = data['localId'];
+      _email = data['email'];
+      _refreshToken = data['refreshToken'];
+      await _secureStorage.write(key: _prefIdToken, value: _idToken!);
+      await _secureStorage.write(key: _prefUid, value: _uid!);
+      await _secureStorage.write(key: _prefEmail, value: _email!);
+      await _secureStorage.write(key: _prefPassword, value: password);
+      if (_refreshToken != null) {
+        await _secureStorage.write(key: _prefRefreshToken, value: _refreshToken!);
+      }
+      return true;
+    }
+    final code =
+        (jsonDecode(response.body)['error']?['message'] ?? '').toString();
+    if (code.contains('EMAIL_NOT_FOUND') ||
+        code.contains('INVALID_PASSWORD') ||
+        code.contains('INVALID_LOGIN_CREDENTIALS')) {
+      return false;
+    }
+    throw Exception(_friendlyAuthError(code));
+  }
+
+  /// Changes the signed-in user's password (accounts:update) and refreshes the
+  /// stored session. Used to sync a Shopify password into Firebase after a
+  /// bridge login so future direct logins work.
+  Future<void> updatePassword(String newPassword) async {
+    if (_idToken == null) throw Exception('Not signed in.');
+    final response = await http.post(
+      Uri.parse(_updateUrl),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'idToken': _idToken,
+        'password': newPassword,
+        'returnSecureToken': true,
+      }),
+    );
+    if (response.statusCode != 200) {
+      final message =
+          jsonDecode(response.body)['error']?['message'] ?? 'Password update failed';
+      throw Exception(_friendlyAuthError(message));
+    }
+    final data = jsonDecode(response.body);
+    if (data['idToken'] != null) {
+      _idToken = data['idToken'];
+      await _secureStorage.write(key: _prefIdToken, value: _idToken!);
+    }
+    if (data['refreshToken'] != null) {
+      _refreshToken = data['refreshToken'];
+      await _secureStorage.write(key: _prefRefreshToken, value: _refreshToken!);
+    }
+    await _secureStorage.write(key: _prefPassword, value: newPassword);
+  }
+
+  /// Establishes the REST session from a Firebase custom token (minted server-
+  /// side for a validated Shopify customer). No password is involved, so nothing
+  /// about the user's credential changes.
+  Future<void> signInWithCustomToken(String token, {String? email}) async {
+    final response = await http.post(
+      Uri.parse(_customTokenUrl),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'token': token, 'returnSecureToken': true}),
+    );
+    if (response.statusCode != 200) {
+      final message = jsonDecode(response.body)['error']?['message'] ??
+          'Custom token sign-in failed';
+      throw Exception(_friendlyAuthError(message));
+    }
+    final data = jsonDecode(response.body);
+    _idToken = data['idToken'];
+    _uid = data['localId'];
+    _email = email ?? _email;
+    _refreshToken = data['refreshToken'];
+    await _secureStorage.write(key: _prefIdToken, value: _idToken!);
+    await _secureStorage.write(key: _prefUid, value: _uid!);
+    if (_email != null) await _secureStorage.write(key: _prefEmail, value: _email!);
+    if (_refreshToken != null) {
+      await _secureStorage.write(key: _prefRefreshToken, value: _refreshToken!);
+    }
+    // Custom-token session has no password to store; the refresh token keeps the
+    // REST session alive, and the Firebase SDK persists its own session.
+    await _secureStorage.delete(key: _prefPassword);
   }
 
   /// Sign out

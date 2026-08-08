@@ -15,6 +15,7 @@ import 'package:elefit_app/features/challenge/data/models/challenge_participant.
 import 'package:elefit_app/features/challenge/domain/services/challenge_scoring_service.dart';
 import 'package:elefit_app/features/challenge/domain/services/leaderboard_service.dart';
 import 'package:elefit_app/features/challenge/domain/services/winner_selection_service.dart';
+import 'package:elefit_app/features/challenge/domain/services/submission_review_service.dart';
 import 'package:elefit_app/features/challenge/data/repositories/leaderboard_repository.dart';
 import 'package:elefit_app/features/challenge/data/repositories/user_repository.dart';
 import 'package:elefit_app/features/challenge/data/models/challenge_winner.dart';
@@ -240,10 +241,10 @@ void main() {
       await h.submissions.approveSubmission(baseline!.id, ChallengeHarness.adminId);
       expect((await h.participant('ch-1', 'u1'))!.eligibleForPrizes, isTrue);
 
-      // Reject a fresh baseline (resubmission) → flag + eligibility off.
-      await h.submissions.submitBaseline('u1', 'ch-1', {'weight': 199.0});
-      final resub = await h.latestSubmission('u1', SubmissionType.baseline);
-      await h.submissions.rejectSubmission(resub!.id, ChallengeHarness.adminId, 'redo it');
+      // A participant can no longer resubmit over an approved baseline (it's their
+      // locked starting point), so the admin re-opens it by rejecting directly →
+      // flag + eligibility off.
+      await h.submissions.rejectSubmission(baseline!.id, ChallengeHarness.adminId, 'redo it');
 
       final p = await h.participant('ch-1', 'u1');
       expect(p!.baselineSubmitted, isFalse);
@@ -337,6 +338,85 @@ void main() {
       final weeklies =
           all.where((s) => s.type == SubmissionType.weeklyCheckIn).toList();
       expect(weeklies.length, 2);
+    });
+
+    test('resubmitting a rejected weekly check-in updates the same doc (no duplicate)',
+        () async {
+      await h.seedChallenge();
+      await h.seedActivePaidParticipant(challengeId: 'ch-1', userId: 'u1');
+
+      await h.submissions.submitWeeklyCheckIn(
+          'u1', 'ch-1', {'weight': 195.0, 'weekNumber': 1});
+      final first = await h.latestSubmission('u1', SubmissionType.weeklyCheckIn);
+      await h.submissions
+          .rejectSubmission(first!.id, ChallengeHarness.adminId, 'redo');
+
+      // Resubmit week 1 → must UPDATE the same doc, not create a second one.
+      await h.submissions.submitWeeklyCheckIn(
+          'u1', 'ch-1', {'weight': 190.0, 'weekNumber': 1});
+
+      final all = await h.submissionsFor('u1');
+      final week1 = all
+          .where((s) =>
+              s.type == SubmissionType.weeklyCheckIn &&
+              s.data['weekNumber'] == 1)
+          .toList();
+      expect(week1.length, 1,
+          reason: 'resubmission must update in place, not create a duplicate');
+      expect(week1.first.reviewStatus, ReviewStatus.submitted);
+      expect(week1.first.data['weight'], 190.0);
+      expect(week1.first.resubmitCount, 1);
+    });
+
+    test('weekly check-in resubmission is capped', () async {
+      await h.seedChallenge();
+      await h.seedActivePaidParticipant(challengeId: 'ch-1', userId: 'u1');
+
+      await h.submissions.submitWeeklyCheckIn(
+          'u1', 'ch-1', {'weight': 195.0, 'weekNumber': 1});
+
+      // Reject + resubmit up to the cap.
+      for (var i = 0; i < SubmissionReviewService.maxResubmissions; i++) {
+        final cur = await h.latestSubmission('u1', SubmissionType.weeklyCheckIn);
+        await h.submissions
+            .rejectSubmission(cur!.id, ChallengeHarness.adminId, 'redo');
+        await h.submissions.submitWeeklyCheckIn(
+            'u1', 'ch-1', {'weight': 190.0 - i, 'weekNumber': 1});
+      }
+
+      // One more reject + resubmit is now blocked by the cap.
+      final last = await h.latestSubmission('u1', SubmissionType.weeklyCheckIn);
+      await h.submissions
+          .rejectSubmission(last!.id, ChallengeHarness.adminId, 'again');
+      expect(
+        () => h.submissions.submitWeeklyCheckIn(
+            'u1', 'ch-1', {'weight': 185.0, 'weekNumber': 1}),
+        throwsA(isA<Exception>()),
+      );
+    });
+
+    test('weekly check-in for week 0 (baseline week) is rejected', () async {
+      await h.seedChallenge();
+      await h.seedActivePaidParticipant(challengeId: 'ch-1', userId: 'u1');
+      // Week 0 is the baseline week — no check-in opens until week 1 (day 7).
+      expect(
+        () => h.submissions.submitWeeklyCheckIn(
+            'u1', 'ch-1', {'weight': 195.0, 'weekNumber': 0}),
+        throwsA(isA<Exception>()),
+      );
+    });
+
+    test('weekly check-in is closed once the final window opens', () async {
+      await h.seedChallenge(
+          startDate: DateTime.now().subtract(const Duration(days: 20)),
+          endDate: DateTime.now().add(const Duration(days: 2)));
+      await h.seedActivePaidParticipant(challengeId: 'ch-1', userId: 'u1');
+      // Final window is open (ends in 2 days) → weekly check-ins are closed.
+      expect(
+        () => h.submissions.submitWeeklyCheckIn(
+            'u1', 'ch-1', {'weight': 190.0, 'weekNumber': 2}),
+        throwsA(isA<Exception>()),
+      );
     });
 
     test('final submission rejected outside the window (ends in 30 days)',
@@ -457,9 +537,12 @@ void main() {
       expect(standings.length, 1);
       final s = standings.first;
       expect(s.userId, 'u1');
-      expect(s.officialMetric, 'bodyFatLossPoints');
-      expect(s.officialScore, closeTo(5.0, 0.001)); // 30 - 25
+      expect(s.officialMetric, 'compositeScore');
+      // BF% change (30→25)=16.667 ×0.5 + weight loss 5% ×0.3 + muscle 0 ×0.2
+      //   = 8.3333 + 1.5 = 9.8333
+      expect(s.officialScore, closeTo(9.8333, 0.01));
       expect(s.weightLossPercent, closeTo(5.0, 0.001)); // (200-190)/200*100
+      expect(s.bodyFatChangePercent, closeTo(16.6667, 0.01));
 
       // Sanitized: the standing doc must NOT carry absolute weight or photos.
       final raw = (await h.db
@@ -472,6 +555,35 @@ void main() {
       expect(raw.containsKey('weight'), isFalse);
       expect(raw.containsKey('photos'), isFalse);
       expect(raw.containsKey('paymentStatus'), isFalse);
+    });
+
+    test('admin bonus points lift a participant in the standings', () async {
+      await h.seedChallenge();
+      await h.seedActivePaidParticipant(
+          challengeId: 'ch-1', userId: 'u1', weight: 200, bodyFat: 30);
+      await h.submissions.submitWeeklyCheckIn(
+          'u1', 'ch-1', {'weight': 190.0, 'bodyFat': 25.0, 'weekNumber': 1});
+      final wk = await h.latestSubmission('u1', SubmissionType.weeklyCheckIn);
+      await h.submissions.approveSubmission(wk!.id, ChallengeHarness.adminId);
+
+      final service = buildService();
+      await service.recomputeAndPublish('ch-1');
+      final before =
+          (await LeaderboardRepository(firestore: h.db).getStandings('ch-1'))
+              .first;
+      expect(before.bonusPoints, 0);
+
+      // Apply a bonus → score increases by exactly the bonus, recorded in the
+      // standing, and the participant only (no new user created).
+      await service.setBonusPoints('ch-1', 'u1', 25.0,
+          adminId: ChallengeHarness.adminId);
+      final standings =
+          await LeaderboardRepository(firestore: h.db).getStandings('ch-1');
+      expect(standings.length, 1);
+      final after = standings.first;
+      expect(after.bonusPoints, 25.0);
+      expect(after.motivationalScore,
+          closeTo(before.motivationalScore + 25.0, 0.001));
     });
 
     test('withdrawn participants are excluded from the published leaderboard',
@@ -527,18 +639,22 @@ void main() {
           .updateChallenge(c!.copyWith(status: ChallengeStatus.completed));
     }
 
-    test('body-fat finalists rank above weight-only finalists', () async {
+    test('composite score weights body fat highest (50%)', () async {
       await h.seedChallenge();
-      await finalist('bfUser', finalWeight: 190, finalBodyFat: 25); // bodyFat metric, score 5
-      await finalist('wtUser', finalWeight: 160); // weight metric, 20% (bigger number)
+      // bfUser: 5% weight loss + 16.67% BF change → composite 9.83
+      await finalist('bfUser', finalWeight: 190, finalBodyFat: 25);
+      // wtUser: 20% weight loss, no BF change → composite 6.0
+      await finalist('wtUser', finalWeight: 160);
 
       final ranking = await buildService().computeRanking('ch-1');
       expect(ranking.ranked.length, 2);
-      // Body-fat finalist first even though the weight finalist has a bigger raw number.
+      // The body-fat mover ranks first because BF% change carries 50% weight,
+      // beating a much larger raw weight-loss number (which carries only 30%).
       expect(ranking.ranked.first.userId, 'bfUser');
-      expect(ranking.ranked.first.officialMetric, 'bodyFatLossPoints');
+      expect(ranking.ranked.first.officialMetric, 'compositeScore');
+      expect(ranking.ranked.first.officialScore, closeTo(9.8333, 0.01));
       expect(ranking.ranked[1].userId, 'wtUser');
-      expect(ranking.ranked[1].officialMetric, 'weightLossPercent');
+      expect(ranking.ranked[1].officialScore, closeTo(6.0, 0.01));
     });
 
     test('declareWinners requires a completed challenge', () async {
@@ -610,18 +726,105 @@ void main() {
       expect(p!.finalPlacement, isNull);
       expect(p.awardLabel, 'Most Consistent');
     });
+
+    test('FULL LIFECYCLE: join → pay → baseline → weekly → complete → winners → results',
+        () async {
+      await h.seedChallenge();
+
+      // 1. JOIN — a participant record is created.
+      await h.enrollment.joinChallenge(userId: 'u1', challengeId: 'ch-1');
+      expect(await h.participant('ch-1', 'u1'), isNotNull);
+
+      // 2. APPROVE participation → active.
+      await h.enrollment
+          .approveParticipant('ch-1', 'u1', ChallengeHarness.adminId);
+      expect((await h.participant('ch-1', 'u1'))!.status,
+          ParticipantStatus.active);
+
+      // 3. PAYMENT — submit proof + admin approves → paid.
+      await h.payments.submitManualPayment(
+          userId: 'u1',
+          challengeId: 'ch-1',
+          amount: 25.0,
+          method: PaymentMethod.zelle,
+          externalTransactionId: 'ref-u1');
+      final pay = await h.latestPayment('u1');
+      await h.payments.approvePayment(pay!.id, ChallengeHarness.adminId);
+      expect((await h.participant('ch-1', 'u1'))!.paymentStatus,
+          PaymentStatus.paid);
+
+      // 4. BASELINE — submit + approve → eligible for prizes.
+      await h.submissions.submitBaseline('u1', 'ch-1', {
+        'weight': 200.0,
+        'unit': 'lbs',
+        'bodyFat': 30.0,
+        'source': 'manualEntry',
+        'photos': <String>['x'],
+      });
+      final baseline = await h.latestSubmission('u1', SubmissionType.baseline);
+      await h.submissions.approveSubmission(baseline!.id, ChallengeHarness.adminId);
+      final afterBaseline = await h.participant('ch-1', 'u1');
+      expect(afterBaseline!.baselineSubmitted, isTrue);
+      expect(afterBaseline.eligibleForPrizes, isTrue);
+
+      // 5. WEEKLY check-in — submit + approve.
+      await h.submissions.submitWeeklyCheckIn(
+          'u1', 'ch-1', {'weight': 188.0, 'bodyFat': 25.0, 'weekNumber': 1});
+      final wk = await h.latestSubmission('u1', SubmissionType.weeklyCheckIn);
+      await h.submissions.approveSubmission(wk!.id, ChallengeHarness.adminId);
+
+      // 6. LEADERBOARD — recompute → participant is scored.
+      await leaderboardService().recomputeAndPublish('ch-1');
+      final standings =
+          await LeaderboardRepository(firestore: h.db).getStandings('ch-1');
+      expect(standings.length, 1);
+      expect(standings.first.userId, 'u1');
+      expect(standings.first.weightLossPercent,
+          closeTo(6.0, 0.001)); // (200-188)/200*100
+
+      // 7. COMPLETE the challenge.
+      final c = await h.challengeRepo.getChallengeById('ch-1');
+      await h.challengeRepo
+          .updateChallenge(c!.copyWith(status: ChallengeStatus.completed));
+
+      // 8. DECLARE WINNERS → results published + placement stamped (this is what
+      //    the participant leaderboard renders as the winners podium).
+      await buildService().declareWinners('ch-1', ChallengeHarness.adminId, [
+        ChallengeWinner(
+            userId: 'u1',
+            displayName: 'U1',
+            place: 1,
+            awardLabel: '1st Place',
+            metric: 'bodyFatLossPoints',
+            score: 5.0),
+      ]);
+      final done = await h.challengeRepo.getChallengeById('ch-1');
+      expect(done!.resultsPublished, isTrue);
+      expect(done.winners.first.userId, 'u1');
+      final finalP = await h.participant('ch-1', 'u1');
+      expect(finalP!.finalPlacement, 1);
+      expect(finalP.awardLabel, '1st Place');
+    });
   });
 
   // ───────────────────────────────────────────────────────────────────────
   group('Scoring (pure calculation)', () {
     final scoring = ChallengeScoringService();
 
-    test('official score uses body-fat loss when both fats present', () async {
+    test('composite score combines body fat, weight loss, and muscle gain',
+        () async {
       await h.seedChallenge();
+      // Baseline: weight 200, bodyFat 30, muscle 40.
       await h.seedActivePaidParticipant(
-          challengeId: 'ch-1', userId: 'u1', weight: 200, bodyFat: 30);
-      await h.submissions.submitWeeklyCheckIn(
-          'u1', 'ch-1', {'weight': 190.0, 'bodyFat': 25.0, 'weekNumber': 1});
+          challengeId: 'ch-1', userId: 'u1', weight: 200, bodyFat: 30, muscle: 40);
+      // Progress: weight 190 (5% loss), bodyFat 25 (16.667% change), muscle 44
+      //   (10% gain).
+      await h.submissions.submitWeeklyCheckIn('u1', 'ch-1', {
+        'weight': 190.0,
+        'bodyFat': 25.0,
+        'muscleMass': 44.0,
+        'weekNumber': 1,
+      });
       final pendingWk = await h.latestSubmission('u1', SubmissionType.weeklyCheckIn);
       await h.submissions.approveSubmission(pendingWk!.id, ChallengeHarness.adminId);
 
@@ -637,8 +840,38 @@ void main() {
         isChallengeCompleted: false,
       );
       expect(result.isEligible, isTrue);
-      expect(result.metric, 'bodyFatLossPoints');
-      expect(result.score, closeTo(5.0, 0.001)); // 30 - 25
+      expect(result.metric, 'compositeScore');
+      expect(result.bodyFatChangePercent, closeTo(16.6667, 0.01));
+      expect(result.weightLossPercent, closeTo(5.0, 0.001));
+      expect(result.muscleGainPercent, closeTo(10.0, 0.001));
+      // 16.6667×0.5 + 5×0.3 + 10×0.2 = 8.3333 + 1.5 + 2.0 = 11.8333
+      expect(result.score, closeTo(11.8333, 0.01));
+    });
+
+    test('composite score handles missing body fat + muscle (weight only)',
+        () async {
+      await h.seedChallenge();
+      await h.seedActivePaidParticipant(
+          challengeId: 'ch-1', userId: 'u2', weight: 200, bodyFat: 30);
+      // Progress with NO bodyFat / muscle → only the 30% weight component counts.
+      await h.submissions.submitWeeklyCheckIn(
+          'u2', 'ch-1', {'weight': 180.0, 'weekNumber': 1});
+      final pending = await h.latestSubmission('u2', SubmissionType.weeklyCheckIn);
+      await h.submissions.approveSubmission(pending!.id, ChallengeHarness.adminId);
+
+      final wk = await h.latestSubmission('u2', SubmissionType.weeklyCheckIn);
+      final participant = await h.participant('ch-1', 'u2');
+      final baseline = await h.latestSubmission('u2', SubmissionType.baseline);
+      final result = scoring.calculateOfficialWinnerScore(
+        participant: participant!,
+        baseline: baseline,
+        latestProgress: wk,
+        isChallengeCompleted: false,
+      );
+      expect(result.metric, 'compositeScore');
+      // BF change 0 (progress has no bodyFat) + 10% weight loss ×0.3 + 0 muscle
+      expect(result.weightLossPercent, closeTo(10.0, 0.001));
+      expect(result.score, closeTo(3.0, 0.01));
     });
 
     test('ineligible participant scores as not-eligible', () {

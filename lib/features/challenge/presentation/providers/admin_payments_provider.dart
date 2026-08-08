@@ -83,13 +83,17 @@ class AdminPaymentsProvider with ChangeNotifier {
           return PaymentViewModel(
             payment: p,
             displayName: UserRepository.formatName(
-              userMap[p.userId], 
-              adminView: true, 
+              userMap[p.userId],
+              adminView: true,
               fallbackId: p.userId,
               leaderboardDisplayName: participant?.leaderboardDisplayName,
             ),
           );
         }).toList();
+
+        // Newest submissions first (most recently submitted payment at the top).
+        _allPayments.sort((a, b) => (b.payment.createdAt ?? DateTime(0))
+            .compareTo(a.payment.createdAt ?? DateTime(0)));
 
         _isLoading = false;
         _errorMessage = null;

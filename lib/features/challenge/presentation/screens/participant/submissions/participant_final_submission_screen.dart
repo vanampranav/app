@@ -1,5 +1,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:elefit_app/utils/decimal_input_formatter.dart';
+import 'package:elefit_app/features/challenge/presentation/widgets/challenge_scale_sync_button.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -48,6 +51,7 @@ class _ParticipantFinalSubmissionContentState extends State<_ParticipantFinalSub
   final _formKey = GlobalKey<FormState>();
   final _weightController = TextEditingController();
   final _bodyFatController = TextEditingController();
+  final _muscleController = TextEditingController();
   final _notesController = TextEditingController();
   
   String _weightUnit = 'kg';
@@ -58,6 +62,7 @@ class _ParticipantFinalSubmissionContentState extends State<_ParticipantFinalSub
   void dispose() {
     _weightController.dispose();
     _bodyFatController.dispose();
+    _muscleController.dispose();
     _notesController.dispose();
     super.dispose();
   }
@@ -142,8 +147,9 @@ class _ParticipantFinalSubmissionContentState extends State<_ParticipantFinalSub
 
         // Pre-fill form if existing submission exists
         if (_weightController.text.isEmpty && submission != null) {
-          _weightController.text = submission.data['weight']?.toString() ?? '';
-          _bodyFatController.text = submission.data['bodyFat']?.toString() ?? '';
+          _weightController.text = formatMeasurement(submission.data['weight'] as num?);
+          _bodyFatController.text = formatMeasurement(submission.data['bodyFat'] as num?);
+          _muscleController.text = formatMeasurement(submission.data['muscleMass'] as num?);
           _notesController.text = submission.data['notes'] ?? '';
           _weightUnit = submission.data['unit'] ?? 'kg';
           _measurementSource = submission.data['source'] ?? 'EleFit 4-electrode scale';
@@ -295,9 +301,23 @@ class _ParticipantFinalSubmissionContentState extends State<_ParticipantFinalSub
   Widget _buildForm(ParticipantFinalSubmissionProvider provider, challenge) {
     return Form(
       key: _formKey,
+      autovalidateMode: AutovalidateMode.onUserInteraction,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          ChallengeScaleSyncButton(
+            onReading: (m) => setState(() {
+              _weightController.text = m.weight.toStringAsFixed(1);
+              _weightUnit = m.unit.toLowerCase().startsWith('lb') ? 'lb' : 'kg';
+              if (m.bodyFat != null) {
+                _bodyFatController.text = m.bodyFat!.toStringAsFixed(1);
+              }
+              if (m.muscle != null) {
+                _muscleController.text = m.muscle!.toStringAsFixed(1);
+              }
+              _measurementSource = 'EleFit 4-electrode scale';
+            }),
+          ),
           const Text('FINAL RESULTS', style: AppTheme.labelSM),
           const SizedBox(height: 16),
           Row(
@@ -307,7 +327,8 @@ class _ParticipantFinalSubmissionContentState extends State<_ParticipantFinalSub
                 child: _buildTextField(
                   label: 'Final Weight',
                   controller: _weightController,
-                  keyboardType: TextInputType.number,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  inputFormatters: [DecimalTextInputFormatter(decimalRange: 1, maxIntegerDigits: 3)],
                   hint: '0.0',
                   validator: (v) {
                     if (v == null || v.isEmpty) return 'Required';
@@ -330,14 +351,29 @@ class _ParticipantFinalSubmissionContentState extends State<_ParticipantFinalSub
           ),
           const SizedBox(height: 20),
           _buildTextField(
-            label: 'Final Body Fat % (Optional)',
+            label: 'Final Body Fat % *',
             controller: _bodyFatController,
-            keyboardType: TextInputType.number,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: [DecimalTextInputFormatter(decimalRange: 1, maxIntegerDigits: 3)],
             hint: 'e.g. 15.5',
             validator: (v) {
-              if (v == null || v.isEmpty) return null;
+              if (v == null || v.isEmpty) return 'Required';
               final val = double.tryParse(v);
               if (val == null || val < 1 || val > 75) return '1-75 only';
+              return null;
+            },
+          ),
+          const SizedBox(height: 20),
+          _buildTextField(
+            label: 'Final Muscle Mass ($_weightUnit) *',
+            controller: _muscleController,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: [DecimalTextInputFormatter(decimalRange: 1, maxIntegerDigits: 3)],
+            hint: 'e.g. 32.4',
+            validator: (v) {
+              if (v == null || v.isEmpty) return 'Required';
+              final val = double.tryParse(v);
+              if (val == null || val <= 0) return 'Invalid';
               return null;
             },
           ),
@@ -394,6 +430,7 @@ class _ParticipantFinalSubmissionContentState extends State<_ParticipantFinalSub
               _buildReadOnlyRow('Final Weight', '${submission.data['weight']} ${submission.data['unit']}'),
               const Divider(height: 24, color: Colors.white10),
               _buildReadOnlyRow('Final Body Fat', '${submission.data['bodyFat'] ?? 'N/A'}%'),
+              _buildReadOnlyRow('Final Muscle Mass', submission.data['muscleMass'] != null ? '${submission.data['muscleMass']} ${submission.data['unit'] ?? ''}' : 'N/A'),
               const Divider(height: 24, color: Colors.white10),
               _buildReadOnlyRow('Source', submission.data['source']),
             ],
@@ -504,7 +541,7 @@ class _ParticipantFinalSubmissionContentState extends State<_ParticipantFinalSub
     );
   }
 
-  Widget _buildTextField({required String label, required TextEditingController controller, String? hint, int maxLines = 1, int? maxLength, TextInputType? keyboardType, String? Function(String?)? validator}) {
+  Widget _buildTextField({required String label, required TextEditingController controller, String? hint, int maxLines = 1, int? maxLength, TextInputType? keyboardType, List<TextInputFormatter>? inputFormatters, String? Function(String?)? validator}) {
     final bool multiline = maxLines != 1;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -516,6 +553,7 @@ class _ParticipantFinalSubmissionContentState extends State<_ParticipantFinalSub
           minLines: multiline ? maxLines : 1,
           maxLines: multiline ? null : 1,
           maxLength: maxLength,
+          inputFormatters: inputFormatters,
           keyboardType: multiline ? TextInputType.multiline : keyboardType,
           textInputAction: multiline ? TextInputAction.newline : null,
           style: const TextStyle(color: Colors.white),
@@ -562,6 +600,7 @@ class _ParticipantFinalSubmissionContentState extends State<_ParticipantFinalSub
       weight: double.parse(_weightController.text),
       unit: _weightUnit,
       bodyFat: _bodyFatController.text.isNotEmpty ? double.parse(_bodyFatController.text) : null,
+      muscleMass: _muscleController.text.isNotEmpty ? double.parse(_muscleController.text) : null,
       source: _measurementSource,
       notes: _notesController.text,
     );

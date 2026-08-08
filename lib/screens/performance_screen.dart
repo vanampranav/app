@@ -19,6 +19,7 @@ const _kWeightColor   = Color(0xFFC8DA2B); // lime
 class _Snapshot {
   final int stepsToday;
   final double? activeCalories;
+  final bool caloriesEstimated; // true when derived from steps, not read from Health
   final double? distanceKm;
   final int? workoutMinutes;
   final double? restingHR;
@@ -31,6 +32,7 @@ class _Snapshot {
   const _Snapshot({
     required this.stepsToday,
     required this.activeCalories,
+    this.caloriesEstimated = false,
     required this.distanceKm,
     required this.workoutMinutes,
     required this.restingHR,
@@ -160,9 +162,22 @@ class _PerformanceScreenState extends State<PerformanceScreen>
       HealthService().fetchWeeklySteps(date: date),
     ]);
 
+    // Steps come free from the device, but active calories only exist in Health
+    // if a wearable / fitness app writes them. When there's no such data, fall
+    // back to a step-based estimate so the ring isn't stuck on 0.
+    final steps = results[0] as int;
+    final fetchedCalories = results[1] as double?;
+    bool caloriesEstimated = false;
+    double? effectiveCalories = fetchedCalories;
+    if ((fetchedCalories == null || fetchedCalories <= 0) && steps > 0) {
+      effectiveCalories = await HealthService().estimateActiveCaloriesFromSteps(steps);
+      caloriesEstimated = effectiveCalories > 0;
+    }
+
     final snap = _Snapshot(
-      stepsToday:      results[0] as int,
-      activeCalories:  results[1] as double?,
+      stepsToday:      steps,
+      activeCalories:  effectiveCalories,
+      caloriesEstimated: caloriesEstimated,
       distanceKm:      results[2] as double?,
       workoutMinutes:  results[3] as int?,
       restingHR:       results[4] as double?,
@@ -482,7 +497,7 @@ class _PerformanceScreenState extends State<PerformanceScreen>
         Row(children: [
           _RingLegend(_kStepsColor, 'Steps',
               '${_fmt(s.stepsToday)} / ${_fmt(stepsGoal)}'),
-          _RingLegend(_kCaloriesColor, 'Calories',
+          _RingLegend(_kCaloriesColor, s.caloriesEstimated ? 'Calories (est.)' : 'Calories',
               '${(s.activeCalories ?? 0).round()} / $caloriesGoal kcal'),
           _RingLegend(_kExerciseColor, 'Exercise',
               '${s.workoutMinutes ?? 0} / $exerciseGoal min'),
@@ -511,7 +526,7 @@ class _PerformanceScreenState extends State<PerformanceScreen>
         color: _kCaloriesColor,
         icon: Icons.local_fire_department_rounded,
         value: '${s.activeCalories!.round()}',
-        label: 'CAL BURNED',
+        label: s.caloriesEstimated ? 'CAL BURNED · EST' : 'CAL BURNED',
         bottom: _ProgressBar(
             value: s.activeCalories! / 600, color: _kCaloriesColor),
       ));

@@ -69,6 +69,30 @@ class ChallengeNotificationService {
     );
   }
 
+  Future<void> notifyParticipantApproved(String userId, String challengeTitle, String challengeId) async {
+    await createChallengeNotification(
+      recipientUserId: userId,
+      title: "You're In!",
+      body: 'Your entry to "$challengeTitle" has been approved. Open the challenge to complete your next steps.',
+      type: 'participantApproved',
+      category: 'participation',
+      data: {'challengeId': challengeId},
+      deepLink: 'challenge_dashboard',
+    );
+  }
+
+  Future<void> notifyParticipantRejected(String userId, String challengeTitle, String challengeId, String reason) async {
+    await createChallengeNotification(
+      recipientUserId: userId,
+      title: 'Entry Not Approved',
+      body: 'Your entry to "$challengeTitle" was not approved. Reason: $reason',
+      type: 'participantRejected',
+      category: 'participation',
+      priority: 'high',
+      data: {'challengeId': challengeId, 'reason': reason},
+    );
+  }
+
   Future<void> notifyPaymentFailed(String userId, String challengeTitle, String challengeId, String reason) async {
     await createChallengeNotification(
       recipientUserId: userId,
@@ -82,8 +106,20 @@ class ChallengeNotificationService {
     );
   }
 
+  /// Turns a raw SubmissionType into readable text for notification copy.
+  String _humanType(String t) {
+    switch (t) {
+      case 'weeklyCheckIn':
+        return 'weekly check-in';
+      case 'finalSubmission':
+        return 'final';
+      default:
+        return t; // 'baseline'
+    }
+  }
+
   Future<void> notifySubmissionApproved(String userId, String challengeTitle, String submissionType, String challengeId) async {
-    String body = 'Your $submissionType submission for "$challengeTitle" has been approved.';
+    String body = 'Your ${_humanType(submissionType)} submission for "$challengeTitle" has been approved.';
     if (submissionType == 'baseline') {
       body = 'Your baseline has been approved. Your progress tracking for "$challengeTitle" is now active.';
     }
@@ -102,7 +138,7 @@ class ChallengeNotificationService {
     await createChallengeNotification(
       recipientUserId: userId,
       title: 'Submission Rejected',
-      body: 'Your $submissionType submission for "$challengeTitle" was rejected. Please review admin notes.',
+      body: 'Your ${_humanType(submissionType)} submission for "$challengeTitle" was rejected. Please review admin notes.',
       type: 'submissionRejected',
       priority: 'high',
       data: {'challengeId': challengeId, 'submissionType': submissionType},
@@ -114,7 +150,7 @@ class ChallengeNotificationService {
     await createChallengeNotification(
       recipientUserId: userId,
       title: 'Action Required',
-      body: 'Your $submissionType submission for "$challengeTitle" requires clarification. Please review notes and resubmit.',
+      body: 'Your ${_humanType(submissionType)} submission for "$challengeTitle" requires clarification. Please review notes and resubmit.',
       type: 'resubmissionRequested',
       priority: 'high',
       data: {'challengeId': challengeId, 'submissionType': submissionType},

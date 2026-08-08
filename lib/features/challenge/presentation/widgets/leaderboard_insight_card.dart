@@ -134,7 +134,9 @@ class LeaderboardInsightCard extends StatelessWidget {
 
     String label = 'Official Progress: ';
     String value = data.score?.toStringAsFixed(2) ?? '0.00';
-    String unit = data.metric == 'bodyFatLossPoints' ? ' pts lost' : '% lost';
+    String unit = data.metric == 'compositeScore'
+        ? ' pts'
+        : (data.metric == 'bodyFatLossPoints' ? ' pts lost' : '% lost');
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 8.0),

@@ -385,6 +385,55 @@ class ShopifyService with ChangeNotifier {
     }
   }
 
+  /// Authenticates a Shopify customer with email + password and returns their
+  /// access token and numeric customer id (used by the Firebase bridge login).
+  /// Returns null if the credentials are not a valid Shopify customer.
+  Future<Map<String, String>?> customerLogin(String email, String password) async {
+    const String loginMutation = '''
+      mutation customerAccessTokenCreate(\$input: CustomerAccessTokenCreateInput!) {
+        customerAccessTokenCreate(input: \$input) {
+          customerAccessToken { accessToken }
+          customerUserErrors { code message }
+        }
+      }
+    ''';
+    const String customerQuery = '''
+      query customer(\$customerAccessToken: String!) {
+        customer(customerAccessToken: \$customerAccessToken) { id email }
+      }
+    ''';
+    try {
+      final graphQLClient = await client;
+      final loginResult = await graphQLClient.mutate(MutationOptions(
+        document: gql(loginMutation),
+        variables: {
+          'input': {'email': email.trim(), 'password': password}
+        },
+        fetchPolicy: FetchPolicy.noCache,
+      ));
+      if (loginResult.hasException) {
+        debugPrint('Shopify customerLogin error: ${loginResult.exception}');
+        return null;
+      }
+      final tokenNode = loginResult
+          .data?['customerAccessTokenCreate']?['customerAccessToken'];
+      final accessToken = tokenNode?['accessToken'] as String?;
+      if (accessToken == null) return null; // wrong password / not a customer
+
+      final custResult = await graphQLClient.query(QueryOptions(
+        document: gql(customerQuery),
+        variables: {'customerAccessToken': accessToken},
+        fetchPolicy: FetchPolicy.noCache,
+      ));
+      final id = custResult.data?['customer']?['id'] as String?;
+      if (id == null) return null;
+      return {'accessToken': accessToken, 'customerId': id};
+    } catch (e) {
+      debugPrint('Shopify customerLogin failed: $e');
+      return null;
+    }
+  }
+
   Future<bool> _validateCustomerAccessToken(String customerAccessToken) async {
     const String validateQuery = '''
       query customer(\$customerAccessToken: String!) {

@@ -87,13 +87,18 @@ class AdminParticipantsProvider with ChangeNotifier {
           return ParticipantViewModel(
             participant: p,
             displayName: UserRepository.formatName(
-              userMap[p.userId], 
-              adminView: true, 
+              userMap[p.userId],
+              adminView: true,
               fallbackId: p.userId,
               leaderboardDisplayName: p.leaderboardDisplayName,
             ),
           );
         }).toList();
+
+        // Newest participants first (most recent join at the top).
+        _allParticipants.sort((a, b) =>
+            (b.participant.joinedAt ?? b.participant.createdAt ?? DateTime(0))
+                .compareTo(a.participant.joinedAt ?? a.participant.createdAt ?? DateTime(0)));
 
         _isLoading = false;
         _errorMessage = null;

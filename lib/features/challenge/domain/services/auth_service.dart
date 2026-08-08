@@ -119,6 +119,17 @@ class AuthService with ChangeNotifier {
     }
   }
 
+  /// Establishes the Firebase Auth SDK session from a custom token (Shopify
+  /// bridge). Does not use or change the password.
+  Future<void> signInWithCustomToken(String token) async {
+    try {
+      await _auth.signInWithCustomToken(token);
+    } catch (e) {
+      debugPrint('Error signing in with custom token: $e');
+      rethrow;
+    }
+  }
+
   Future<void> signUp(String email, String password) async {
     try {
       await _auth.createUserWithEmailAndPassword(

@@ -362,6 +362,24 @@ class HealthService {
     }
   }
 
+  /// Rough estimate of active calories burned from step count, used as a
+  /// fallback when Health has no ACTIVE_ENERGY_BURNED data (i.e. the user has no
+  /// wearable / fitness app writing it — the phone records steps but not
+  /// calories). Personalized by the profile weight when available.
+  ///
+  /// Heuristic: ~0.04 kcal/step for a ~70 kg adult, scaled linearly by weight.
+  Future<double> estimateActiveCaloriesFromSteps(int steps) async {
+    if (steps <= 0) return 0.0;
+    double weightKg = 70.0;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final w = prefs.getDouble('user_weight_kg');
+      if (w != null && w > 0) weightKg = w;
+    } catch (_) {}
+    final kcalPerStep = 0.04 * (weightKg / 70.0).clamp(0.5, 2.0);
+    return steps * kcalPerStep;
+  }
+
   /// Weight readings in a date range — used to fill the trend chart.
   Future<List<Map<String, dynamic>>> fetchWeightHistory(DateTime from) async {
     if (!await _ensurePermsLoaded()) return [];

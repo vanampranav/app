@@ -23,7 +23,7 @@ class AppErrorMapper {
 
     final errorStr = error.toString().toLowerCase();
 
-    if (errorStr.contains('permission-denied') || errorStr.contains('permission_denied')) {
+    if (errorStr.contains('permission-denied') || errorStr.contains('permission_denied') || errorStr.contains('unauthorized')) {
       title = 'Access Denied';
       message = "You don't have access to this section. Please contact your administrator if you believe this is an error.";
       technicalCode = 'PERMISSION_DENIED';
@@ -49,6 +49,35 @@ class AppErrorMapper {
       title = 'Setup Required';
       message = "This section is not fully configured yet. Please contact EleFit support.";
       technicalCode = 'INDEX_MISSING';
+    } else if (errorStr.contains('resource-exhausted') || errorStr.contains('quota')) {
+      title = 'Server Busy';
+      message = "The server is busy right now. Please try again in a moment.";
+      technicalCode = 'RESOURCE_EXHAUSTED';
+    }
+
+    // No known technical category matched → if the error is a plain, readable
+    // message (how our own rules throw them, e.g. "Weekly check-ins open after
+    // your first week."), surface THAT so the user sees the real problem instead
+    // of a vague "something went wrong". Keep the generic copy only for clearly
+    // technical errors.
+    if (technicalCode == null) {
+      final raw = error.toString().replaceFirst(RegExp(r'^Exception:\s*'), '').trim();
+      final lower = raw.toLowerCase();
+      final looksTechnical = raw.isEmpty ||
+          raw.length > 180 ||
+          raw.startsWith('[') || // FlutterFire / PlatformException "[plugin/code] ..." strings
+          lower.contains('is not a subtype') ||
+          lower.contains("type '") ||
+          lower.contains('instance of') ||
+          lower.contains('nosuchmethod') ||
+          lower.contains('rangeerror') ||
+          lower.contains('stack trace') ||
+          lower.startsWith('bad state') ||
+          raw.contains('#0 ');
+      if (!looksTechnical) {
+        title = 'Please note';
+        message = raw;
+      }
     }
 
     // Log to Crashlytics

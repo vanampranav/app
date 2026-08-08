@@ -132,7 +132,7 @@ class ParticipantEnrollmentService {
     
     final challenge = await _challengeRepository.getChallengeById(participant.challengeId);
     if (challenge != null) {
-      await _notificationService.notifyPaymentApproved(participant.userId, challenge.title, challenge.id);
+      await _notificationService.notifyParticipantApproved(participant.userId, challenge.title, challenge.id);
     }
   }
 
@@ -162,5 +162,19 @@ class ParticipantEnrollmentService {
       newData: updatedParticipant.toMap(),
       reason: reason,
     );
+
+    // Tell the participant their entry was rejected (best-effort — a failed
+    // notification must not fail the rejection the admin just performed).
+    try {
+      final challenge = await _challengeRepository.getChallengeById(participant.challengeId);
+      if (challenge != null) {
+        await _notificationService.notifyParticipantRejected(
+            participant.userId, challenge.title, challenge.id, reason);
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Enrollment: reject notification failed (non-fatal): $e');
+      }
+    }
   }
 }

@@ -95,7 +95,15 @@ class ParticipantLeaderboardProvider with ChangeNotifier {
         _leaderboardRepository.streamStandings(challengeId).listen((standings) {
       final entries =
           standings.map(LeaderboardEntry.fromStanding).toList()
-            ..sort((a, b) => b.motivationalScore.compareTo(a.motivationalScore));
+            ..sort((a, b) {
+              // Rank by score (bonus included). On ties, "Not started" sinks last.
+              final byScore = b.motivationalScore.compareTo(a.motivationalScore);
+              if (byScore != 0) return byScore;
+              final aNotStarted = a.latestSubmissionType == 'Not started';
+              final bNotStarted = b.latestSubmissionType == 'Not started';
+              if (aNotStarted != bNotStarted) return aNotStarted ? 1 : -1;
+              return 0;
+            });
       _leaderboard = entries;
       _isLoading = false;
       _errorMessage = null;
