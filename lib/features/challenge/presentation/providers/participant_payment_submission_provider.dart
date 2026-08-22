@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dispose_guard_notifier.dart';
 import 'package:elefit_app/features/challenge/presentation/providers/challenge_error_text.dart';
 import 'package:elefit_app/features/challenge/challenge_auth_guard.dart';
 import 'dart:io';
@@ -12,7 +13,7 @@ import 'package:elefit_app/features/challenge/data/repositories/challenge_partic
 import 'package:elefit_app/features/challenge/data/repositories/payment_record_repository.dart';
 import 'package:elefit_app/features/challenge/domain/services/payment_approval_service.dart';
 
-class ParticipantPaymentSubmissionProvider with ChangeNotifier {
+class ParticipantPaymentSubmissionProvider with ChangeNotifier, DisposeGuardNotifier {
   final String challengeId;
   final String userId;
   final ChallengeRepository _challengeRepository;

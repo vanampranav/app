@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dispose_guard_notifier.dart';
 import 'package:flutter/material.dart';
 import 'package:elefit_app/features/challenge/data/models/challenge.dart';
 import 'package:elefit_app/features/challenge/data/models/challenge_participant.dart';
@@ -8,7 +9,7 @@ import 'package:elefit_app/features/challenge/data/repositories/challenge_partic
 import 'package:elefit_app/features/challenge/domain/services/participant_enrollment_service.dart';
 import 'challenge_error_text.dart';
 
-class ParticipantChallengeDetailProvider with ChangeNotifier {
+class ParticipantChallengeDetailProvider with ChangeNotifier, DisposeGuardNotifier {
   final String challengeId;
   final String userId;
   final ChallengeRepository _challengeRepository;

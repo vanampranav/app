@@ -52,50 +52,66 @@ import 'package:elefit_app/features/challenge/presentation/providers/notificatio
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Install a global async-error handler FIRST — even before Firebase — so a
+  // failure during startup (e.g. a cold-start launched by tapping a push
+  // notification) can never escape as a hard native "app crashed" dialog.
+  // Reports to Crashlytics when available, otherwise just logs.
+  PlatformDispatcher.instance.onError = (error, stack) {
+    try {
+      FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+    } catch (_) {
+      debugPrint('Uncaught async error (Crashlytics unavailable): $error');
+    }
+    return true;
+  };
+
   // Initialize Firebase (core + SDK for the Challenge feature + Crashlytics)
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
-
     // Route uncaught framework errors to Crashlytics
     FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
-    // Route uncaught async errors to Crashlytics
-    PlatformDispatcher.instance.onError = (error, stack) {
-      FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
-      return true;
-    };
-
     debugPrint('Firebase initialized successfully');
   } catch (e) {
     debugPrint('Firebase initialization failed: $e');
     // Continue without Firebase - OneSignal handles notifications
   }
 
-  // Initialize analytics and log app open
-  await AnalyticsService.initialize();
-  AnalyticsService.logAppOpened();
+  // Everything below is best-effort: a failure must NEVER stop runApp from
+  // being reached, or the app dies at launch (which shows as an iOS crash when
+  // opened from a notification). Each step is guarded.
+  try {
+    await AnalyticsService.initialize();
+    AnalyticsService.logAppOpened();
+  } catch (e) {
+    debugPrint('Analytics init failed (non-fatal): $e');
+  }
 
-  // Initialize OneSignal for notifications and in-app messages.
   // Fire-and-forget — do NOT await, so the notification-permission dialog never
   // blocks first paint (the app shows immediately; the prompt appears over it).
-  OneSignalService.initialize();
+  try {
+    OneSignalService.initialize();
+  } catch (e) {
+    debugPrint('OneSignal init failed (non-fatal): $e');
+  }
 
-  // Set preferred orientations
-  await SystemChrome.setPreferredOrientations([
-    DeviceOrientation.portraitUp,
-    DeviceOrientation.portraitDown,
-  ]);
-
-  // Set system overlay style
-  SystemChrome.setSystemUIOverlayStyle(
-    const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.dark,
-      systemNavigationBarColor: AppTheme.surfaceColor,
-      systemNavigationBarIconBrightness: Brightness.light,
-    ),
-  );
+  try {
+    await SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+    ]);
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.dark,
+        systemNavigationBarColor: AppTheme.surfaceColor,
+        systemNavigationBarIconBrightness: Brightness.light,
+      ),
+    );
+  } catch (e) {
+    debugPrint('System chrome setup failed (non-fatal): $e');
+  }
 
   runApp(
     MultiProvider(

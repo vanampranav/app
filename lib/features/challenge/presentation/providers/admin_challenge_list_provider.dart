@@ -1,9 +1,10 @@
 import 'dart:async';
+import 'dispose_guard_notifier.dart';
 import 'package:flutter/material.dart';
 import 'package:elefit_app/features/challenge/data/models/challenge.dart';
 import 'package:elefit_app/features/challenge/data/repositories/challenge_repository.dart';
 
-class AdminChallengeListProvider with ChangeNotifier {
+class AdminChallengeListProvider with ChangeNotifier, DisposeGuardNotifier {
   final ChallengeRepository _challengeRepository;
   
   List<Challenge> _challenges = [];

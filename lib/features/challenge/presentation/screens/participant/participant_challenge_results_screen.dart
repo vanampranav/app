@@ -90,6 +90,7 @@ class _ResultsViewState extends State<_ResultsView>
     with TickerProviderStateMixin {
   late final AnimationController _podium;
   AnimationController? _confetti;
+  bool _confettiDone = false;
 
   int get _myRank {
     final i = widget.standings.indexWhere((s) => s.userId == widget.myUserId);
@@ -106,7 +107,13 @@ class _ResultsViewState extends State<_ResultsView>
       ..forward();
     if (_iAmTop3) {
       _confetti = AnimationController(
-          vsync: this, duration: const Duration(seconds: 5))
+          vsync: this, duration: const Duration(seconds: 4))
+        // Remove the confetti overlay entirely once it has fallen off-screen.
+        ..addStatusListener((s) {
+          if (s == AnimationStatus.completed && mounted) {
+            setState(() => _confettiDone = true);
+          }
+        })
         ..forward();
     }
   }
@@ -149,8 +156,9 @@ class _ResultsViewState extends State<_ResultsView>
                 (i) => _buildRow(standings[i], i + 1)),
           ],
         ),
-        // Celebration only if the current user finished on the podium.
-        if (_confetti != null)
+        // Celebration only if the current user finished on the podium — removed
+        // once the confetti has fallen off-screen.
+        if (_confetti != null && !_confettiDone)
           Positioned.fill(
             child: IgnorePointer(
               child: AnimatedBuilder(
@@ -425,8 +433,11 @@ class _ConfettiPainter extends CustomPainter {
     return List.generate(90, (i) {
       return _Bit(
         x: rnd.nextDouble(),
-        delay: rnd.nextDouble() * 0.4,
-        speed: 0.7 + rnd.nextDouble() * 0.6,
+        // Delay + speed are bounded so EVERY piece reaches the bottom (t = 1)
+        // before the animation ends — nothing freezes mid-screen.
+        // Slowest piece: (1 - 0.25) * 1.4 ≈ 1.05 ≥ 1.
+        delay: rnd.nextDouble() * 0.25,
+        speed: 1.4 + rnd.nextDouble() * 0.8,
         drift: (rnd.nextDouble() - 0.5) * 0.3,
         color: colors[i % colors.length],
         size: 5 + rnd.nextDouble() * 6,
@@ -443,7 +454,10 @@ class _ConfettiPainter extends CustomPainter {
       if (t <= 0) continue;
       final y = t * (size.height + 40) - 20;
       final x = (b.x + b.drift * t) * size.width;
-      paint.color = b.color.withValues(alpha: (1 - t).clamp(0.0, 1.0));
+      // Stay solid while falling, then fade out over the last stretch so it
+      // reads as "falls down and disappears" rather than fading the whole way.
+      final double fade = t < 0.8 ? 1.0 : ((1 - t) / 0.2).clamp(0.0, 1.0);
+      paint.color = b.color.withValues(alpha: fade);
       canvas.save();
       canvas.translate(x, y);
       canvas.rotate(b.rot + t * 8);

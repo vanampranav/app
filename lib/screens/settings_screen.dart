@@ -5,7 +5,7 @@ import '../services/shopify_service.dart';
 import '../services/health_service.dart';
 import 'add_member_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:elefit_app/utils/app_secure_storage.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -42,7 +42,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _loadSettings() async {
-    const secureStorage = FlutterSecureStorage();
+    const secureStorage = appSecureStorage;
     final prefs = await SharedPreferences.getInstance();
     final email = await secureStorage.read(key: 'user_email');
     final healthConnected = await HealthService().isConnected;

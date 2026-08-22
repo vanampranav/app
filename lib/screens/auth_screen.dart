@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
 import '../services/shopify_service.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:elefit_app/utils/app_secure_storage.dart';
 import '../utils/constants.dart';
 
 class AuthScreen extends StatefulWidget {
@@ -13,7 +13,7 @@ class AuthScreen extends StatefulWidget {
 }
 
 class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateMixin {
-  static const _secureStorage = FlutterSecureStorage();
+  static const _secureStorage = appSecureStorage;
   bool _isLogin = true;
   bool _isLoading = false;
   final _formKey = GlobalKey<FormState>();

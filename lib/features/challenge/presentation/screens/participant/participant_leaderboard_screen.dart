@@ -12,6 +12,7 @@ import 'package:elefit_app/features/challenge/presentation/providers/leaderboard
 import 'package:elefit_app/features/challenge/presentation/widgets/leaderboard_insight_card.dart';
 import 'package:elefit_app/features/challenge/presentation/widgets/participant_progress_chart.dart';
 import 'package:elefit_app/features/challenge/presentation/widgets/score_breakdown_card.dart';
+import 'package:elefit_app/features/challenge/presentation/widgets/leaderboard_scoring_help_card.dart';
 
 class ParticipantLeaderboardScreen extends StatelessWidget {
   final String challengeId;
@@ -83,6 +84,12 @@ class _ParticipantLeaderboardContent extends StatelessWidget {
                 child: _buildHeader(leaderboardProvider.challenge?.title ?? ''),
               ),
 
+              // "How to score & climb" explainer (collapsible, shown to everyone)
+              const SliverPadding(
+                padding: EdgeInsets.fromLTRB(20, 20, 20, 0),
+                sliver: SliverToBoxAdapter(child: LeaderboardScoringHelpCard()),
+              ),
+
               // Published winners (only after the admin declares results)
               if (leaderboardProvider.challenge?.resultsPublished == true &&
                   (leaderboardProvider.challenge?.winners.isNotEmpty ?? false))
@@ -90,7 +97,9 @@ class _ParticipantLeaderboardContent extends StatelessWidget {
                   child: _buildWinnersBanner(leaderboardProvider.challenge!),
                 ),
 
-              // Personal Insights
+              // Personal insight card + the rankings heading. The rankings list
+              // now sits high (right under your insight card); the progress-trend
+              // chart moves below it.
               if (insights != null)
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
@@ -99,10 +108,6 @@ class _ParticipantLeaderboardContent extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         LeaderboardInsightCard(insights: insights),
-                        const SizedBox(height: 24),
-                        ParticipantProgressChart(points: insights.progressPoints),
-                        const SizedBox(height: 24),
-                        ScoreBreakdownCard(insights: insights),
                         const SizedBox(height: 40),
                         _buildSectionTitle('LEADERBOARD RANKINGS'),
                         const SizedBox(height: 16),
@@ -118,7 +123,7 @@ class _ParticipantLeaderboardContent extends StatelessWidget {
                   ),
                 ),
 
-              // Global Leaderboard List
+              // Global Leaderboard List (moved up — was below the progress chart)
               SliverPadding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 sliver: SliverList(
@@ -128,7 +133,7 @@ class _ParticipantLeaderboardContent extends StatelessWidget {
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 12),
                         child: _LeaderboardRow(
-                          entry: entry, 
+                          entry: entry,
                           rank: i + 1,
                           isMe: entry.userId == insightsProvider.userId,
                         ),
@@ -138,7 +143,23 @@ class _ParticipantLeaderboardContent extends StatelessWidget {
                   ),
                 ),
               ),
-              
+
+              // Score breakdown + Progress trend chart (moved BELOW the rankings)
+              if (insights != null)
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(20, 32, 20, 0),
+                  sliver: SliverToBoxAdapter(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        ScoreBreakdownCard(insights: insights),
+                        const SizedBox(height: 24),
+                        ParticipantProgressChart(points: insights.progressPoints),
+                      ],
+                    ),
+                  ),
+                ),
+
               const SliverToBoxAdapter(child: SizedBox(height: 60)),
             ],
           );
@@ -216,8 +237,8 @@ class _ParticipantLeaderboardContent extends StatelessWidget {
         children: [
           Text(title, style: AppTheme.bodySM.copyWith(color: AppTheme.lime, fontWeight: FontWeight.bold)),
           const SizedBox(height: 4),
-          const Text('Rankings below include consistency points for motivation.', style: AppTheme.bodySM),
-          const Text('Official prizes use approved physical measurements only.', style: TextStyle(fontSize: 9, color: AppTheme.textTertiary, fontStyle: FontStyle.italic)),
+          const Text('Ranked by points earned at every check-in — body fat, weight & muscle.', style: AppTheme.bodySM),
+          const Text('Prizes need a verified payment + an approved final submission.', style: TextStyle(fontSize: 9, color: AppTheme.textTertiary, fontStyle: FontStyle.italic)),
         ],
       ),
     );
@@ -284,41 +305,32 @@ class _LeaderboardRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bool isTop3 = rank <= 3;
-    final Color rankColor = rank == 1 
-        ? const Color(0xFFFFD700) // Gold
-        : rank == 2 
-            ? const Color(0xFFC0C0C0) // Silver
-            : rank == 3 
-                ? const Color(0xFFCD7F32) // Bronze
-                : AppTheme.textTertiary;
+    final String? medal =
+        rank == 1 ? '🥇' : rank == 2 ? '🥈' : rank == 3 ? '🥉' : null;
 
     return EFCard(
       padding: const EdgeInsets.all(16),
       color: isMe ? AppTheme.lime.withValues(alpha: 0.05) : null,
       child: Row(
         children: [
-          // Rank
-          Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              color: isTop3 ? rankColor.withValues(alpha: 0.2) : Colors.transparent,
-              shape: BoxShape.circle,
-              border: isTop3 ? Border.all(color: rankColor, width: 1.5) : null,
-            ),
-            child: Center(
-              child: Text(
-                '$rank',
-                style: AppTheme.numericMD.copyWith(
-                  fontSize: 14, 
-                  color: isTop3 ? rankColor : AppTheme.textSecondary,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
+          // Medal for the top 3, otherwise a plain rank number.
+          SizedBox(
+            width: 36,
+            height: 36,
+            child: medal != null
+                ? Center(child: Text(medal, style: const TextStyle(fontSize: 26)))
+                : Center(
+                    child: Text(
+                      '$rank',
+                      style: AppTheme.numericMD.copyWith(
+                        fontSize: 14,
+                        color: AppTheme.textSecondary,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 14),
           
           // User Info
           Expanded(

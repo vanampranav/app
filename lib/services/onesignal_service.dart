@@ -66,18 +66,27 @@ class OneSignalService {
       event.notification.display();
     });
 
-    // Handle tap on push notification
+    // Handle tap on push notification. Wrapped so a malformed payload or a
+    // navigation hiccup on tap can never crash the app (this fires on the tap
+    // that opens the app, so an exception here surfaces as an "app crashed").
     OneSignal.Notifications.addClickListener((event) {
-      final data = event.notification.additionalData;
-      if (data == null) return;
+      try {
+        final data = event.notification.additionalData;
+        if (data == null) return;
 
-      final action = data['action'] as String?;
-      final productId = data['product_id'] as String?;
+        // Read defensively — values may be non-String depending on the sender.
+        final action = data['action']?.toString();
+        final productId = data['product_id']?.toString();
 
-      if (productId != null) {
-        NavigationService.navigateToProductById(productId);
-      } else if (action != null) {
-        NavigationService.handleAction(action);
+        if (productId != null && productId.isNotEmpty) {
+          NavigationService.navigateToProductById(productId);
+        } else if (action != null && action.isNotEmpty) {
+          NavigationService.handleAction(action);
+        }
+        // Challenge notifications (challengeId/type/deepLink) have neither key
+        // and simply open the app — no navigation needed here.
+      } catch (e) {
+        debugPrint('OneSignal click handler error (non-fatal): $e');
       }
     });
   }

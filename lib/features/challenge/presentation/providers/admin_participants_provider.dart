@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dispose_guard_notifier.dart';
 import 'package:flutter/foundation.dart';
 import 'package:elefit_app/features/challenge/data/models/challenge_participant.dart';
 import 'package:elefit_app/features/challenge/data/repositories/challenge_participant_repository.dart';
@@ -16,7 +17,7 @@ class ParticipantViewModel {
   });
 }
 
-class AdminParticipantsProvider with ChangeNotifier {
+class AdminParticipantsProvider with ChangeNotifier, DisposeGuardNotifier {
   final String challengeId;
   final ChallengeParticipantRepository _participantRepository;
   final UserRepository _userRepository;

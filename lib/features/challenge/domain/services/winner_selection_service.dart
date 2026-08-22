@@ -48,8 +48,11 @@ class WinnerSelectionService {
         _auditService = auditService,
         _notificationService = notificationService;
 
-  static int _metricRank(String metric) =>
-      metric == 'bodyFatLossPoints' ? 0 : 1;
+  /// The score that ranks a finalist: the composite official score PLUS the
+  /// admin's manual bonus/penalty, so "Adjust Standings" actually influences who
+  /// wins (matching the public leaderboard order).
+  static double _rankScore(LeaderboardStanding s) =>
+      (s.officialScore ?? 0) + s.bonusPoints;
 
   /// Refreshes the leaderboard from source data, then proposes a ranking.
   Future<WinnerRanking> computeRanking(String challengeId) async {
@@ -58,12 +61,7 @@ class WinnerSelectionService {
     final standings = await _leaderboardRepository.getStandings(challengeId);
 
     final eligible = standings.where((s) => s.officialEligible).toList()
-      ..sort((a, b) {
-        final g = _metricRank(a.officialMetric)
-            .compareTo(_metricRank(b.officialMetric));
-        if (g != 0) return g; // body-fat group ranks above weight-fallback
-        return (b.officialScore ?? 0).compareTo(a.officialScore ?? 0);
-      });
+      ..sort((a, b) => _rankScore(b).compareTo(_rankScore(a)));
 
     final ineligible =
         standings.where((s) => !s.officialEligible).toList();

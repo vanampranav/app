@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dispose_guard_notifier.dart';
 import 'package:flutter/material.dart';
 import 'package:elefit_app/features/challenge/data/constants/firestore_collections.dart';
 import 'package:elefit_app/features/challenge/data/models/challenge.dart';
@@ -26,15 +27,19 @@ class ProgressPoint {
   });
 }
 
+/// The three weighted contributions that make up a participant's score, plus
+/// the total (composite + admin bonus) that the leaderboard ranks by.
 class ScoreBreakdown {
-  final double fatLossScore;
-  final double weightLossScore;
-  final double consistencyScore;
+  final double fatLossScore; // body-fat % change × 0.5
+  final double weightLossScore; // weight loss % × 0.3
+  final double muscleGainScore; // muscle gain % × 0.2
+  final double consistencyScore; // informational only — not part of the score
   final double totalLeaderboardScore;
 
   ScoreBreakdown({
     required this.fatLossScore,
     required this.weightLossScore,
+    required this.muscleGainScore,
     required this.consistencyScore,
     required this.totalLeaderboardScore,
   });
@@ -86,7 +91,7 @@ class ParticipantLeaderboardInsights {
 /// metric) comes from the PUBLIC sanitized standings — no permission-denied.
 /// The private progress chart + absolute weights come from the user's OWN
 /// submissions, which security rules let them read.
-class LeaderboardInsightsProvider with ChangeNotifier {
+class LeaderboardInsightsProvider with ChangeNotifier, DisposeGuardNotifier {
   final String challengeId;
   final String userId;
   final ChallengeRepository _challengeRepository;
@@ -215,8 +220,11 @@ class LeaderboardInsightsProvider with ChangeNotifier {
 
       // Score components come from the sanitized standing (already computed the
       // same way), so the breakdown matches the ranking exactly.
-      final double fatLossContribution = myStanding.bodyFatLossPoints * 10;
-      final double weightLossContribution = myStanding.weightLossPercent * 5;
+      // The participant's best transformation so far (baseline → best), shown as
+      // raw %s. The score itself is the accumulated points (totalLeaderboardScore).
+      final double fatLossContribution = myStanding.bodyFatChangePercent;
+      final double weightLossContribution = myStanding.weightLossPercent;
+      final double muscleGainContribution = myStanding.muscleGainPercent;
 
       final bool isCompleted = _challenge?.status == ChallengeStatus.completed;
 
@@ -238,6 +246,7 @@ class LeaderboardInsightsProvider with ChangeNotifier {
         scoreBreakdown: ScoreBreakdown(
           fatLossScore: fatLossContribution,
           weightLossScore: weightLossContribution,
+          muscleGainScore: muscleGainContribution,
           consistencyScore: myStanding.consistencyScore,
           totalLeaderboardScore: myStanding.motivationalScore,
         ),

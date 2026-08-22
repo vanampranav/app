@@ -12,6 +12,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:elefit_app/features/challenge/data/constants/firestore_collections.dart';
 import 'package:elefit_app/features/challenge/data/models/challenge_participant.dart';
+import 'package:elefit_app/features/challenge/data/models/challenge_submission.dart';
 import 'package:elefit_app/features/challenge/domain/services/challenge_scoring_service.dart';
 import 'package:elefit_app/features/challenge/domain/services/leaderboard_service.dart';
 import 'package:elefit_app/features/challenge/domain/services/winner_selection_service.dart';
@@ -540,7 +541,7 @@ void main() {
       expect(s.officialMetric, 'compositeScore');
       // BF% change (30→25)=16.667 ×0.5 + weight loss 5% ×0.3 + muscle 0 ×0.2
       //   = 8.3333 + 1.5 = 9.8333
-      expect(s.officialScore, closeTo(9.8333, 0.01));
+      expect(s.officialScore, closeTo(98.333, 0.1)); // ×10 points
       expect(s.weightLossPercent, closeTo(5.0, 0.001)); // (200-190)/200*100
       expect(s.bodyFatChangePercent, closeTo(16.6667, 0.01));
 
@@ -652,9 +653,27 @@ void main() {
       // beating a much larger raw weight-loss number (which carries only 30%).
       expect(ranking.ranked.first.userId, 'bfUser');
       expect(ranking.ranked.first.officialMetric, 'compositeScore');
-      expect(ranking.ranked.first.officialScore, closeTo(9.8333, 0.01));
+      expect(ranking.ranked.first.officialScore, closeTo(98.333, 0.1));
       expect(ranking.ranked[1].userId, 'wtUser');
-      expect(ranking.ranked[1].officialScore, closeTo(6.0, 0.01));
+      expect(ranking.ranked[1].officialScore, closeTo(60.0, 0.1));
+    });
+
+    test('admin bonus points change the winner ranking', () async {
+      await h.seedChallenge();
+      await finalist('bfUser', finalWeight: 190, finalBodyFat: 25); // composite ~9.83
+      await finalist('wtUser', finalWeight: 160); // composite 6.0
+
+      // Without a bonus, the body-fat mover leads.
+      final before = await buildService().computeRanking('ch-1');
+      expect(before.ranked.first.userId, 'bfUser');
+
+      // A big admin bonus on the runner-up must lift them to #1 in the winner
+      // ranking (not just the public leaderboard).
+      await leaderboardService()
+          .setBonusPoints('ch-1', 'wtUser', 50.0, adminId: ChallengeHarness.adminId);
+      final after = await buildService().computeRanking('ch-1');
+      expect(after.ranked.first.userId, 'wtUser');
+      expect(after.ranked[1].userId, 'bfUser');
     });
 
     test('declareWinners requires a completed challenge', () async {
@@ -836,7 +855,7 @@ void main() {
       final result = scoring.calculateOfficialWinnerScore(
         participant: participant!,
         baseline: baseline,
-        latestProgress: wk,
+        approvedProgress: [wk!],
         isChallengeCompleted: false,
       );
       expect(result.isEligible, isTrue);
@@ -845,7 +864,7 @@ void main() {
       expect(result.weightLossPercent, closeTo(5.0, 0.001));
       expect(result.muscleGainPercent, closeTo(10.0, 0.001));
       // 16.6667×0.5 + 5×0.3 + 10×0.2 = 8.3333 + 1.5 + 2.0 = 11.8333
-      expect(result.score, closeTo(11.8333, 0.01));
+      expect(result.score, closeTo(118.333, 0.1)); // ×10 points scale
     });
 
     test('composite score handles missing body fat + muscle (weight only)',
@@ -865,13 +884,13 @@ void main() {
       final result = scoring.calculateOfficialWinnerScore(
         participant: participant!,
         baseline: baseline,
-        latestProgress: wk,
+        approvedProgress: [wk!],
         isChallengeCompleted: false,
       );
       expect(result.metric, 'compositeScore');
       // BF change 0 (progress has no bodyFat) + 10% weight loss ×0.3 + 0 muscle
       expect(result.weightLossPercent, closeTo(10.0, 0.001));
-      expect(result.score, closeTo(3.0, 0.01));
+      expect(result.score, closeTo(30.0, 0.1)); // ×10
     });
 
     test('ineligible participant scores as not-eligible', () {
@@ -884,7 +903,7 @@ void main() {
         baselineSubmitted: false,
       );
       final r = scoring.calculateOfficialWinnerScore(
-        participant: ineligible, baseline: null, latestProgress: null,
+        participant: ineligible, baseline: null, approvedProgress: const [],
         isChallengeCompleted: false);
       expect(r.isEligible, isFalse);
     });
@@ -893,6 +912,187 @@ void main() {
       expect(scoring.calculateWeightLossPercent(200, 180), closeTo(10.0, 0.001));
       expect(scoring.calculateBodyFatLossPoints(30, 25), closeTo(5.0, 0.001));
       expect(scoring.calculateConsistencyScore(5), closeTo(100.0, 0.001));
+    });
+  });
+
+  // ───────────────────────────────────────────────────────────────────────
+  group('Accumulated points (recommended model)', () {
+    final scoring = ChallengeScoringService();
+
+    ChallengeSubmission sub(String type,
+            {double? w, double? bf, double? mus, int? week, int day = 1,
+            dynamic rawW, dynamic rawBf, dynamic rawMus,
+            String status = ReviewStatus.approved}) =>
+        ChallengeSubmission(
+          id: '', challengeId: 'c', userId: 'u', type: type,
+          data: {
+            if (w != null) 'weight': w,
+            if (bf != null) 'bodyFat': bf,
+            if (mus != null) 'muscleMass': mus,
+            if (rawW != null) 'weight': rawW,
+            if (rawBf != null) 'bodyFat': rawBf,
+            if (rawMus != null) 'muscleMass': rawMus,
+            if (week != null) 'weekNumber': week,
+          },
+          reviewStatus: status,
+          createdAt: DateTime(2026, 1, day),
+        );
+
+    ChallengeParticipant part(
+            {bool disq = false, bool eligible = true,
+            String status = ParticipantStatus.active}) =>
+        ChallengeParticipant(
+          id: 'p', challengeId: 'c', userId: 'u', status: status,
+          paymentStatus: PaymentStatus.paid, amountDue: 0, amountCollected: 0,
+          eligibleForPrizes: eligible, disqualified: disq, baselineSubmitted: true,
+        );
+
+    // "Rahul" from the recommended-model document.
+    final rahulBaseline = sub(SubmissionType.baseline, w: 80, bf: 30, mus: 32);
+
+    test('accumulates points across check-ins (Rahul example)', () {
+      final w1 = sub(SubmissionType.weeklyCheckIn, w: 79, bf: 29.5, mus: 32, week: 1, day: 2);
+      final w2 = sub(SubmissionType.weeklyCheckIn, w: 76, bf: 27, mus: 33, week: 2, day: 3);
+      final w3 = sub(SubmissionType.weeklyCheckIn, w: 78, bf: 28, mus: 32.5, week: 3, day: 4); // worse
+      final w4 = sub(SubmissionType.weeklyCheckIn, w: 75, bf: 26, mus: 33, week: 4, day: 5);
+      final acc = scoring.calculateAccumulatedPoints(
+          baseline: rahulBaseline, approvedProgress: [w1, w2, w3, w4]);
+      // W1 +12.08, W2 +60.02, W3 +0 (regression), W4 +22.47 (beyond best) ≈ 94.56
+      expect(acc.points, closeTo(94.56, 0.5));
+    });
+
+    test('per-check-in awards break out points + deltas (§16)', () {
+      final w1 = sub(SubmissionType.weeklyCheckIn, w: 79, bf: 29.5, mus: 32, week: 1, day: 2);
+      final w2 = sub(SubmissionType.weeklyCheckIn, w: 76, bf: 27, mus: 33, week: 2, day: 3);
+      final w3 = sub(SubmissionType.weeklyCheckIn, w: 78, bf: 28, mus: 32.5, week: 3, day: 4);
+      final w4 = sub(SubmissionType.weeklyCheckIn, w: 75, bf: 26, mus: 33, week: 4, day: 5);
+      final awards = scoring.calculateCheckinAwards(
+          baseline: rahulBaseline, approvedProgress: [w1, w2, w3, w4]);
+      expect(awards.length, 4);
+      expect(awards[0].points, closeTo(12.08, 0.2));
+      expect(awards[1].points, closeTo(60.02, 0.3));
+      expect(awards[2].points, closeTo(0.0, 0.01)); // regression week
+      expect(awards[3].points, closeTo(22.47, 0.3));
+      expect(awards[3].runningTotal, closeTo(94.56, 0.5));
+      // Deltas since the previous check-in (W2 vs W1).
+      expect(awards[1].weightDelta, closeTo(-3.0, 0.001)); // 76 − 79
+      expect(awards[1].muscleDelta, closeTo(1.0, 0.001)); // 33 − 32
+    });
+
+    test('a poor week awards 0 and never subtracts', () {
+      final w1 = sub(SubmissionType.weeklyCheckIn, w: 76, bf: 27, mus: 33, week: 1, day: 2);
+      final w2 = sub(SubmissionType.weeklyCheckIn, w: 82, bf: 31, mus: 31, week: 2, day: 3); // worse
+      final acc = scoring.calculateAccumulatedPoints(
+          baseline: rahulBaseline, approvedProgress: [w1, w2]);
+      final acc1 = scoring.calculateAccumulatedPoints(
+          baseline: rahulBaseline, approvedProgress: [w1]);
+      expect(acc.points, closeTo(acc1.points, 0.001)); // W2 added nothing
+      expect(acc.points, greaterThan(0));
+    });
+
+    test('never negative (all worse than baseline)', () {
+      final w1 = sub(SubmissionType.weeklyCheckIn, w: 82, bf: 31, mus: 31, week: 1, day: 2);
+      final acc = scoring.calculateAccumulatedPoints(
+          baseline: rahulBaseline, approvedProgress: [w1]);
+      expect(acc.points, 0);
+    });
+
+    test('anti-farming: yo-yoing back to a best earns nothing extra', () {
+      final base = sub(SubmissionType.baseline, w: 80);
+      final w1 = sub(SubmissionType.weeklyCheckIn, w: 75, week: 1, day: 2); // best
+      final w2 = sub(SubmissionType.weeklyCheckIn, w: 80, week: 2, day: 3); // back up
+      final w3 = sub(SubmissionType.weeklyCheckIn, w: 75, week: 3, day: 4); // same best again
+      final acc = scoring.calculateAccumulatedPoints(
+          baseline: base, approvedProgress: [w1, w2, w3]);
+      // Only W1's 6.25% weight loss × 0.3 × 10 = 18.75 counts; W2/W3 add 0.
+      expect(acc.points, closeTo(18.75, 0.1));
+    });
+
+    test('a NEW personal best earns new points', () {
+      final base = sub(SubmissionType.baseline, w: 80);
+      final w1 = sub(SubmissionType.weeklyCheckIn, w: 75, week: 1, day: 2);
+      final w2 = sub(SubmissionType.weeklyCheckIn, w: 74, week: 2, day: 3); // new best
+      final acc = scoring.calculateAccumulatedPoints(
+          baseline: base, approvedProgress: [w1, w2]);
+      // W1: 6.25%×0.3×10 = 18.75; W2: (75-74)/75=1.333%×0.3×10 = 4.0 → 22.75
+      expect(acc.points, closeTo(22.75, 0.1));
+    });
+
+    test('missing a week compares to the latest available (not a fake value)', () {
+      final w1 = sub(SubmissionType.weeklyCheckIn, w: 79, bf: 29.5, mus: 32, week: 1, day: 2);
+      final w3 = sub(SubmissionType.weeklyCheckIn, w: 76, bf: 27, mus: 33, week: 3, day: 4);
+      final acc = scoring.calculateAccumulatedPoints(
+          baseline: rahulBaseline, approvedProgress: [w1, w3]);
+      // W3 measured vs W1 (the latest best) → same as Rahul's W1+W2 ≈ 72.1
+      expect(acc.points, closeTo(72.1, 0.5));
+    });
+
+    test('empty progress → 0 points', () {
+      final acc = scoring.calculateAccumulatedPoints(
+          baseline: rahulBaseline, approvedProgress: []);
+      expect(acc.points, 0);
+    });
+
+    test('String-typed measurements (Firestore drift) do not crash', () {
+      final base = sub(SubmissionType.baseline, rawW: '80', rawBf: '30', rawMus: '32');
+      final w1 = sub(SubmissionType.weeklyCheckIn, rawW: '79', rawBf: '29.5', rawMus: '32', week: 1, day: 2);
+      final acc = scoring.calculateAccumulatedPoints(
+          baseline: base, approvedProgress: [w1]);
+      expect(acc.points, closeTo(12.08, 0.1));
+    });
+
+    test('official score = accumulated points; completed needs a final', () {
+      final w2 = sub(SubmissionType.weeklyCheckIn, w: 76, bf: 27, mus: 33, week: 2);
+      final r1 = scoring.calculateOfficialWinnerScore(
+        participant: part(), baseline: rahulBaseline,
+        approvedProgress: [w2], isChallengeCompleted: false,
+      );
+      expect(r1.isEligible, isTrue);
+      expect(r1.score, greaterThan(0));
+      final r2 = scoring.calculateOfficialWinnerScore(
+        participant: part(), baseline: rahulBaseline,
+        approvedProgress: [w2], isChallengeCompleted: true,
+      );
+      expect(r2.isEligible, isFalse);
+      expect(r2.ineligibilityReason, contains('final'));
+    });
+
+    test('disqualified / payment-pending are ineligible', () {
+      final w2 = sub(SubmissionType.weeklyCheckIn, w: 76, bf: 27, week: 2);
+      expect(scoring.calculateOfficialWinnerScore(
+        participant: part(disq: true), baseline: rahulBaseline,
+        approvedProgress: [w2], isChallengeCompleted: false).isEligible, isFalse);
+      expect(scoring.calculateOfficialWinnerScore(
+        participant: part(eligible: false), baseline: rahulBaseline,
+        approvedProgress: [w2], isChallengeCompleted: false).isEligible, isFalse);
+    });
+
+    test('LEADERBOARD accumulates and a worse week adds nothing', () async {
+      final service = LeaderboardService(
+        challengeRepository: h.challengeRepo,
+        participantRepository: h.participantRepo,
+        submissionRepository: h.submissionRepo,
+        userRepository: UserRepository(firestore: h.db),
+        leaderboardRepository: LeaderboardRepository(firestore: h.db),
+      );
+
+      await h.seedChallenge();
+      await h.seedActivePaidParticipant(
+          challengeId: 'ch-1', userId: 'u1', weight: 200, bodyFat: 30, muscle: 40);
+      await h.submissions.submitWeeklyCheckIn('u1', 'ch-1',
+          {'weight': 190.0, 'bodyFat': 24.0, 'muscleMass': 44.0, 'weekNumber': 1});
+      final w1 = await h.latestSubmission('u1', SubmissionType.weeklyCheckIn);
+      await h.submissions.approveSubmission(w1!.id, ChallengeHarness.adminId);
+      await h.submissions.submitWeeklyCheckIn('u1', 'ch-1',
+          {'weight': 196.0, 'bodyFat': 28.0, 'muscleMass': 41.0, 'weekNumber': 2});
+      final w2 = await h.latestSubmission('u1', SubmissionType.weeklyCheckIn);
+      await h.submissions.approveSubmission(w2!.id, ChallengeHarness.adminId);
+
+      await service.recomputeAndPublish('ch-1');
+      final s = (await LeaderboardRepository(firestore: h.db).getStandings('ch-1')).first;
+      // Week 1: BF20%×0.5 + Wt5%×0.3 + Mus10%×0.2 = 13.5 → ×10 = 135. Week 2 worse → +0.
+      expect(s.officialScore, closeTo(135.0, 0.5));
+      expect(s.motivationalScore, closeTo(135.0, 0.5));
     });
   });
 }

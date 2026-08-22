@@ -90,6 +90,7 @@ class ChallengeNotificationService {
       category: 'participation',
       priority: 'high',
       data: {'challengeId': challengeId, 'reason': reason},
+      deepLink: 'challenge_detail',
     );
   }
 
@@ -118,10 +119,14 @@ class ChallengeNotificationService {
     }
   }
 
-  Future<void> notifySubmissionApproved(String userId, String challengeTitle, String submissionType, String challengeId) async {
+  Future<void> notifySubmissionApproved(String userId, String challengeTitle, String submissionType, String challengeId, {double? pointsEarned}) async {
     String body = 'Your ${_humanType(submissionType)} submission for "$challengeTitle" has been approved.';
     if (submissionType == 'baseline') {
       body = 'Your baseline has been approved. Your progress tracking for "$challengeTitle" is now active.';
+    } else if (pointsEarned != null && pointsEarned > 0.049) {
+      body = 'Your ${_humanType(submissionType)} check-in for "$challengeTitle" was approved — you earned +${pointsEarned.toStringAsFixed(1)} points! 🎉';
+    } else if (pointsEarned != null) {
+      body = 'Your ${_humanType(submissionType)} check-in for "$challengeTitle" was approved. No new personal best this time — your earned points are safe.';
     }
 
     await createChallengeNotification(

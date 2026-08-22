@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dispose_guard_notifier.dart';
 import 'package:elefit_app/features/challenge/data/models/challenge.dart';
 import 'package:elefit_app/features/challenge/data/models/challenge_winner.dart';
 import 'package:elefit_app/features/challenge/data/models/leaderboard_standing.dart';
@@ -17,7 +18,7 @@ class WinnerDraft {
   bool get isSelected => place > 0 || specialAward.trim().isNotEmpty;
 }
 
-class AdminWinnerSelectionProvider with ChangeNotifier {
+class AdminWinnerSelectionProvider with ChangeNotifier, DisposeGuardNotifier {
   final String challengeId;
   final String adminId;
   final WinnerSelectionService _service;

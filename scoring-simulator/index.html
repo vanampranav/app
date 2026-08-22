@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>EleFit Challenge — Leaderboard Simulator (Testing)</title>
+<style>
+  :root{
+    --bg:#0d0f0c; --surface:#161a13; --surface2:#1e2418; --line:#2a2f22;
+    --lime:#c7f94d; --lime-soft:rgba(199,249,77,.12);
+    --text:#f2f4ee; --muted:#9aa08d; --dim:#6c7160; --err:#ff6b6b;
+    --gold:#ffd700; --silver:#c9cdd4; --bronze:#cd8b52;
+    --radius:16px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1200px 600px at 50% -10%, #1a2013 0%, var(--bg) 55%);
+    color:var(--text);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    min-height:100vh;padding:24px 16px 72px}
+  .wrap{max-width:960px;margin:0 auto}
+  header{text-align:center;margin:8px 0 24px}
+  .badge{display:inline-block;font-size:11px;font-weight:800;letter-spacing:1px;text-transform:uppercase;
+    color:var(--lime);background:var(--lime-soft);border:1px solid rgba(199,249,77,.35);
+    padding:4px 10px;border-radius:999px;margin-bottom:12px}
+  h1{font-size:26px;margin:0 0 6px;letter-spacing:-.3px}
+  header p{color:var(--muted);margin:0;max-width:640px;margin-inline:auto}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:20px;margin:16px 0}
+  .card h2{font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin:0 0 16px;font-weight:800;
+    display:flex;align-items:center;gap:8px}
+  label{display:block;font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:var(--dim);margin-bottom:6px;font-weight:700}
+  input{background:var(--surface2);border:1px solid var(--line);color:var(--text);border-radius:10px;padding:9px 11px;
+    font-size:15px;outline:none;font-variant-numeric:tabular-nums;width:100%}
+  input:focus{border-color:var(--lime)}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .btn{cursor:pointer;border:none;border-radius:10px;font-weight:800;font-size:14px;padding:10px 16px;background:var(--lime);color:#0c0f08}
+  .btn:hover{filter:brightness(1.06)}
+  .btn.ghost{background:transparent;border:1px solid var(--line);color:var(--text)}
+  .btn.ghost:hover{border-color:var(--lime);color:var(--lime)}
+  .btn.sm{padding:7px 12px;font-size:13px}
+  .row-actions{display:flex;gap:10px;flex-wrap:wrap}
+  table{width:100%;border-collapse:collapse}
+  th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line);font-size:14px;font-variant-numeric:tabular-nums}
+  th{font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:var(--dim);font-weight:700}
+  td input{width:74px}
+  .x{cursor:pointer;color:var(--dim);background:none;border:none;font-size:18px;line-height:1;padding:4px}
+  .x:hover{color:var(--err)}
+
+  /* Leaderboard */
+  .lb-row{display:flex;align-items:center;gap:14px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;margin-bottom:10px;background:var(--surface2)}
+  .rank{width:34px;height:34px;flex:none;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    font-weight:800;font-size:15px;color:var(--dim);border:1px solid var(--line)}
+  .rank.r1{color:var(--gold);border-color:var(--gold);background:rgba(255,215,0,.1)}
+  .rank.r2{color:var(--silver);border-color:var(--silver);background:rgba(201,205,212,.1)}
+  .rank.r3{color:var(--bronze);border-color:var(--bronze);background:rgba(205,139,82,.12)}
+  .lb-name{flex:1;min-width:0}
+  .lb-name .n{font-weight:800;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .lb-name .sub{font-size:12px;color:var(--dim)}
+  .chip{display:inline-block;font-size:10px;font-weight:800;color:var(--lime);background:var(--lime-soft);border-radius:5px;padding:1px 6px;margin-left:6px}
+  .lb-pts{text-align:right;flex:none}
+  .lb-pts .p{font-size:22px;font-weight:800;color:var(--lime);line-height:1}
+  .lb-pts .l{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--dim)}
+  .notstarted .p{color:var(--dim)}
+
+  /* Participant cards */
+  details.pcard{border:1px solid var(--line);border-radius:12px;margin-bottom:12px;background:var(--surface2);overflow:hidden}
+  details.pcard>summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:12px;padding:12px 14px}
+  details.pcard>summary::-webkit-details-marker{display:none}
+  .caret{color:var(--dim);transition:transform .15s}
+  details[open] .caret{transform:rotate(90deg)}
+  .psum-name{flex:1;font-weight:800}
+  .psum-pts{color:var(--lime);font-weight:800;font-variant-numeric:tabular-nums}
+  .pbody{padding:0 14px 16px;border-top:1px solid var(--line)}
+  .prow{display:flex;gap:10px;align-items:flex-end;margin:14px 0}
+  .prow .grow{flex:1}
+  .mini{font-size:12px;color:var(--dim)}
+  .cpts{font-variant-numeric:tabular-nums;font-weight:800;text-align:right;white-space:nowrap}
+  code{background:var(--surface2);border:1px solid var(--line);border-radius:6px;padding:1px 6px;font-size:13px}
+  .wt{display:inline-block;font-size:10px;font-weight:800;color:var(--lime);background:var(--lime-soft);border-radius:5px;padding:1px 6px;margin-left:6px}
+  summary.rules-sum{cursor:pointer;font-weight:700;color:var(--lime);list-style:none}
+  summary.rules-sum::-webkit-details-marker{display:none}
+  footer{text-align:center;color:var(--dim);font-size:12px;margin-top:28px}
+  @media(max-width:600px){td input{width:60px}.lb-pts .p{font-size:19px}h1{font-size:22px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <span class="badge">Testing environment</span>
+    <h1>Challenge Leaderboard Simulator</h1>
+    <p>Add several challengers, each with their own baseline, weekly check-ins and admin bonus, and watch the leaderboard rank them — using the exact scoring model that runs in the app.</p>
+  </header>
+
+  <div class="card">
+    <h2>🏆 Leaderboard</h2>
+    <div id="lbRows"></div>
+  </div>
+
+  <div class="row-actions" style="margin:0 0 8px">
+    <button class="btn sm" onclick="addParticipant()">+ Add challenger</button>
+    <button class="btn ghost sm" onclick="loadSample()">Load sample challenge</button>
+    <button class="btn ghost sm" onclick="resetAll()">Reset</button>
+  </div>
+
+  <div id="participants"></div>
+
+  <div class="card">
+    <h2>How the scoring works</h2>
+    <details>
+      <summary class="rules-sum">Show the rules</summary>
+      <p style="margin-top:10px">Each approved check-in <b>adds points</b> for improvement — points stack up and <b>never go down</b> (a poor week earns 0). The leaderboard ranks everyone by <b>total points + admin bonus</b>.</p>
+      <p>Weighted: Body-fat lost <span class="wt">50%</span> · Weight lost <span class="wt">30%</span> · Muscle gained <span class="wt">20%</span>. Then <code>points = max(0, weekly) &times; 10</code>.</p>
+      <p><b>Anti-farming:</b> improvement counts only <b>beyond your best-so-far</b> — yo-yoing to a weight you already hit earns nothing.</p>
+    </details>
+  </div>
+
+  <footer>EleFit — internal leaderboard test tool. Numbers mirror the app&rsquo;s live scoring engine.</footer>
+</div>
+
+<script>
+  var BF_W=0.5, WT_W=0.3, MUS_W=0.2, SCALE=10;
+  function num(v){ if(v===null||v===undefined) return null; var s=String(v).trim(); if(s==='') return null; var n=parseFloat(s); return isNaN(n)?null:n; }
+  function fmt(n){ return (Math.round(n*10)/10).toFixed(1); }
+
+  // Accumulated points for one participant (mirrors calculateAccumulatedPoints).
+  function score(p){
+    var bestWt=num(p.base.weight), bestBF=num(p.base.fat), bestMus=num(p.base.muscle);
+    var total=0, awards=[];
+    p.checks.forEach(function(c){
+      var wt=num(c.weight), bf=num(c.fat), mus=num(c.muscle);
+      var wImp =(bestWt!==null&&bestWt>0&&wt!==null&&wt<bestWt)?(bestWt-wt)/bestWt*100:0;
+      var bfImp=(bestBF!==null&&bestBF>0&&bf!==null&&bf<bestBF)?(bestBF-bf)/bestBF*100:0;
+      var mImp =(bestMus!==null&&bestMus>0&&mus!==null&&mus>bestMus)?(mus-bestMus)/bestMus*100:0;
+      var weekly=bfImp*BF_W+wImp*WT_W+mImp*MUS_W;
+      var pts=weekly>0?weekly*SCALE:0;
+      total+=pts;
+      awards.push({points:pts, total:total});
+      if(wt!==null &&(bestWt===null ||wt<bestWt))  bestWt=wt;
+      if(bf!==null &&(bestBF===null ||bf<bestBF))  bestBF=bf;
+      if(mus!==null&&(bestMus===null||mus>bestMus)) bestMus=mus;
+    });
+    var baseWt=num(p.base.weight), baseBF=num(p.base.fat), baseMus=num(p.base.muscle);
+    var dWt =(baseWt!==null&&bestWt!==null&&baseWt>0)?(baseWt-bestWt)/baseWt*100:0;
+    var dBF =(baseBF!==null&&bestBF!==null&&baseBF>0)?(baseBF-bestBF)/baseBF*100:0;
+    var dMus=(baseMus!==null&&bestMus!==null&&baseMus>0)?(bestMus-baseMus)/baseMus*100:0;
+    var bonus=num(p.bonus)||0;
+    var approved=p.checks.filter(function(c){return num(c.weight)!==null||num(c.fat)!==null||num(c.muscle)!==null;}).length;
+    return { total:total, rankScore:total+bonus, bonus:bonus, checkins:approved, awards:awards, dWt:dWt, dBF:dBF, dMus:dMus };
+  }
+
+  var participants=[];
+  function blankP(name){ return { name:name||'', bonus:'', base:{weight:'',fat:'',muscle:''}, checks:[] }; }
+
+  function upd(pi,f,v){ participants[pi][f]=v; recompute(); }
+  function updBase(pi,f,v){ participants[pi].base[f]=v; recompute(); }
+  function updCheck(pi,ci,f,v){ participants[pi].checks[ci][f]=v; recompute(); }
+  function addParticipant(){ participants.push(blankP('Challenger '+(participants.length+1))); render(); }
+  function removeP(pi){ participants.splice(pi,1); render(); }
+  function addC(pi){ participants[pi].checks.push({weight:'',fat:'',muscle:''}); render(); }
+  function removeC(pi,ci){ participants[pi].checks.splice(ci,1); render(); }
+
+  function render(){
+    var host=document.getElementById('participants'); host.innerHTML='';
+    participants.forEach(function(p,pi){
+      var d=document.createElement('details'); d.className='pcard'; d.open=true;
+      var rowsHtml='';
+      p.checks.forEach(function(c,ci){
+        rowsHtml+='<tr><td class="mini" style="font-weight:800;white-space:nowrap">Week '+(ci+1)+'</td>'+
+          '<td><input type="number" step="0.1" value="'+(c.weight||'')+'" oninput="updCheck('+pi+','+ci+',\'weight\',this.value)"></td>'+
+          '<td><input type="number" step="0.1" value="'+(c.fat||'')+'" oninput="updCheck('+pi+','+ci+',\'fat\',this.value)"></td>'+
+          '<td><input type="number" step="0.1" value="'+(c.muscle||'')+'" oninput="updCheck('+pi+','+ci+',\'muscle\',this.value)"></td>'+
+          '<td class="cpts" id="cpts-'+pi+'-'+ci+'">&mdash;</td>'+
+          '<td><button class="x" onclick="removeC('+pi+','+ci+')" title="Remove">&times;</button></td></tr>';
+      });
+      d.innerHTML =
+        '<summary><span class="caret">&#9656;</span>'+
+          '<span class="psum-name" id="psname-'+pi+'"></span>'+
+          '<span class="psum-pts" id="pspts-'+pi+'">0.0 pts</span></summary>'+
+        '<div class="pbody">'+
+          '<div class="prow">'+
+            '<div class="grow"><label>Name</label><input value="'+(p.name||'').replace(/"/g,"&quot;")+'" oninput="upd('+pi+',\'name\',this.value)"></div>'+
+            '<div style="width:130px"><label>Admin bonus (pts)</label><input type="number" step="1" value="'+(p.bonus||'')+'" oninput="upd('+pi+',\'bonus\',this.value)"></div>'+
+            '<button class="x" onclick="removeP('+pi+')" title="Remove challenger" style="font-size:22px">&times;</button>'+
+          '</div>'+
+          '<label>Baseline</label>'+
+          '<div class="grid3">'+
+            '<input type="number" step="0.1" placeholder="Weight" value="'+(p.base.weight||'')+'" oninput="updBase('+pi+',\'weight\',this.value)">'+
+            '<input type="number" step="0.1" placeholder="Body fat %" value="'+(p.base.fat||'')+'" oninput="updBase('+pi+',\'fat\',this.value)">'+
+            '<input type="number" step="0.1" placeholder="Muscle" value="'+(p.base.muscle||'')+'" oninput="updBase('+pi+',\'muscle\',this.value)">'+
+          '</div>'+
+          '<label style="margin-top:16px">Weekly check-ins</label>'+
+          '<table><thead><tr><th>Check-in</th><th>Weight</th><th>Body fat</th><th>Muscle</th><th style="text-align:right">Points</th><th></th></tr></thead><tbody>'+rowsHtml+'</tbody></table>'+
+          '<div style="margin-top:12px"><button class="btn ghost sm" onclick="addC('+pi+')">+ Add check-in</button></div>'+
+        '</div>';
+      host.appendChild(d);
+    });
+    recompute();
+  }
+
+  function recompute(){
+    var results=participants.map(function(p){ return score(p); });
+    // update each participant summary + per-check-in points
+    results.forEach(function(r,pi){
+      var nEl=document.getElementById('psname-'+pi); if(nEl) nEl.textContent = participants[pi].name || ('Challenger '+(pi+1));
+      var pEl=document.getElementById('pspts-'+pi); if(pEl) pEl.textContent = fmt(r.rankScore)+' pts';
+      r.awards.forEach(function(a,ci){
+        var cell=document.getElementById('cpts-'+pi+'-'+ci);
+        if(!cell) return;
+        var earned=a.points>0.049;
+        cell.textContent=(earned?'+':'')+fmt(a.points);
+        cell.title='Running total: '+fmt(a.total);
+        cell.style.color= earned?'var(--lime)':'var(--dim)';
+      });
+    });
+    // rank
+    var order=participants.map(function(_,i){return i;});
+    order.sort(function(a,b){
+      if(results[b].rankScore!==results[a].rankScore) return results[b].rankScore-results[a].rankScore;
+      var aStarted=results[a].checkins>0, bStarted=results[b].checkins>0;
+      if(aStarted!==bStarted) return aStarted?-1:1;
+      return 0;
+    });
+    var lb=document.getElementById('lbRows'); lb.innerHTML='';
+    if(!participants.length){ lb.innerHTML='<div class="mini">Add a challenger to see the ranking.</div>'; return; }
+    order.forEach(function(pi,idx){
+      var r=results[pi], rank=idx+1, name=participants[pi].name||('Challenger '+(pi+1));
+      var started=r.checkins>0;
+      var rc='rank'+(rank<=3?' r'+rank:'');
+      var trans = started
+        ? 'Body fat &minus;'+fmt(r.dBF)+'% &middot; Weight &minus;'+fmt(r.dWt)+'% &middot; Muscle +'+fmt(r.dMus)+'%'
+        : 'Not started';
+      var bonusChip = r.bonus ? '<span class="chip">'+(r.bonus>0?'+':'')+fmt(r.bonus)+' bonus</span>' : '';
+      var row=document.createElement('div'); row.className='lb-row'+(started?'':' notstarted');
+      row.innerHTML =
+        '<div class="'+rc+'">'+rank+'</div>'+
+        '<div class="lb-name"><div class="n">'+escapeHtml(name)+bonusChip+'</div>'+
+          '<div class="sub">'+(started?(r.checkins+' check-in'+(r.checkins===1?'':'s')+' &middot; '+trans):'Not started')+'</div></div>'+
+        '<div class="lb-pts"><div class="p">'+(started||r.bonus?fmt(r.rankScore):'—')+'</div><div class="l">points</div></div>';
+      lb.appendChild(row);
+    });
+  }
+
+  function escapeHtml(s){ return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+
+  function loadSample(){
+    participants=[
+      { name:'Aisha', bonus:'', base:{weight:'80',fat:'30',muscle:'32'},
+        checks:[{weight:'78',fat:'28',muscle:'33'},{weight:'75',fat:'26',muscle:'34'},{weight:'73',fat:'24',muscle:'34.5'}] },
+      { name:'Rahul', bonus:'', base:{weight:'80',fat:'30',muscle:'32'},
+        checks:[{weight:'79',fat:'29.5',muscle:'32'},{weight:'76',fat:'27',muscle:'33'},{weight:'78',fat:'28',muscle:'32.5'},{weight:'75',fat:'26',muscle:'33'}] },
+      { name:'Priya', bonus:'20', base:{weight:'90',fat:'32',muscle:'30'},
+        checks:[{weight:'89',fat:'31.5',muscle:'30'},{weight:'88',fat:'31',muscle:'30.5'}] },
+      { name:'Maya (yo-yo)', bonus:'', base:{weight:'80',fat:'',muscle:''},
+        checks:[{weight:'75',fat:'',muscle:''},{weight:'80',fat:'',muscle:''},{weight:'75',fat:'',muscle:''}] },
+      { name:'Dev', bonus:'', base:{weight:'85',fat:'29',muscle:'31'}, checks:[] }
+    ];
+    render();
+  }
+  function resetAll(){ participants=[ blankP('Challenger 1') ]; participants[0].checks=[{weight:'',fat:'',muscle:''}]; render(); }
+
+  loadSample();
+</script>
+</body>
+</html>

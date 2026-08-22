@@ -122,8 +122,7 @@ class _ChallengePackageSelectionContentState extends State<_ChallengePackageSele
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              'Select one package for this challenge — tap it and a check mark '
-              'appears on the right. Then tap Continue at the bottom to join.',
+              'Select a package and tap Continue to join the challenge.',
               style: AppTheme.bodyMD.copyWith(color: AppTheme.textSecondary, height: 1.4),
             ),
           ),

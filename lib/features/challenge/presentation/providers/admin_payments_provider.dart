@@ -7,6 +7,7 @@ import 'package:elefit_app/features/challenge/data/repositories/user_repository.
 import 'package:elefit_app/features/challenge/domain/services/payment_approval_service.dart';
 import 'package:elefit_app/features/challenge/data/constants/firestore_collections.dart';
 import 'challenge_error_text.dart';
+import 'dispose_guard_notifier.dart';
 
 class PaymentViewModel {
   final PaymentRecord payment;
@@ -18,7 +19,7 @@ class PaymentViewModel {
   });
 }
 
-class AdminPaymentsProvider with ChangeNotifier {
+class AdminPaymentsProvider with ChangeNotifier, DisposeGuardNotifier {
   final String challengeId;
   final PaymentRecordRepository _paymentRepository;
   final ChallengeParticipantRepository _participantRepository;

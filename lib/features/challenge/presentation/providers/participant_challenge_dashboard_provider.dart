@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dispose_guard_notifier.dart';
 import 'package:flutter/material.dart';
 import 'package:elefit_app/features/challenge/data/models/challenge.dart';
 import 'package:elefit_app/features/challenge/data/models/challenge_participant.dart';
@@ -10,7 +11,7 @@ import 'package:elefit_app/features/challenge/data/repositories/challenge_submis
 import 'package:elefit_app/features/challenge/data/repositories/payment_record_repository.dart';
 import 'package:elefit_app/features/challenge/data/constants/firestore_collections.dart';
 
-class ParticipantChallengeDashboardProvider with ChangeNotifier {
+class ParticipantChallengeDashboardProvider with ChangeNotifier, DisposeGuardNotifier {
   final String challengeId;
   final String userId;
   final ChallengeRepository _challengeRepository;

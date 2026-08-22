@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:elefit_app/theme/app_theme.dart';
 import 'package:elefit_app/widgets/ef_components.dart';
 import 'package:elefit_app/features/challenge/presentation/providers/leaderboard_insights_provider.dart';
-import 'package:elefit_app/features/challenge/domain/services/challenge_scoring_service.dart';
 
 class ScoreBreakdownCard extends StatelessWidget {
   final ParticipantLeaderboardInsights insights;
@@ -20,37 +19,30 @@ class ScoreBreakdownCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('LEADERBOARD SCORE', style: AppTheme.labelMD.copyWith(letterSpacing: 2)),
-              const SizedBox(height: 20),
-              _buildScoreItem('Weight Loss', breakdown.weightLossScore, Icons.fitness_center_rounded),
-              const SizedBox(height: 12),
-              _buildScoreItem('Body Fat Loss', breakdown.fatLossScore, Icons.monitor_weight_outlined),
-              const SizedBox(height: 12),
-              _buildScoreItem('Consistency', breakdown.consistencyScore, Icons.event_repeat_rounded),
-              const Divider(height: 32, color: Colors.white10),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Expanded(
-                    child: Text(
-                      'MOTIVATIONAL SCORE',
-                      style: AppTheme.labelLG.copyWith(color: AppTheme.lime),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
+                  Text('TOTAL POINTS', style: AppTheme.labelMD.copyWith(letterSpacing: 2, color: AppTheme.lime)),
                   Text(
                     breakdown.totalLeaderboardScore.toStringAsFixed(1),
-                    style: AppTheme.numericLG.copyWith(color: AppTheme.lime, fontSize: 24),
+                    style: AppTheme.numericLG.copyWith(color: AppTheme.lime, fontSize: 30),
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 6),
               Text(
-                'This score is motivational and includes consistency to help you stay engaged.',
+                'Earned across your approved check-ins. Points only go up — a poor week never costs you points.',
                 style: AppTheme.bodySM.copyWith(color: AppTheme.textTertiary, fontStyle: FontStyle.italic),
               ),
+              const Divider(height: 32, color: Colors.white10),
+              Text('YOUR BEST TRANSFORMATION SO FAR', style: AppTheme.labelSM.copyWith(color: AppTheme.textTertiary, letterSpacing: 1.2)),
+              const SizedBox(height: 16),
+              _buildScoreItem('Body fat (50%)', breakdown.fatLossScore, Icons.monitor_weight_outlined, suffix: '%'),
+              const SizedBox(height: 12),
+              _buildScoreItem('Weight (30%)', breakdown.weightLossScore, Icons.fitness_center_rounded, suffix: '%'),
+              const SizedBox(height: 12),
+              _buildScoreItem('Muscle (20%)', breakdown.muscleGainScore, Icons.sports_gymnastics_rounded, suffix: '%'),
             ],
           ),
         ),
@@ -63,26 +55,16 @@ class ScoreBreakdownCard extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('OFFICIAL PROGRESS', style: AppTheme.labelMD.copyWith(letterSpacing: 2)),
+                  Text('PRIZE ELIGIBILITY', style: AppTheme.labelMD.copyWith(letterSpacing: 2)),
                   _buildEligibilityBadge(official.isEligible),
                 ],
               ),
               const SizedBox(height: 20),
               if (official.isEligible) ...[
-                _buildOfficialMetricRow(official),
-                if (official.metric == 'compositeScore') ...[
-                  const SizedBox(height: 16),
-                  _buildComponentRow('Body Fat % Change (50%)', official.bodyFatChangePercent),
-                  const SizedBox(height: 8),
-                  _buildComponentRow('Weight Loss (30%)', official.weightLossPercent),
-                  const SizedBox(height: 8),
-                  _buildComponentRow('Muscle Gain (20%)', official.muscleGainPercent),
-                ],
-                const SizedBox(height: 12),
                 Text(
-                  insights.isProjectedOfficialRanking 
-                      ? 'Final prize winners are determined using approved official measurements only. Current progress is projected.'
-                      : 'Official ranking based on approved final measurements.',
+                  insights.isProjectedOfficialRanking
+                      ? "You're on track for prizes. Winners are decided from approved official measurements, so keep your submissions up to date."
+                      : 'Your final measurements are approved — you are ranked for prizes.',
                   style: AppTheme.bodySM.copyWith(color: AppTheme.textSecondary),
                 ),
               ] else ...[
@@ -121,58 +103,7 @@ class ScoreBreakdownCard extends StatelessWidget {
     );
   }
 
-  Widget _buildComponentRow(String label, double percent) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Expanded(
-          child: Text(label,
-              style: AppTheme.bodySM.copyWith(color: AppTheme.textSecondary),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis),
-        ),
-        const SizedBox(width: 8),
-        Text('${percent.toStringAsFixed(1)}%',
-            style: AppTheme.numericMD.copyWith(fontSize: 14)),
-      ],
-    );
-  }
-
-  Widget _buildOfficialMetricRow(OfficialWinnerData data) {
-    String label = 'Official Score';
-    String unit = '';
-    if (data.metric == 'compositeScore') {
-      label = 'Participant Score';
-      unit = '';
-    } else if (data.metric == 'bodyFatLossPoints') {
-      label = 'Body Fat Points Lost';
-      unit = ' pts';
-    } else if (data.metric == 'weightLossPercent') {
-      label = 'Weight Loss';
-      unit = '%';
-    }
-
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Expanded(
-          child: Text(
-            label,
-            style: AppTheme.bodyMD.copyWith(fontWeight: FontWeight.bold),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Text(
-          '${data.score?.toStringAsFixed(2) ?? "0.00"}$unit',
-          style: AppTheme.numericLG.copyWith(color: AppTheme.textPrimary, fontSize: 20),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildScoreItem(String label, double score, IconData icon) {
+  Widget _buildScoreItem(String label, double score, IconData icon, {String suffix = ''}) {
     return Row(
       children: [
         Container(
@@ -206,7 +137,7 @@ class ScoreBreakdownCard extends StatelessWidget {
         ),
         const SizedBox(width: 16),
         Text(
-          score.toStringAsFixed(1),
+          '${score.toStringAsFixed(1)}$suffix',
           style: AppTheme.numericMD.copyWith(fontSize: 16),
         ),
       ],

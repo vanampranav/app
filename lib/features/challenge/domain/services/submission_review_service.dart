@@ -5,9 +5,12 @@ import 'package:elefit_app/features/challenge/data/repositories/challenge_reposi
 import 'package:elefit_app/features/challenge/data/constants/firestore_collections.dart';
 import 'admin_audit_service.dart';
 import 'challenge_notification_service.dart';
+import 'challenge_scoring_service.dart';
 import 'leaderboard_service.dart';
 
 class SubmissionReviewService {
+  final ChallengeScoringService _scoring = ChallengeScoringService();
+
   final ChallengeSubmissionRepository _submissionRepository;
   final ChallengeParticipantRepository _participantRepository;
   final ChallengeRepository _challengeRepository;
@@ -210,7 +213,36 @@ class SubmissionReviewService {
 
     final challenge = await _challengeRepository.getChallengeById(submission.challengeId);
     if (challenge != null) {
-      await _notificationService.notifySubmissionApproved(submission.userId, challenge.title, submission.type, submission.challengeId);
+      // Points earned by THIS check-in (for the approval notification, §16).
+      double? pointsEarned;
+      if (submission.type != SubmissionType.baseline) {
+        try {
+          final approved = (await _submissionRepository
+                  .streamSubmissionsByParticipant(submission.userId)
+                  .first)
+              .where((s) =>
+                  s.challengeId == submission.challengeId &&
+                  s.reviewStatus == ReviewStatus.approved)
+              .toList();
+          final baseline =
+              approved.firstWhere((s) => s.type == SubmissionType.baseline);
+          final progress =
+              approved.where((s) => s.type != SubmissionType.baseline).toList();
+          final awards = _scoring.calculateCheckinAwards(
+              baseline: baseline, approvedProgress: progress);
+          for (final a in awards) {
+            if (a.submissionId == submission.id) {
+              pointsEarned = a.points;
+              break;
+            }
+          }
+        } catch (_) {
+          pointsEarned = null; // no approved baseline yet, or bad data
+        }
+      }
+      await _notificationService.notifySubmissionApproved(
+          submission.userId, challenge.title, submission.type, submission.challengeId,
+          pointsEarned: pointsEarned);
     }
 
     await _refreshLeaderboard(submission.challengeId);

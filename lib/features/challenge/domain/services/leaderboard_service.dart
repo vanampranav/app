@@ -140,37 +140,28 @@ class LeaderboardService {
         final baseline =
             subs.firstWhere((s) => s.type == SubmissionType.baseline);
 
+        // "Last updated" label + timestamp come from the most recent activity.
         subs.sort((a, b) => (b.createdAt ?? DateTime(0))
             .compareTo(a.createdAt ?? DateTime(0)));
         final latest = subs.first;
 
-        final double startW = (baseline.data['weight'] as num).toDouble();
-        final double latestW = (latest.data['weight'] as num).toDouble();
-        final double pctW = _scoring.calculateWeightLossPercent(startW, latestW);
+        // ACCUMULATED POINTS: points are earned at every approved check-in for
+        // improvement beyond the participant's best, added to a running total
+        // (never negative). The leaderboard ranks by this SAME score that
+        // decides winners.
+        final approvedProgress =
+            subs.where((s) => s.type != SubmissionType.baseline).toList();
+        final acc = _scoring.calculateAccumulatedPoints(
+            baseline: baseline, approvedProgress: approvedProgress);
 
-        final double? startBF = baseline.data['bodyFat'] != null
+        // Absolute body-fat points lost to best (display only).
+        final double? startBF = baseline.data['bodyFat'] is num
             ? (baseline.data['bodyFat'] as num).toDouble()
             : null;
-        final double? latestBF = latest.data['bodyFat'] != null
-            ? (latest.data['bodyFat'] as num).toDouble()
-            : null;
-        final double lostBF =
-            _scoring.calculateBodyFatLossPoints(startBF, latestBF);
+        final double lostBF = (startBF ?? 0) * acc.bodyFatChangePercent / 100;
 
-        // Composite-score components (relative % changes) for the official metric.
-        final double? startMuscle = baseline.data['muscleMass'] != null
-            ? (baseline.data['muscleMass'] as num).toDouble()
-            : null;
-        final double? latestMuscle = latest.data['muscleMass'] != null
-            ? (latest.data['muscleMass'] as num).toDouble()
-            : null;
-        final double bfChangePct =
-            _scoring.calculateBodyFatChangePercent(startBF, latestBF);
-        final double muscleGainPct =
-            _scoring.calculateMuscleGainPercent(startMuscle, latestMuscle);
-
-        // Consistency counts DISTINCT weeks with an approved check-in — not the
-        // raw submission count — so resubmissions / duplicate docs can't inflate it.
+        // Consistency counts DISTINCT weeks with an approved check-in (kept as an
+        // informational stat — it no longer affects the score).
         final int distinctWeeklyWeeks = subs
             .where((s) => s.type == SubmissionType.weeklyCheckIn)
             .map((s) => s.data['weekNumber'])
@@ -179,17 +170,11 @@ class LeaderboardService {
             .length;
         final double consistency =
             _scoring.calculateConsistencyScore(distinctWeeklyWeeks);
-        final double motivational =
-            _scoring.calculateMotivationalLeaderboardScore(
-          weightLossPercent: pctW,
-          bodyFatLossPoints: lostBF,
-          consistencyScore: consistency,
-        );
 
         final official = _scoring.calculateOfficialWinnerScore(
           participant: participant,
           baseline: baseline,
-          latestProgress: latest,
+          approvedProgress: approvedProgress,
           isChallengeCompleted: isCompleted,
         );
 
@@ -213,10 +198,11 @@ class LeaderboardService {
         standings.add(LeaderboardStanding(
           userId: userId,
           displayName: displayName,
-          // Fold in the admin's manual bonus/penalty so it affects ranking.
-          motivationalScore: motivational + participant.bonusPoints,
+          // Accumulated points + the admin's manual bonus/penalty (so a bonus
+          // lifts the participant on the same scale that decides winners).
+          motivationalScore: acc.points + participant.bonusPoints,
           bonusPoints: participant.bonusPoints,
-          weightLossPercent: pctW,
+          weightLossPercent: acc.weightLossPercent,
           bodyFatLossPoints: lostBF,
           consistencyScore: consistency,
           latestSubmissionType: latest.type,
@@ -227,8 +213,8 @@ class LeaderboardService {
           officialMetric: official.metric,
           officialEligible: official.isEligible,
           officialIneligibilityReason: official.ineligibilityReason,
-          bodyFatChangePercent: bfChangePct,
-          muscleGainPercent: muscleGainPct,
+          bodyFatChangePercent: acc.bodyFatChangePercent,
+          muscleGainPercent: acc.muscleGainPercent,
         ));
       } catch (_) {
         // Skip participants without an approved baseline / malformed data.

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:elefit_app/utils/safe_image_picker.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -260,11 +261,7 @@ class _NutritionLogScreenState extends State<NutritionLogScreen> {
 
     if (source == null) return;
 
-    final XFile? image = await _picker.pickImage(
-      source: source,
-      imageQuality: 80,
-      maxWidth: 1024,
-    );
+    final XFile? image = await safePickImage(context, _picker, source: source, imageQuality: 80, maxWidth: 1024);
     if (image == null) return;
 
     final imageFile = File(image.path);

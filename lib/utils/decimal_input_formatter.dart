@@ -30,8 +30,16 @@ class DecimalTextInputFormatter extends TextInputFormatter {
 
 /// Formats a numeric measurement for display in a text field: trims raw float
 /// precision to at most 1 decimal and drops a trailing ".0" (70.0 → "70").
-String formatMeasurement(num? value) {
-  if (value == null) return '';
-  final s = value.toStringAsFixed(1);
+///
+/// Accepts a raw dynamic value (num, numeric String, or null) because Firestore
+/// docs written by the REST / AI-Coach flow sometimes store numbers as Strings —
+/// a hard `as num` cast on those would crash the screen. Anything unparseable
+/// yields an empty string.
+String formatMeasurement(dynamic value) {
+  final num? n = value is num
+      ? value
+      : (value is String ? num.tryParse(value) : null);
+  if (n == null) return '';
+  final s = n.toStringAsFixed(1);
   return s.endsWith('.0') ? s.substring(0, s.length - 2) : s;
 }

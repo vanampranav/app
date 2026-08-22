@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dispose_guard_notifier.dart';
 import 'package:elefit_app/features/challenge/presentation/providers/challenge_error_text.dart';
 import 'package:elefit_app/features/challenge/challenge_auth_guard.dart';
 import 'dart:io';
@@ -17,7 +18,7 @@ import 'package:elefit_app/features/challenge/data/constants/firestore_collectio
 import 'package:elefit_app/services/member_service.dart';
 import 'package:elefit_app/services/analytics_service.dart';
 
-class ParticipantBaselineSubmissionProvider with ChangeNotifier {
+class ParticipantBaselineSubmissionProvider with ChangeNotifier, DisposeGuardNotifier {
   final String challengeId;
   final String userId;
   final ChallengeRepository _challengeRepository;

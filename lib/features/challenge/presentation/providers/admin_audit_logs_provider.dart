@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dispose_guard_notifier.dart';
 import 'package:flutter/material.dart';
 import 'package:elefit_app/features/challenge/data/models/admin_audit_log.dart';
 import 'package:elefit_app/features/challenge/data/repositories/user_repository.dart';
@@ -14,7 +15,7 @@ class AuditLogViewModel {
   });
 }
 
-class AdminAuditLogsProvider with ChangeNotifier {
+class AdminAuditLogsProvider with ChangeNotifier, DisposeGuardNotifier {
   final String challengeId;
   final AdminAuditService _auditService;
   final UserRepository _userRepository;

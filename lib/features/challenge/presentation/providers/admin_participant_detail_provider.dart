@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
+import 'dispose_guard_notifier.dart';
 import 'package:elefit_app/features/challenge/data/models/app_user.dart';
 import 'package:elefit_app/features/challenge/data/models/challenge_participant.dart';
 import 'package:elefit_app/features/challenge/data/repositories/user_repository.dart';
 import 'package:elefit_app/features/challenge/data/repositories/challenge_participant_repository.dart';
 import 'challenge_error_text.dart';
 
-class AdminParticipantDetailProvider with ChangeNotifier {
+class AdminParticipantDetailProvider with ChangeNotifier, DisposeGuardNotifier {
   final String userId;
   final String? challengeId;
   final UserRepository _userRepository;

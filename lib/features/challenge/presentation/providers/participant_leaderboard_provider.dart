@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dispose_guard_notifier.dart';
 import 'package:flutter/material.dart';
 import 'package:elefit_app/features/challenge/data/models/challenge.dart';
 import 'package:elefit_app/features/challenge/data/models/leaderboard_standing.dart';
@@ -53,7 +54,7 @@ class LeaderboardEntry {
 /// admin-context recompute publishes. Participants have read-only access, so
 /// this no longer triggers the permission-denied error the old raw-data reads
 /// caused.
-class ParticipantLeaderboardProvider with ChangeNotifier {
+class ParticipantLeaderboardProvider with ChangeNotifier, DisposeGuardNotifier {
   final String challengeId;
   final ChallengeRepository _challengeRepository;
   final LeaderboardRepository _leaderboardRepository;

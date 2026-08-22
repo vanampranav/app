@@ -4,6 +4,13 @@
 <dict>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<!-- Disable Firebase's UIApplicationDelegate method swizzling. Both Firebase
+	     and OneSignal swizzle the notification-delegate methods; on a cold launch
+	     triggered by tapping a push (killed app), the two swizzles collide and the
+	     app crashes natively before Flutter starts. This app does not use FCM, so
+	     letting only OneSignal own the notification delegate is safe. -->
+	<key>FirebaseAppDelegateProxyEnabled</key>
+	<false/>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
@@ -44,9 +51,9 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>EleFit uses your camera to scan barcodes and take photos of your meals for AI-powered nutrition logging.</string>
+	<string>EleFit uses your camera to take photos of your meals and your challenge progress, and to scan barcodes for nutrition logging.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>EleFit needs access to your photo library to log meals from existing photos.</string>
+	<string>EleFit needs access to your photos to log meals and to add progress and payment photos for challenges.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>We need Bluetooth access to connect to your smart scale and receive weight data.</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>

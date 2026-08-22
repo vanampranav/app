@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dispose_guard_notifier.dart';
 import 'package:flutter/material.dart';
 import 'package:elefit_app/features/challenge/data/models/challenge_participant.dart';
 import 'package:elefit_app/features/challenge/data/repositories/challenge_participant_repository.dart';
@@ -26,7 +27,7 @@ class ParticipantEligibilityViewModel {
     !participant.disqualified;
 }
 
-class AdminEligibilityDashboardProvider with ChangeNotifier {
+class AdminEligibilityDashboardProvider with ChangeNotifier, DisposeGuardNotifier {
   final String challengeId;
   final ChallengeParticipantRepository _participantRepository;
   final UserRepository _userRepository;

@@ -8,6 +8,7 @@ import 'package:elefit_app/features/challenge/data/models/challenge_submission.d
 import 'package:elefit_app/features/challenge/data/repositories/challenge_submission_repository.dart';
 import 'package:elefit_app/features/challenge/domain/services/auth_service.dart';
 import 'package:elefit_app/features/challenge/presentation/providers/participant_my_submissions_provider.dart';
+import 'package:elefit_app/features/challenge/domain/services/challenge_scoring_service.dart';
 
 class ParticipantMySubmissionsScreen extends StatelessWidget {
   final String challengeId;
@@ -116,13 +117,15 @@ class _ParticipantMySubmissionsContent extends StatelessWidget {
   }
 
   Widget _buildSubmissionList(BuildContext context, ParticipantMySubmissionsProvider provider) {
+    final awards = provider.awardsBySubmission;
     return ListView.separated(
       padding: const EdgeInsets.all(20),
       itemCount: provider.submissions.length,
       separatorBuilder: (_, __) => const SizedBox(height: 16),
       itemBuilder: (ctx, i) {
         final submission = provider.submissions[i];
-        return _ParticipantSubmissionCard(submission: submission);
+        return _ParticipantSubmissionCard(
+            submission: submission, award: awards[submission.id]);
       },
     );
   }
@@ -152,8 +155,9 @@ class _ParticipantMySubmissionsContent extends StatelessWidget {
 
 class _ParticipantSubmissionCard extends StatelessWidget {
   final ChallengeSubmission submission;
+  final CheckinAward? award;
 
-  const _ParticipantSubmissionCard({Key? key, required this.submission}) : super(key: key);
+  const _ParticipantSubmissionCard({Key? key, required this.submission, this.award}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -191,6 +195,13 @@ class _ParticipantSubmissionCard extends StatelessWidget {
             'Submitted: ${submission.createdAt != null ? dateFormat.format(submission.createdAt!) : 'N/A'}',
             style: AppTheme.bodySM.copyWith(color: AppTheme.textTertiary),
           ),
+          // §16 — points reveal for an approved weekly/final check-in.
+          if (award != null &&
+              submission.reviewStatus == ReviewStatus.approved &&
+              submission.type != SubmissionType.baseline) ...[
+            const SizedBox(height: 12),
+            _buildPointsReveal(award!, unit),
+          ],
           const Divider(height: 32, color: Colors.white10),
           
           Row(
@@ -281,6 +292,68 @@ class _ParticipantSubmissionCard extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+
+  Widget _buildPointsReveal(CheckinAward a, String unit) {
+    final bool earned = a.points > 0.049;
+    final chips = <Widget>[];
+    void addChip(String label, double? d, {required bool lowerIsGood, String suffix = ''}) {
+      if (d == null || d.abs() < 0.05) return;
+      final bool good = lowerIsGood ? d < 0 : d > 0;
+      final String sign = d < 0 ? '−' : '+';
+      chips.add(_deltaChip('$label $sign${d.abs().toStringAsFixed(1)}$suffix', good));
+    }
+    addChip('Weight', a.weightDelta, lowerIsGood: true, suffix: ' $unit');
+    addChip('Body fat', a.bodyFatDelta, lowerIsGood: true, suffix: '%');
+    addChip('Muscle', a.muscleDelta, lowerIsGood: false, suffix: ' $unit');
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppTheme.lime.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.lime.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.bolt_rounded, color: AppTheme.lime, size: 18),
+              const SizedBox(width: 6),
+              Text(earned ? 'YOU EARNED' : 'CHECK-IN APPROVED',
+                  style: AppTheme.labelSM.copyWith(color: AppTheme.lime, letterSpacing: 1)),
+              const Spacer(),
+              Text('${earned ? '+' : ''}${a.points.toStringAsFixed(1)} pts',
+                  style: AppTheme.numericLG.copyWith(color: AppTheme.lime, fontSize: 22)),
+            ],
+          ),
+          if (chips.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text('Since your previous check-in',
+                style: AppTheme.bodySM.copyWith(color: AppTheme.textTertiary, fontSize: 10)),
+            const SizedBox(height: 6),
+            Wrap(spacing: 6, runSpacing: 6, children: chips),
+          ] else if (!earned) ...[
+            const SizedBox(height: 6),
+            Text('No new personal best this check-in — your earned points are safe.',
+                style: AppTheme.bodySM.copyWith(color: AppTheme.textSecondary)),
+          ],
+          const SizedBox(height: 12),
+          Text('Total challenge points: ${a.runningTotal.toStringAsFixed(1)}',
+              style: AppTheme.bodyMD.copyWith(fontWeight: FontWeight.w800)),
+        ],
+      ),
+    );
+  }
+
+  Widget _deltaChip(String text, bool good) {
+    final c = good ? AppTheme.lime : AppTheme.textSecondary;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(color: c.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(6)),
+      child: Text(text, style: TextStyle(color: c, fontSize: 11, fontWeight: FontWeight.w700)),
     );
   }
 

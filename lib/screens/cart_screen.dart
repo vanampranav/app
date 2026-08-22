@@ -8,7 +8,7 @@ import '../services/shopify_service.dart';
 import '../providers/location_provider.dart'; 
 import 'shop_screen.dart'; 
 import '../widgets/main_layout.dart'; 
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:elefit_app/utils/app_secure_storage.dart';
 
 class CartScreen extends StatefulWidget {
   const CartScreen({Key? key}) : super(key: key);
@@ -339,7 +339,7 @@ class _CartScreenState extends State<CartScreen> {
                   final addressModel = context.read<AddressModel>();
                   
                   // Get user authentication token
-                  const _secureStorage = FlutterSecureStorage();
+                  const _secureStorage = appSecureStorage;
                   final customerAccessToken = await _secureStorage.read(key: 'auth_token');
                   
                   // Get default shipping address

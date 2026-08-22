@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:elefit_app/utils/app_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/ai_coach_models.dart';
 import '../config/secrets.dart';
@@ -27,7 +27,7 @@ class FirebaseRestService {
   // Firebase Auth SDK on startup — the Challenge feature needs a live SDK session.
   static const String _prefPassword = 'fb_password';
 
-  static const _secureStorage = FlutterSecureStorage();
+  static const _secureStorage = appSecureStorage;
 
   String? _idToken;
   String? _uid;

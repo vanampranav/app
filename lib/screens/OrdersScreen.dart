@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/shopify_service.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:elefit_app/utils/app_secure_storage.dart';
 import 'package:intl/intl.dart';
 import '../theme/app_theme.dart';
 
@@ -25,7 +25,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
 
   Future<void> _fetchOrders() async {
     try {
-      const _secureStorage = FlutterSecureStorage();
+      const _secureStorage = appSecureStorage;
       final accessToken = await _secureStorage.read(key: 'auth_token');
       if (accessToken == null) {
         setState(() {

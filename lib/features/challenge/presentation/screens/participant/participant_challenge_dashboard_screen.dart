@@ -21,6 +21,8 @@ import 'package:elefit_app/features/challenge/presentation/screens/participant/s
 import 'package:elefit_app/features/challenge/presentation/screens/participant/submissions/participant_final_submission_screen.dart';
 import 'package:elefit_app/features/challenge/presentation/screens/participant/submissions/participant_my_submissions_screen.dart';
 import 'package:elefit_app/features/challenge/presentation/screens/participant/participant_leaderboard_screen.dart';
+import 'package:elefit_app/features/challenge/presentation/widgets/challenge_steps_help_card.dart';
+import 'package:elefit_app/features/challenge/data/models/challenge_submission.dart';
 
 class ParticipantChallengeDashboardScreen extends StatelessWidget {
   final String challengeId;
@@ -96,7 +98,19 @@ class _ParticipantChallengeDashboardContent extends StatelessWidget {
                 children: [
                   _buildStatusHeader(challenge, participant),
                   const SizedBox(height: 24),
-                  _buildPaymentStatusCard(context, participant),
+                  // Big payment card only while payment still needs attention —
+                  // once verified it collapses to a small tag in the status header.
+                  if (participant.paymentStatus != PaymentStatus.paid &&
+                      participant.paymentStatus != PaymentStatus.waived) ...[
+                    _buildPaymentStatusCard(context, participant),
+                    const SizedBox(height: 24),
+                  ],
+                  // "How this challenge works" (or the results banner) lives above
+                  // the ACTIONS list, not inside it.
+                  if (challenge.status == 'completed')
+                    _buildResultsBanner(context, challenge)
+                  else
+                    const ChallengeStepsHelpCard(),
                   const SizedBox(height: 32),
                   _buildSectionTitle('ACTIONS'),
                   const SizedBox(height: 16),
@@ -128,7 +142,18 @@ class _ParticipantChallengeDashboardContent extends StatelessWidget {
                   children: [
                     Text('MY STATUS', style: AppTheme.labelSM.copyWith(color: AppTheme.textTertiary)),
                     const SizedBox(height: 4),
-                    _StatusBadge(status: participant.status, type: 'participant'),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: [
+                        _StatusBadge(status: participant.status, type: 'participant'),
+                        // Once verified, payment collapses to a compact tag here
+                        // instead of its own big card below.
+                        if (participant.paymentStatus == PaymentStatus.paid ||
+                            participant.paymentStatus == PaymentStatus.waived)
+                          _StatusBadge(status: participant.paymentStatus, type: 'payment'),
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -340,37 +365,6 @@ class _ParticipantChallengeDashboardContent extends StatelessWidget {
     );
   }
 
-  Widget _buildStepsBanner() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppTheme.lime.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-        border: Border.all(color: AppTheme.lime.withValues(alpha: 0.25)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Row(
-            children: [
-              Icon(Icons.info_outline_rounded, color: AppTheme.lime, size: 20),
-              SizedBox(width: 8),
-              Text('HOW THIS CHALLENGE WORKS', style: AppTheme.labelSM),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            '1. Submit your payment proof to start.\n'
-            '2. Submit your baseline (photos & weight) once the organizer approves your entry.\n'
-            '3. Log a weekly check-in each week after your baseline is approved.\n'
-            '4. Complete the final submission near the end date.',
-            style: AppTheme.bodyMD.copyWith(color: AppTheme.textSecondary, height: 1.6),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildActionCards(BuildContext context, ParticipantChallengeDashboardProvider provider, Challenge challenge, ChallengeParticipant participant) {
     final paymentStatus = participant.paymentStatus;
@@ -381,6 +375,10 @@ class _ParticipantChallengeDashboardContent extends StatelessWidget {
     final canSubmitInitialPayment = paymentStatus == PaymentStatus.pending ||
         paymentStatus == PaymentStatus.partiallyPaid;
     final canSubmitRecoveryPayment = paymentStatus == PaymentStatus.failed;
+    // My Submissions + Leaderboard unlock only once payment is verified — a
+    // participant who just joined (payment pending) shouldn't have them open yet.
+    final isPaymentVerified = paymentStatus == PaymentStatus.paid ||
+        paymentStatus == PaymentStatus.waived;
     // Baseline requires the participant to be APPROVED (active). The service
     // rejects any other status, so the button must stay locked until then —
     // otherwise the user taps and gets a raw exception.
@@ -394,6 +392,20 @@ class _ParticipantChallengeDashboardContent extends StatelessWidget {
     final canSubmitWeekly = baselineApproved && firstCheckInOpen && !finalWindowOpen;
     final canSubmitFinal = baselineApproved && finalWindowOpen;
 
+    // A step counts as "done" once the participant has completed their part.
+    bool submissionDone(ChallengeSubmission? s) =>
+        s != null &&
+        (s.reviewStatus == ReviewStatus.submitted ||
+            s.reviewStatus == ReviewStatus.approved);
+    final baselineDone = submissionDone(baseline);
+    // Weekly is "done" only if THIS week's check-in has been submitted.
+    final int currentWeek = (now.difference(challenge.startDate).inDays / 7).floor();
+    final weekly = provider.latestWeeklyCheckIn;
+    final int? weeklyWeek =
+        weekly?.data['weekNumber'] is num ? (weekly!.data['weekNumber'] as num).toInt() : null;
+    final weeklyDoneThisWeek = submissionDone(weekly) && weeklyWeek == currentWeek;
+    final finalDone = submissionDone(provider.finalSubmission);
+
     String paymentSubtitle = 'Required to start challenge';
     if (paymentStatus == PaymentStatus.paid || paymentStatus == PaymentStatus.waived) {
       paymentSubtitle = 'Payment Verified';
@@ -405,17 +417,11 @@ class _ParticipantChallengeDashboardContent extends StatelessWidget {
 
     return Column(
       children: [
-        if (challenge.status == 'completed') ...[
-          _buildResultsBanner(context, challenge),
-          const SizedBox(height: 16),
-        ] else ...[
-          _buildStepsBanner(),
-          const SizedBox(height: 16),
-        ],
         _ActionCard(
           title: 'Submit Payment Proof',
           icon: Icons.payments_outlined,
           isEnabled: canSubmitInitialPayment || canSubmitRecoveryPayment,
+          isDone: isPaymentVerified,
           subtitle: paymentSubtitle,
           onTap: () {
             if (canSubmitRecoveryPayment) {
@@ -430,6 +436,7 @@ class _ParticipantChallengeDashboardContent extends StatelessWidget {
           title: 'Submit Baseline',
           icon: Icons.straighten_rounded,
           isEnabled: canSubmitBaseline,
+          isDone: baselineDone,
           status: baseline?.reviewStatus,
           subtitle: !canSubmitBaseline
               ? 'Available after the organizer approves your entry'
@@ -441,11 +448,14 @@ class _ParticipantChallengeDashboardContent extends StatelessWidget {
           title: 'Weekly Check-In',
           icon: Icons.event_available_rounded,
           isEnabled: canSubmitWeekly,
+          isDone: weeklyDoneThisWeek,
           subtitle: !baselineApproved
               ? 'Locked until the organizer approves your baseline'
               : (!firstCheckInOpen
                   ? 'Opens after your first week'
-                  : (finalWindowOpen ? 'Closed — submit your Final results' : 'Log your progress')),
+                  : (finalWindowOpen
+                      ? 'Closed — submit your Final results'
+                      : (weeklyDoneThisWeek ? "This week's check-in is done" : 'Log your progress'))),
           onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ParticipantWeeklyCheckinScreen(challengeId: challenge.id))),
         ),
         const SizedBox(height: 12),
@@ -453,22 +463,26 @@ class _ParticipantChallengeDashboardContent extends StatelessWidget {
           title: 'Final Submission',
           icon: Icons.emoji_events_outlined,
           isEnabled: canSubmitFinal,
-          subtitle: !canSubmitFinal ? 'Unlocks in the final days of the challenge' : 'Final results',
+          isDone: finalDone,
+          subtitle: finalDone
+              ? 'Final submission complete'
+              : (!canSubmitFinal ? 'Unlocks in the final days of the challenge' : 'Final results'),
           onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ParticipantFinalSubmissionScreen(challengeId: challenge.id))),
         ),
         const SizedBox(height: 12),
         _ActionCard(
           title: 'My Submissions',
           icon: Icons.history_rounded,
-          isEnabled: true,
+          isEnabled: isPaymentVerified,
+          subtitle: isPaymentVerified ? 'View your submitted measurements' : 'Available after your payment is verified',
           onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ParticipantMySubmissionsScreen(challengeId: challenge.id))),
         ),
         const SizedBox(height: 12),
         _ActionCard(
           title: 'Leaderboard',
           icon: Icons.leaderboard_outlined,
-          isEnabled: true,
-          subtitle: 'See standings',
+          isEnabled: isPaymentVerified,
+          subtitle: isPaymentVerified ? 'See standings' : 'Available after your payment is verified',
           onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ParticipantLeaderboardScreen(challengeId: challenge.id))),
         ),
       ],
@@ -524,6 +538,8 @@ class _ActionCard extends StatelessWidget {
   final bool isEnabled;
   final VoidCallback onTap;
   final String? status;
+  // Marks a step the participant has completed (shows a green check).
+  final bool isDone;
 
   const _ActionCard({
     required this.title,
@@ -532,15 +548,19 @@ class _ActionCard extends StatelessWidget {
     required this.isEnabled,
     required this.onTap,
     this.status,
+    this.isDone = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    final color = isEnabled ? AppTheme.lime : AppTheme.textTertiary;
-    
+    // A done step reads as "active" even if it's no longer tappable (e.g. a
+    // verified payment), so it isn't greyed out like a locked step.
+    final bool active = isEnabled || isDone;
+    final color = active ? AppTheme.lime : AppTheme.textTertiary;
+
     return EFCard(
       onTap: isEnabled ? onTap : null,
-      color: isEnabled ? AppTheme.surface1 : AppTheme.surface1.withValues(alpha: 0.5),
+      color: active ? AppTheme.surface1 : AppTheme.surface1.withValues(alpha: 0.5),
       child: Row(
         children: [
           Container(
@@ -556,15 +576,17 @@ class _ActionCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: AppTheme.labelLG.copyWith(color: isEnabled ? Colors.white : AppTheme.textTertiary)),
+                Text(title, style: AppTheme.labelLG.copyWith(color: active ? Colors.white : AppTheme.textTertiary)),
                 if (subtitle != null) ...[
                   const SizedBox(height: 4),
-                  Text(subtitle!, style: AppTheme.bodySM.copyWith(color: isEnabled ? AppTheme.textSecondary : AppTheme.textTertiary, fontSize: 11)),
+                  Text(subtitle!, style: AppTheme.bodySM.copyWith(color: active ? AppTheme.textSecondary : AppTheme.textTertiary, fontSize: 11)),
                 ],
               ],
             ),
           ),
-          if (isEnabled)
+          if (isDone)
+            const Icon(Icons.check_circle_rounded, color: AppTheme.lime, size: 24)
+          else if (isEnabled)
             const Icon(Icons.chevron_right_rounded, color: AppTheme.textTertiary)
           else
             const Icon(Icons.lock_outline_rounded, color: AppTheme.textTertiary, size: 18),

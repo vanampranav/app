@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dispose_guard_notifier.dart';
 import 'package:flutter/material.dart';
 import 'package:elefit_app/features/challenge/data/models/challenge.dart';
 import 'package:elefit_app/features/challenge/data/repositories/challenge_repository.dart';
@@ -6,7 +7,7 @@ import 'package:elefit_app/features/challenge/domain/services/challenge_service.
 import 'package:elefit_app/features/challenge/domain/services/challenge_notification_service.dart';
 import 'challenge_error_text.dart';
 
-class AdminChallengeDetailProvider with ChangeNotifier {
+class AdminChallengeDetailProvider with ChangeNotifier, DisposeGuardNotifier {
   final String challengeId;
   final ChallengeRepository _challengeRepository;
   final ChallengeService _challengeService;

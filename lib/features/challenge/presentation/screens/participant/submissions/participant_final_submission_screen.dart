@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:elefit_app/utils/safe_image_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:elefit_app/utils/decimal_input_formatter.dart';
@@ -92,7 +93,7 @@ class _ParticipantFinalSubmissionContentState extends State<_ParticipantFinalSub
     );
 
     if (source != null) {
-      final pickedFile = await _picker.pickImage(source: source, imageQuality: 70);
+      final pickedFile = await safePickImage(context, _picker, source: source, imageQuality: 70);
       if (pickedFile != null) {
         final bytes = await pickedFile.readAsBytes();
         provider.addPhoto(File(pickedFile.path), bytes);
@@ -147,9 +148,9 @@ class _ParticipantFinalSubmissionContentState extends State<_ParticipantFinalSub
 
         // Pre-fill form if existing submission exists
         if (_weightController.text.isEmpty && submission != null) {
-          _weightController.text = formatMeasurement(submission.data['weight'] as num?);
-          _bodyFatController.text = formatMeasurement(submission.data['bodyFat'] as num?);
-          _muscleController.text = formatMeasurement(submission.data['muscleMass'] as num?);
+          _weightController.text = formatMeasurement(submission.data['weight']);
+          _bodyFatController.text = formatMeasurement(submission.data['bodyFat']);
+          _muscleController.text = formatMeasurement(submission.data['muscleMass']);
           _notesController.text = submission.data['notes'] ?? '';
           _weightUnit = submission.data['unit'] ?? 'kg';
           _measurementSource = submission.data['source'] ?? 'EleFit 4-electrode scale';
@@ -432,17 +433,17 @@ class _ParticipantFinalSubmissionContentState extends State<_ParticipantFinalSub
               _buildReadOnlyRow('Final Body Fat', '${submission.data['bodyFat'] ?? 'N/A'}%'),
               _buildReadOnlyRow('Final Muscle Mass', submission.data['muscleMass'] != null ? '${submission.data['muscleMass']} ${submission.data['unit'] ?? ''}' : 'N/A'),
               const Divider(height: 24, color: Colors.white10),
-              _buildReadOnlyRow('Source', submission.data['source']),
+              _buildReadOnlyRow('Source', submission.data['source']?.toString() ?? 'N/A'),
             ],
           ),
         ),
-        if (submission.data['photos'] != null && (submission.data['photos'] as List).isNotEmpty) ...[
+        if (submission.data['photos'] is List && (submission.data['photos'] as List).isNotEmpty) ...[
           const SizedBox(height: 32),
           const Text('TRANSFORMATION PHOTOS', style: AppTheme.labelSM),
           const SizedBox(height: 12),
           _buildReadOnlyPhotoGrid(List<String>.from(submission.data['photos'])),
         ],
-        if (submission.data['notes'] != null && (submission.data['notes'] as String).isNotEmpty) ...[
+        if (submission.data['notes'] is String && (submission.data['notes'] as String).isNotEmpty) ...[
           const SizedBox(height: 32),
           const Text('JOURNEY NOTES', style: AppTheme.labelSM),
           const SizedBox(height: 12),

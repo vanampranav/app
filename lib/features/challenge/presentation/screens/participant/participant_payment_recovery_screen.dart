@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:elefit_app/utils/safe_image_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
@@ -64,7 +65,7 @@ class _ParticipantPaymentRecoveryScreenState extends State<ParticipantPaymentRec
   }
 
   Future<void> _pickImage() async {
-    final pickedFile = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
+    final pickedFile = await safePickImage(context, _picker, source: ImageSource.gallery, imageQuality: 70);
     if (pickedFile != null) {
       final bytes = await pickedFile.readAsBytes();
       setState(() {

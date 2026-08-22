@@ -14,20 +14,27 @@ import UIKit
     
     // Initialize SDK Manager
     sdkManager = FitDaysSDKManager()
-    
-    let controller : FlutterViewController = window?.rootViewController as! FlutterViewController
-    let methodChannel = FlutterMethodChannel(name: "com.theelefit.app/fitdays",
+
+    // Guard the root view controller instead of force-casting. On a cold launch
+    // triggered by a push notification the window/rootViewController can be in an
+    // unexpected state; a force-cast (`as!`) here would raise a native SIGABRT and
+    // crash the app before Flutter starts — which no Dart error handler can catch.
+    // If the controller isn't ready we skip the FitDays channel wiring (it's only
+    // needed once the UI is up) and still register plugins + finish launching.
+    if let controller = window?.rootViewController as? FlutterViewController {
+      let methodChannel = FlutterMethodChannel(name: "com.theelefit.app/fitdays",
+                                                binaryMessenger: controller.binaryMessenger)
+
+      let eventChannel = FlutterEventChannel(name: "com.theelefit.app/fitdays_events",
                                               binaryMessenger: controller.binaryMessenger)
-    
-    let eventChannel = FlutterEventChannel(name: "com.theelefit.app/fitdays_events",
-                                            binaryMessenger: controller.binaryMessenger)
-    eventChannel.setStreamHandler(self)
-    
-    methodChannel.setMethodCallHandler({
-      (call: FlutterMethodCall, result: @escaping FlutterResult) -> Void in
-      self.handleMethodCall(call, result: result)
-    })
-    
+      eventChannel.setStreamHandler(self)
+
+      methodChannel.setMethodCallHandler({
+        (call: FlutterMethodCall, result: @escaping FlutterResult) -> Void in
+        self.handleMethodCall(call, result: result)
+      })
+    }
+
     GeneratedPluginRegistrant.register(with: self)
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }

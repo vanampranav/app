@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:elefit_app/utils/safe_image_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
@@ -87,7 +88,7 @@ class _ParticipantPaymentSubmissionContentState extends State<_ParticipantPaymen
     );
 
     if (source != null) {
-      final pickedFile = await _picker.pickImage(source: source, imageQuality: 70);
+      final pickedFile = await safePickImage(context, _picker, source: source, imageQuality: 70);
       if (pickedFile != null) {
         // Read the bytes now — the picker's temp file can be cleaned up before
         // upload, so we don't rely on the file path surviving.

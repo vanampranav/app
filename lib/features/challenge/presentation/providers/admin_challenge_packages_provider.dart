@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
+import 'dispose_guard_notifier.dart';
 import 'package:elefit_app/features/challenge/data/models/challenge_package.dart';
 import 'package:elefit_app/features/challenge/domain/services/challenge_package_service.dart';
 import 'package:elefit_app/features/challenge/domain/services/admin_audit_service.dart';
 import 'challenge_error_text.dart';
 
-class AdminChallengePackagesProvider with ChangeNotifier {
+class AdminChallengePackagesProvider with ChangeNotifier, DisposeGuardNotifier {
   final String challengeId;
   final ChallengePackageService _packageService;
   final AdminAuditService _auditService;

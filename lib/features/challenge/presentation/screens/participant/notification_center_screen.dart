@@ -10,6 +10,10 @@ import 'package:elefit_app/features/challenge/presentation/screens/participant/p
 import 'package:elefit_app/features/challenge/presentation/screens/participant/submissions/participant_my_submissions_screen.dart';
 import 'package:elefit_app/features/challenge/presentation/screens/participant/submissions/participant_weekly_checkin_screen.dart';
 import 'package:elefit_app/features/challenge/presentation/screens/participant/submissions/participant_final_submission_screen.dart';
+import 'package:elefit_app/features/challenge/presentation/screens/participant/challenge_detail_screen.dart';
+import 'package:elefit_app/features/challenge/presentation/screens/admin/admin_participants_screen.dart';
+import 'package:elefit_app/features/challenge/presentation/screens/admin/admin_payments_screen.dart';
+import 'package:elefit_app/features/challenge/presentation/screens/admin/admin_submissions_screen.dart';
 
 class NotificationCenterScreen extends StatelessWidget {
   const NotificationCenterScreen({Key? key}) : super(key: key);
@@ -203,13 +207,33 @@ class _NotificationCard extends StatelessWidget {
       provider.markAsRead(notification.id);
     }
 
-    final deepLink = notification.deepLink;
     final challengeId = notification.challengeId ?? notification.data?['challengeId'];
+    if (challengeId == null) return;
 
-    if (deepLink == null || challengeId == null) return;
+    // Admin "needs review" alerts (from the Cloud Function) carry no deepLink —
+    // route them to the matching admin review screen based on what happened.
+    if (notification.type == 'adminReviewNeeded') {
+      final kind = notification.data?['kind'];
+      Widget dest;
+      if (kind == 'paymentSubmitted') {
+        dest = AdminPaymentsScreen(challengeId: challengeId);
+      } else if (kind == 'participantJoined') {
+        dest = AdminParticipantsScreen(challengeId: challengeId);
+      } else {
+        // 'submission' / 'resubmission'
+        dest = AdminSubmissionsScreen(challengeId: challengeId);
+      }
+      Navigator.push(context, MaterialPageRoute(builder: (_) => dest));
+      return;
+    }
+
+    final deepLink = notification.deepLink;
+    if (deepLink == null) return;
 
     if (deepLink == 'challenge_dashboard') {
       Navigator.push(context, MaterialPageRoute(builder: (_) => ParticipantChallengeDashboardScreen(challengeId: challengeId)));
+    } else if (deepLink == 'challenge_detail') {
+      Navigator.push(context, MaterialPageRoute(builder: (_) => ChallengeDetailScreen(challengeId: challengeId)));
     } else if (deepLink == 'leaderboard') {
       Navigator.push(context, MaterialPageRoute(builder: (_) => ParticipantLeaderboardScreen(challengeId: challengeId)));
     } else if (deepLink == 'my_submissions') {

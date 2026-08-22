@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dispose_guard_notifier.dart';
 import 'package:flutter/material.dart';
 import 'package:elefit_app/features/challenge/data/models/challenge_submission.dart';
 import 'package:elefit_app/features/challenge/data/repositories/challenge_submission_repository.dart';
 import 'package:elefit_app/features/challenge/data/constants/firestore_collections.dart';
+import 'package:elefit_app/features/challenge/domain/services/challenge_scoring_service.dart';
 
-class ParticipantMySubmissionsProvider with ChangeNotifier {
+class ParticipantMySubmissionsProvider with ChangeNotifier, DisposeGuardNotifier {
   final String challengeId;
   final String userId;
   final ChallengeSubmissionRepository _submissionRepository;
@@ -44,6 +46,29 @@ class ParticipantMySubmissionsProvider with ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
   String get currentFilter => _currentFilter;
+
+  final ChallengeScoringService _scoring = ChallengeScoringService();
+
+  /// Points each APPROVED check-in earned (keyed by submission id), for the
+  /// "+X points" reveal. Empty until an approved baseline exists.
+  Map<String, CheckinAward> get awardsBySubmission {
+    ChallengeSubmission? baseline;
+    try {
+      baseline = _allSubmissions.firstWhere((s) =>
+          s.type == SubmissionType.baseline &&
+          s.reviewStatus == ReviewStatus.approved);
+    } catch (_) {
+      return const {};
+    }
+    final approvedProgress = _allSubmissions
+        .where((s) =>
+            s.type != SubmissionType.baseline &&
+            s.reviewStatus == ReviewStatus.approved)
+        .toList();
+    final awards = _scoring.calculateCheckinAwards(
+        baseline: baseline, approvedProgress: approvedProgress);
+    return {for (final a in awards) a.submissionId: a};
+  }
 
   ParticipantMySubmissionsProvider({
     required this.challengeId,

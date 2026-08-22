@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dispose_guard_notifier.dart';
 import 'package:flutter/material.dart';
 import 'package:elefit_app/features/challenge/data/models/challenge_submission.dart';
 import 'package:elefit_app/features/challenge/data/repositories/challenge_submission_repository.dart';
@@ -18,7 +19,7 @@ class SubmissionViewModel {
   });
 }
 
-class AdminSubmissionsProvider with ChangeNotifier {
+class AdminSubmissionsProvider with ChangeNotifier, DisposeGuardNotifier {
   final String challengeId;
   final ChallengeSubmissionRepository _submissionRepository;
   final ChallengeParticipantRepository _participantRepository;
