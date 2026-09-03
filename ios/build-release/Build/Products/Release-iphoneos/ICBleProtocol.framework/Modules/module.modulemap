@@ -1,6 +1,0 @@
-framework module ICBleProtocol {
-  umbrella header "ICBleProtocol.h"
-  export *
-
-  module * { export * }
-}

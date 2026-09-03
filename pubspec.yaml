@@ -58,6 +58,10 @@ dependencies:
   # Charts for weight trend graph
   fl_chart: ^0.69.0
 
+  # Sharing the body-comparison report as an image (capture uses built-in
+  # RepaintBoundary + path_provider; this only opens the OS share sheet)
+  share_plus: ^10.1.4
+
   # Barcode scanning for nutrition food lookup
   mobile_scanner: ^6.0.0
 

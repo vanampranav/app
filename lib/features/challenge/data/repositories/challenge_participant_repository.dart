@@ -80,6 +80,27 @@ class ChallengeParticipantRepository {
             .toList());
   }
 
+  /// One-shot read of all participants for a challenge. Uses a plain get()
+  /// (server-preferred, falling back to cache only when offline) instead of
+  /// streamParticipantsByChallenge(...).first — that stream serves the offline
+  /// cache first, which let a leaderboard recompute re-publish a stale/deleted
+  /// participant still lingering in a client's cache. Use this for recompute.
+  Future<List<ChallengeParticipant>> getParticipantsByChallenge(
+      String challengeId) async {
+    try {
+      final snapshot = await _firestore
+          .collection(FirestoreCollections.challenges)
+          .doc(challengeId)
+          .collection('participants')
+          .get();
+      return snapshot.docs
+          .map((doc) => ChallengeParticipant.fromFirestore(doc))
+          .toList();
+    } catch (e) {
+      throw Exception('Failed to get participants: $e');
+    }
+  }
+
   Stream<List<ChallengeParticipant>> streamParticipantsByUser(String userId) {
     // This now requires a collectionGroup query
     return _firestore

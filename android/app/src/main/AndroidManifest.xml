@@ -92,6 +92,14 @@
             android:name="flutterEmbedding"
             android:value="2" />
 
+        <!-- Disable Impeller on Android → falls back to the stable Skia renderer.
+             Fixes the black-screen / blank-frame bug seen on some new Android 16
+             (Vulkan) devices when opening a pushed route (e.g. Challenge details).
+             Remove once on a Flutter version where the Impeller bug is fixed. -->
+        <meta-data
+            android:name="io.flutter.embedding.android.EnableImpeller"
+            android:value="false" />
+
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

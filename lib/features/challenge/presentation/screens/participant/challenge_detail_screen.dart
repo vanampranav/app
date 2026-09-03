@@ -12,6 +12,7 @@ import 'package:elefit_app/features/challenge/domain/services/participant_enroll
 import 'package:elefit_app/features/challenge/domain/services/auth_service.dart';
 import 'package:elefit_app/features/challenge/presentation/screens/participant/participant_challenge_dashboard_screen.dart';
 import 'package:elefit_app/features/challenge/presentation/screens/participant/challenge_package_selection_screen.dart';
+import 'package:elefit_app/features/challenge/presentation/screens/participant/participant_payment_submission_screen.dart';
 import 'package:elefit_app/features/challenge/presentation/providers/participant_challenge_detail_provider.dart';
 import 'package:elefit_app/services/analytics_service.dart';
 
@@ -419,11 +420,19 @@ class _ChallengeDetailContentState extends State<_ChallengeDetailContent> {
               } else {
                 AnalyticsService.logChallengeJoinCompleted(provider.challengeId, package.id);
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Joined challenge successfully! 🎉'), backgroundColor: AppTheme.lime));
-                Navigator.pushAndRemoveUntil(
-                  context, 
+                final navigator = Navigator.of(context);
+                navigator.pushAndRemoveUntil(
                   MaterialPageRoute(builder: (_) => ParticipantChallengeDashboardScreen(challengeId: provider.challengeId)),
                   (route) => route.isFirst,
                 );
+                // Guided flow: take the user straight to the payment step (the
+                // immediate next action) when the package has a fee. The dashboard
+                // sits underneath, so Back returns to it. Free packages skip it.
+                if (package.packagePrice > 0) {
+                  navigator.push(
+                    MaterialPageRoute(builder: (_) => ParticipantPaymentSubmissionScreen(challengeId: provider.challengeId)),
+                  );
+                }
               }
             }
           },

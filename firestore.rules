@@ -105,7 +105,17 @@ service cloud.firestore {
     match /challengeSubmissions/{submissionId} {
       allow read: if isSignedIn() && (isOwner(resource.data.userId) || isAdmin());
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update: if isAdmin();
+      // Admins can update freely (review/approve/reject). An owner may RESUBMIT
+      // their own submission after it was rejected / needs clarification — but
+      // only to move it back to 'submitted' (they can never self-approve) and
+      // only on their own doc (userId can't change). This is what makes the
+      // "Resubmit Baseline / Update Submission" flow work for participants.
+      allow update: if isAdmin() || (
+        isOwner(resource.data.userId) &&
+        request.resource.data.userId == resource.data.userId &&
+        resource.data.reviewStatus in ['rejected', 'needsClarification'] &&
+        request.resource.data.reviewStatus == 'submitted'
+      );
       allow delete: if isAdmin();
     }
 

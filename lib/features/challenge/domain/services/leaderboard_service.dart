@@ -40,21 +40,32 @@ class LeaderboardService {
         _userRepository = userRepository,
         _leaderboardRepository = leaderboardRepository;
 
+  /// A participant appears on the leaderboard only while they are still in the
+  /// challenge — i.e. NOT withdrawn and NOT disqualified. Disqualification is
+  /// recorded two ways: status == disqualified (admin "reject participant") OR
+  /// the disqualified flag (eligibility-dashboard "disqualify") — exclude both.
+  static bool _countsForLeaderboard(ChallengeParticipant p) =>
+      p.status != ParticipantStatus.withdrawn &&
+      p.status != ParticipantStatus.disqualified &&
+      !p.disqualified;
+
   /// Best-effort: recompute + publish. Never throws to its caller — a failed
   /// leaderboard refresh must not fail the admin action that triggered it.
   Future<void> recomputeAndPublish(String challengeId) async {
     try {
       final challenge =
           await _challengeRepository.getChallengeById(challengeId);
-      final participants = await _participantRepository
-          .streamParticipantsByChallenge(challengeId)
-          .first;
+      // Read participants from the server (plain get, NOT snapshots().first)
+      // so a recompute can't re-publish a stale/deleted participant lingering
+      // in this admin device's Firestore offline cache.
+      final participants =
+          await _participantRepository.getParticipantsByChallenge(challengeId);
       final submissions = await _submissionRepository
           .streamSubmissionsByChallenge(challengeId)
           .first;
 
       final activeUserIds = participants
-          .where((p) => p.status != ParticipantStatus.withdrawn)
+          .where(_countsForLeaderboard)
           .map((p) => p.userId)
           .toList();
       // Display names are best-effort: if the user lookup fails, still publish
@@ -111,9 +122,8 @@ class LeaderboardService {
     List<ChallengeSubmission> submissions,
     List<dynamic> users,
   ) {
-    final activeParticipants = participants
-        .where((p) => p.status != ParticipantStatus.withdrawn)
-        .toList();
+    final activeParticipants =
+        participants.where(_countsForLeaderboard).toList();
     final activeUserIds = activeParticipants.map((p) => p.userId).toSet();
     if (activeUserIds.isEmpty) return [];
 

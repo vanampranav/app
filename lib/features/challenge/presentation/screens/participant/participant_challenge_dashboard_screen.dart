@@ -67,6 +67,7 @@ class _ParticipantChallengeDashboardContent extends StatelessWidget {
 
         final challenge = provider.challenge!;
         final participant = provider.participant!;
+        final nextStep = _buildNextStepCard(context, provider, challenge, participant);
 
         if (kDebugMode) {
           debugPrint('Dashboard: Participant Doc Path: challenges/${participant.challengeId}/participants/${participant.userId}');
@@ -96,6 +97,11 @@ class _ParticipantChallengeDashboardContent extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Guided flow: the single "do this now" card, always at the top.
+                  if (nextStep != null) ...[
+                    nextStep,
+                    const SizedBox(height: 24),
+                  ],
                   _buildStatusHeader(challenge, participant),
                   const SizedBox(height: 24),
                   // Big payment card only while payment still needs attention —
@@ -178,6 +184,193 @@ class _ParticipantChallengeDashboardContent extends StatelessWidget {
               Expanded(child: _buildTimelineInfo('End', challenge.endDate)),
             ],
           ),
+        ],
+      ),
+    );
+  }
+
+  /// The single "do this now" card at the top of the dashboard — the heart of
+  /// the guided flow. It reads payment + participant + submission state and tells
+  /// the user exactly what to do next (or that they're waiting on the organizer).
+  /// Returns null when there's nothing to prompt (challenge completed, or the
+  /// user is withdrawn/disqualified).
+  ///
+  /// NOTE: when Stripe in-app payments land, only the "Submit your payment"
+  /// branch's CTA changes (open the Stripe sheet instead of the proof screen) —
+  /// the rest of the guided flow is unaffected.
+  Widget? _buildNextStepCard(
+    BuildContext context,
+    ParticipantChallengeDashboardProvider provider,
+    Challenge challenge,
+    ChallengeParticipant participant,
+  ) {
+    if (challenge.status == ChallengeStatus.completed) {
+      return null;
+    }
+    if (participant.status == ParticipantStatus.withdrawn ||
+        participant.status == ParticipantStatus.disqualified) {
+      return null;
+    }
+
+    final paymentStatus = participant.paymentStatus;
+    final baseline = provider.baselineSubmission;
+    final now = DateTime.now();
+
+    void goto(Widget screen) =>
+        Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
+
+    IconData icon = Icons.arrow_forward_rounded;
+    String title;
+    String message;
+    String? ctaLabel;
+    VoidCallback? onTap;
+
+    if (paymentStatus == PaymentStatus.pending ||
+        paymentStatus == PaymentStatus.partiallyPaid) {
+      icon = Icons.payments_outlined;
+      title = 'Submit your payment';
+      message =
+          'Pay the entry fee and upload your payment proof to secure your spot.';
+      ctaLabel = 'Submit Payment';
+      onTap = () =>
+          goto(ParticipantPaymentSubmissionScreen(challengeId: challenge.id));
+    } else if (paymentStatus == PaymentStatus.pendingReview) {
+      icon = Icons.hourglass_bottom_rounded;
+      title = 'Payment under review';
+      message =
+          "We're verifying your payment. You'll be notified once it's approved.";
+    } else if (paymentStatus == PaymentStatus.failed) {
+      icon = Icons.error_outline_rounded;
+      title = 'Payment needs attention';
+      message = participant.paymentFailureReason ??
+          "We couldn't verify your payment. Please submit updated proof.";
+      ctaLabel = 'Resubmit Payment';
+      onTap = () =>
+          goto(ParticipantPaymentRecoveryScreen(challengeId: challenge.id));
+    } else if (participant.status != ParticipantStatus.active) {
+      // Paid/waived, but the organizer hasn't approved the entry yet.
+      icon = Icons.verified_user_outlined;
+      title = 'Waiting for approval';
+      message =
+          "Payment verified! The organizer is reviewing your entry — you'll be notified when you're approved.";
+    } else if (baseline == null) {
+      icon = Icons.straighten_rounded;
+      title = 'Submit your baseline';
+      message =
+          'Log your starting weight, body-fat and photos to start tracking your progress.';
+      ctaLabel = 'Submit Baseline';
+      onTap = () =>
+          goto(ParticipantBaselineSubmissionScreen(challengeId: challenge.id));
+    } else if (baseline.reviewStatus == ReviewStatus.needsClarification ||
+        baseline.reviewStatus == ReviewStatus.rejected) {
+      icon = Icons.straighten_rounded;
+      title = 'Update your baseline';
+      message = 'Your baseline needs changes. Review the notes and resubmit.';
+      ctaLabel = 'Resubmit Baseline';
+      onTap = () =>
+          goto(ParticipantBaselineSubmissionScreen(challengeId: challenge.id));
+    } else if (baseline.reviewStatus == ReviewStatus.submitted) {
+      icon = Icons.hourglass_bottom_rounded;
+      title = 'Baseline under review';
+      message =
+          "Your baseline is awaiting approval. Check-ins unlock once it's approved.";
+    } else {
+      // Baseline approved → weekly / final cadence.
+      final firstCheckInOpen =
+          now.isAfter(challenge.startDate.add(const Duration(days: 7)));
+      final finalWindowOpen =
+          now.isAfter(challenge.endDate.subtract(const Duration(days: 3)));
+      final int currentWeek =
+          (now.difference(challenge.startDate).inDays / 7).floor();
+      final weekly = provider.latestWeeklyCheckIn;
+      final int? weeklyWeek = weekly?.data['weekNumber'] is num
+          ? (weekly!.data['weekNumber'] as num).toInt()
+          : null;
+      final bool weeklyDoneThisWeek = weekly != null &&
+          (weekly.reviewStatus == ReviewStatus.submitted ||
+              weekly.reviewStatus == ReviewStatus.approved) &&
+          weeklyWeek == currentWeek;
+      final fin = provider.finalSubmission;
+      final bool finalDone = fin != null &&
+          (fin.reviewStatus == ReviewStatus.submitted ||
+              fin.reviewStatus == ReviewStatus.approved);
+
+      if (finalWindowOpen) {
+        icon = Icons.emoji_events_outlined;
+        if (finalDone) {
+          title = "You're all done!";
+          message =
+              'Your final results are in. Sit tight for the winners announcement.';
+        } else {
+          title = 'Submit your final results';
+          message =
+              'The challenge is wrapping up — submit your final measurements and photos.';
+          ctaLabel = 'Submit Final';
+          onTap = () =>
+              goto(ParticipantFinalSubmissionScreen(challengeId: challenge.id));
+        }
+      } else if (firstCheckInOpen && !weeklyDoneThisWeek) {
+        icon = Icons.event_available_rounded;
+        title = 'Weekly check-in is open';
+        message =
+            "Log this week's progress to earn points and climb the leaderboard.";
+        ctaLabel = 'Weekly Check-In';
+        onTap = () =>
+            goto(ParticipantWeeklyCheckinScreen(challengeId: challenge.id));
+      } else {
+        icon = Icons.check_circle_outline_rounded;
+        title = "You're on track";
+        message = weeklyDoneThisWeek
+            ? "This week's check-in is done. The next one opens soon — keep it up!"
+            : 'Your first weekly check-in opens after week one. Keep going!';
+      }
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppTheme.lime.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+        border: Border.all(color: AppTheme.lime.withValues(alpha: 0.30)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppTheme.lime.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: AppTheme.lime, size: 22),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('YOUR NEXT STEP',
+                        style: AppTheme.labelSM.copyWith(
+                            color: AppTheme.lime, letterSpacing: 1.5)),
+                    const SizedBox(height: 4),
+                    Text(title, style: AppTheme.headingSM),
+                    const SizedBox(height: 6),
+                    Text(message,
+                        style: AppTheme.bodySM.copyWith(
+                            color: AppTheme.textSecondary, height: 1.4)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (ctaLabel != null && onTap != null) ...[
+            const SizedBox(height: 16),
+            EFButton(label: ctaLabel, onTap: onTap),
+          ],
         ],
       ),
     );

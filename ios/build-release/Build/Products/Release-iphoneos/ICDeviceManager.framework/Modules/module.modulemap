@@ -1,6 +1,0 @@
-framework module ICDeviceManager {
-  umbrella header "ICDeviceManager.h"
-  export *
-
-  module * { export * }
-}

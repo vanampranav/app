@@ -11,6 +11,7 @@ import '../services/health_service.dart';
 import '../services/streak_service.dart';
 import '../theme/app_theme.dart';
 import 'add_member_screen.dart';
+import 'body_history_screen.dart';
 
 /// Health status levels
 enum HealthLevel { low, thin, standard, overweight, severelyOverweight, tooHigh, excellent }
@@ -880,6 +881,15 @@ class _MeasurementScreenState extends State<MeasurementScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         const Spacer(),
+        IconButton(
+          tooltip: 'History & comparison',
+          icon: const Icon(Icons.calendar_month_rounded,
+              color: AppTheme.textPrimary, size: 22),
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const BodyHistoryScreen()),
+          ),
+        ),
         GestureDetector(
           onTap: _showMemberSelector,
           child: Container(
