@@ -15,6 +15,7 @@ import '../../models/device_model.dart';
 import '../../utils/food_emoji_helper.dart';
 import '../../utils/food_icon_helper.dart';
 import '../../services/health_service.dart';
+import '../../services/backend_service.dart';
 import '../../widgets/device_scan_sheet.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/ef_components.dart';
@@ -222,9 +223,26 @@ class _NutritionLogScreenState extends State<NutritionLogScreen> {
     });
     await _save();
 
-    // Push each new entry to Apple Health / Health Connect (silent)
+    // Push each new entry to Apple Health / Health Connect & Firebase backend (silent)
     for (final e in entries) {
       HealthService().syncMealEntry(e);
+      _syncBackendMealEntry(e, source: 'manual', nutritionSource: 'fatsecret');
+    }
+  }
+
+  Future<void> _syncBackendMealEntry(
+    MealEntry entry, {
+    String source = 'manual',
+    String? nutritionSource,
+  }) async {
+    try {
+      await BackendService().saveMeal(
+        entry,
+        source: source,
+        nutritionSource: nutritionSource,
+      );
+    } catch (e) {
+      debugPrint('Backend saveMeal error for "${entry.foodName}": $e');
     }
   }
 
@@ -361,6 +379,13 @@ class _NutritionLogScreenState extends State<NutritionLogScreen> {
 
       for (final e in confirmedEntries) {
         HealthService().syncMealEntry(e);
+        final String nutritionSource =
+            e.fdcId == 'ai_vision' ? 'ai_estimate' : 'fatsecret';
+        _syncBackendMealEntry(
+          e,
+          source: 'camera_ai',
+          nutritionSource: nutritionSource,
+        );
       }
 
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(

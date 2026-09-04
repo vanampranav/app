@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import '../theme/app_theme.dart';
 import '../services/shopify_service.dart';
 import '../services/health_service.dart';
+import '../services/backend_service.dart';
 import 'add_member_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -272,6 +274,368 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'Failed to submit deletion request. Please try again or contact support.',
             style: TextStyle(fontFamily: "Helvetica", ),
           ),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _testBackend() async {
+    try {
+      final result = await BackendService().helloEleFit();
+      debugPrint('helloEleFit response: $result');
+      if (!mounted) return;
+      final uid = result['uid'] ?? 'unknown';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Backend connected: $uid'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      debugPrint('helloEleFit error: $e');
+      if (!mounted) return;
+      String errorMsg = e.toString();
+      if (e is FirebaseFunctionsException) {
+        errorMsg = '[${e.code}] ${e.message ?? 'Unauthenticated or server error'}';
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Backend error: $errorMsg'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _saveTestMeal() async {
+    try {
+      final result = await BackendService().saveTestMeal();
+      debugPrint('saveTestMeal response: $result');
+      if (!mounted) return;
+      final docId = result['id'] ?? result['data']?['id'] ?? 'unknown';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Test meal saved: $docId'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      debugPrint('saveTestMeal error: $e');
+      if (!mounted) return;
+      String errorMsg = e.toString();
+      if (e is FirebaseFunctionsException) {
+        errorMsg = '[${e.code}] ${e.message ?? 'Failed to save test meal'}';
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Backend error: $errorMsg'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _loadTodayMeals() async {
+    try {
+      final entries = await BackendService().getMealsForDate(DateTime.now());
+      debugPrint('getMealsForDate loaded ${entries.length} entries:');
+      for (final e in entries) {
+        debugPrint('  - ${e.foodName} (${e.meal}) | ${e.weight}g | ${e.nutrition.calories} kcal');
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Loaded ${entries.length} meals from backend'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      debugPrint('getMealsForDate error: $e');
+      if (!mounted) return;
+      String errorMsg = e.toString();
+      if (e is FirebaseFunctionsException) {
+        errorMsg = '[${e.code}] ${e.message ?? 'Failed to load meals'}';
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Backend error: $errorMsg'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _testBackendFoodSearch() async {
+    try {
+      final foods = await BackendService().searchFoods('idli');
+      debugPrint('searchFoods returned ${foods.length} results:');
+      for (final item in foods) {
+        debugPrint('  - foodId: ${item['foodId']}');
+        debugPrint('    name: ${item['name']}');
+        debugPrint('    brandName: ${item['brandName']}');
+        debugPrint('    description: ${item['description']}');
+        debugPrint('    caloriesPer100g: ${item['caloriesPer100g']}');
+        debugPrint('    defaultServing: ${item['defaultServing']}');
+        debugPrint('    provider: ${item['provider']}');
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Backend search returned ${foods.length} foods'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      debugPrint('searchFoods error: $e');
+      if (!mounted) return;
+      String errorMsg = e.toString();
+      if (e is FirebaseFunctionsException) {
+        errorMsg = '[${e.code}] ${e.message ?? 'Food search failed'}';
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Backend error: $errorMsg'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _testFoodDetails() async {
+    try {
+      final food = await BackendService().getFoodDetails('5702429');
+      final servings = food['servings'] as List<dynamic>? ?? [];
+      debugPrint('getFoodDetails returned:');
+      debugPrint('  foodId: ${food['foodId']}');
+      debugPrint('  name: ${food['name']}');
+      debugPrint('  brandName: ${food['brandName']}');
+      debugPrint('  provider: ${food['provider']}');
+      debugPrint('  number of servings: ${servings.length}');
+
+      for (final s in servings) {
+        if (s is Map<String, dynamic>) {
+          final n = s['nutrition'] as Map<String, dynamic>? ?? {};
+          debugPrint('    - servingId: ${s['servingId']} | description: ${s['description']} | '
+              'metricAmount: ${s['metricAmount']} | metricUnit: ${s['metricUnit']} | '
+              'calories: ${n['calories']} | protein: ${n['protein']} | carbs: ${n['carbs']} | fat: ${n['fat']}');
+        }
+      }
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Loaded ${servings.length} serving options'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      debugPrint('getFoodDetails error: $e');
+      if (!mounted) return;
+      String errorMsg = e.toString();
+      if (e is FirebaseFunctionsException) {
+        errorMsg = '[${e.code}] ${e.message ?? 'Food details failed'}';
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Backend error: $errorMsg'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _testResolveFood() async {
+    try {
+      final food = await BackendService().resolveFood(
+        foodId: '5702429',
+        servingId: '5537175',
+        quantity: 4.0,
+      );
+
+      final String name = food['name'] ?? 'Unknown';
+      final String servingDesc = food['servingDescription'] ?? '';
+      final double qty = (food['quantity'] ?? 0.0).toDouble();
+      final num? weightGrams = food['weightGrams'];
+      final Map<String, dynamic> n =
+          food['nutrition'] as Map<String, dynamic>? ?? {};
+
+      debugPrint('resolveFood response:');
+      debugPrint('  full object: $food');
+      debugPrint('  foodId: ${food['foodId']}');
+      debugPrint('  name: $name');
+      debugPrint('  servingId: ${food['servingId']}');
+      debugPrint('  servingDescription: $servingDesc');
+      debugPrint('  quantity: $qty');
+      debugPrint('  weightGrams: $weightGrams');
+      debugPrint('  calories: ${n['calories']}');
+      debugPrint('  protein: ${n['protein']}');
+      debugPrint('  carbs: ${n['carbs']}');
+      debugPrint('  fat: ${n['fat']}');
+
+      if (!mounted) return;
+      final cal = n['calories'] ?? 0;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Resolved ${qty.toStringAsFixed(0)} × $name = $cal kcal'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      debugPrint('resolveFood error: $e');
+      if (!mounted) return;
+      String errorMsg = e.toString();
+      if (e is FirebaseFunctionsException) {
+        errorMsg = '[${e.code}] ${e.message ?? 'Food resolution failed'}';
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Backend error: $errorMsg'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _testInterpretMeal() async {
+    try {
+      const String sampleInput = "I had 4 idlis for lunch";
+      final interpretation = await BackendService().interpretMeal(sampleInput);
+
+      final foods = interpretation['foods'] as List<dynamic>? ?? [];
+      final String? mealType = interpretation['mealType'];
+      final String mealTypeSource = interpretation['mealTypeSource'] ?? 'unknown';
+      final double confidence = (interpretation['confidence'] ?? 0.0).toDouble();
+      final bool needsClarification = interpretation['needsClarification'] ?? false;
+      final String? clarificationQuestion = interpretation['clarificationQuestion'];
+
+      debugPrint('interpretMeal response for "$sampleInput":');
+      debugPrint('  mealType: $mealType ($mealTypeSource)');
+      debugPrint('  confidence: $confidence');
+      debugPrint('  needsClarification: $needsClarification');
+      debugPrint('  clarificationQuestion: $clarificationQuestion');
+      debugPrint('  foods (${foods.length}):');
+
+      String summaryFoodText = 'no food';
+      for (final f in foods) {
+        if (f is Map<String, dynamic>) {
+          final name = f['name'] ?? 'unknown';
+          final qty = f['quantity'];
+          final unit = f['unit'];
+          final mods = f['modifiers'] as List<dynamic>? ?? [];
+          summaryFoodText = '${qty ?? ''} × $name'.trim();
+          debugPrint('    - name: "$name" | quantity: $qty | unit: "$unit" | modifiers: $mods');
+        }
+      }
+
+      if (!mounted) return;
+      final String snackText = 'Understood: $summaryFoodText • ${mealType ?? 'unspecified'}';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(snackText),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      debugPrint('interpretMeal error: $e');
+      if (!mounted) return;
+      String errorMsg = e.toString();
+      if (e is FirebaseFunctionsException) {
+        errorMsg = '[${e.code}] ${e.message ?? 'Meal interpretation failed'}';
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Backend error: $errorMsg'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _testPrepareMeal() async {
+    try {
+      const String sampleInput = "I had 4 idlis for lunch";
+      final proposal = await BackendService().prepareMeal(sampleInput);
+
+      final String originalText = proposal['originalText'] ?? sampleInput;
+      final String? mealType = proposal['mealType'];
+      final String mealTypeSource = proposal['mealTypeSource'] ?? 'unknown';
+      final double interpConf = (proposal['interpretationConfidence'] ?? 0.0).toDouble();
+      final bool readyToLog = proposal['readyToLog'] ?? false;
+      final bool needsClarification = proposal['needsClarification'] ?? false;
+      final String? clarificationQuestion = proposal['clarificationQuestion'];
+      final items = proposal['items'] as List<dynamic>? ?? [];
+
+      debugPrint('prepareMeal response for "$originalText":');
+      debugPrint('  mealType: $mealType ($mealTypeSource)');
+      debugPrint('  interpretationConfidence: $interpConf');
+      debugPrint('  readyToLog: $readyToLog');
+      debugPrint('  needsClarification: $needsClarification');
+      debugPrint('  clarificationQuestion: $clarificationQuestion');
+      debugPrint('  items (${items.length}):');
+
+      num calories = 0;
+      String matchedFoodName = 'Idli';
+
+      for (final item in items) {
+        if (item is Map<String, dynamic>) {
+          final String interpName = item['interpretedName'] ?? '';
+          final String? foodId = item['matchedFoodId'];
+          final String? foodName = item['matchedFoodName'];
+          final String? brandName = item['brandName'];
+          final num? reqQty = item['requestedQuantity'];
+          final String? reqUnit = item['requestedUnit'];
+          final String? servingId = item['matchedServingId'];
+          final String? servingDesc = item['matchedServingDescription'];
+          final num? resolvedQty = item['resolvedQuantity'];
+          final num? weightGrams = item['weightGrams'];
+          final double matchConf = (item['matchConfidence'] ?? 0.0).toDouble();
+          final String status = item['status'] ?? 'unknown';
+          final Map<String, dynamic>? nutrition =
+              item['nutrition'] as Map<String, dynamic>?;
+
+          if (foodName != null) {
+            matchedFoodName = foodName;
+          }
+          if (nutrition != null && nutrition['calories'] != null) {
+            calories = nutrition['calories'];
+          }
+
+          debugPrint('    - interpretedName: "$interpName"');
+          debugPrint('      matchedFoodId: $foodId');
+          debugPrint('      matchedFoodName: $foodName');
+          debugPrint('      brandName: $brandName');
+          debugPrint('      requestedQuantity: $reqQty');
+          debugPrint('      requestedUnit: $reqUnit');
+          debugPrint('      matchedServingId: $servingId');
+          debugPrint('      matchedServingDescription: $servingDesc');
+          debugPrint('      resolvedQuantity: $resolvedQty');
+          debugPrint('      weightGrams: $weightGrams');
+          debugPrint('      matchConfidence: $matchConf');
+          debugPrint('      status: $status');
+          debugPrint('      nutrition: $nutrition');
+        }
+      }
+
+      if (!mounted) return;
+      final String snackText =
+          'Prepared: 4 × $matchedFoodName • $calories kcal';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(snackText),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      debugPrint('prepareMeal error: $e');
+      if (!mounted) return;
+      String errorMsg = e.toString();
+      if (e is FirebaseFunctionsException) {
+        errorMsg = '[${e.code}] ${e.message ?? 'Meal preparation failed'}';
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Backend error: $errorMsg'),
           backgroundColor: Colors.red,
         ),
       );
@@ -685,6 +1049,116 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ],
 
           const SizedBox(height: 32),
+
+          // TEMPORARY: Developer Test Section
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Developer Options',
+                    style: TextStyle(
+                      fontFamily: "Helvetica",
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  ElevatedButton.icon(
+                    onPressed: _testBackend,
+                    icon: const Icon(Icons.cloud_done_rounded),
+                    label: const Text('Test EleFit Backend'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.lime,
+                      foregroundColor: Colors.black,
+                      minimumSize: const Size(double.infinity, 48),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ElevatedButton.icon(
+                    onPressed: _saveTestMeal,
+                    icon: const Icon(Icons.restaurant_rounded),
+                    label: const Text('Save Test Meal'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.surface3,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(double.infinity, 48),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ElevatedButton.icon(
+                    onPressed: _loadTodayMeals,
+                    icon: const Icon(Icons.download_rounded),
+                    label: const Text("Load Today's Meals"),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.purple,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(double.infinity, 48),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ElevatedButton.icon(
+                    onPressed: _testBackendFoodSearch,
+                    icon: const Icon(Icons.search_rounded),
+                    label: const Text('Test Backend Food Search'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.surface2,
+                      foregroundColor: AppTheme.lime,
+                      minimumSize: const Size(double.infinity, 48),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ElevatedButton.icon(
+                    onPressed: _testFoodDetails,
+                    icon: const Icon(Icons.fastfood_rounded),
+                    label: const Text('Test Food Details'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.surface2,
+                      foregroundColor: AppTheme.lime,
+                      minimumSize: const Size(double.infinity, 48),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ElevatedButton.icon(
+                    onPressed: _testResolveFood,
+                    icon: const Icon(Icons.calculate_rounded),
+                    label: const Text('Test Resolve Food'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.surface2,
+                      foregroundColor: AppTheme.lime,
+                      minimumSize: const Size(double.infinity, 48),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ElevatedButton.icon(
+                    onPressed: _testInterpretMeal,
+                    icon: const Icon(Icons.auto_awesome_rounded),
+                    label: const Text('Test Interpret Meal'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.surface2,
+                      foregroundColor: AppTheme.lime,
+                      minimumSize: const Size(double.infinity, 48),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ElevatedButton.icon(
+                    onPressed: _testPrepareMeal,
+                    icon: const Icon(Icons.fact_check_rounded),
+                    label: const Text('Test Prepare Meal'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.surface2,
+                      foregroundColor: AppTheme.lime,
+                      minimumSize: const Size(double.infinity, 48),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 16),
 
           // App Info
           Card(

@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
+from typing import List, Dict, Optional
 import traceback
 from groq import AsyncGroq
 from openai import AsyncOpenAI
@@ -99,6 +100,24 @@ openai_client = AsyncOpenAI(api_key=openai_api_key) if openai_api_key else None
 
 class ChatRequest(BaseModel):
     message: str
+
+# --- Ele AI Assistant Models ---
+class EleRequest(BaseModel):
+    userId: str
+    inputType: str  # "text"
+    message: str
+    currentScreen: str = "home"
+    localTime: str
+    context: dict = {}
+
+class EleResponse(BaseModel):
+    intent: str
+    confidence: float
+    message: str
+    uiType: str
+    requiresConfirmation: bool = False
+    draftAction: dict = None
+    actions: list = []
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
