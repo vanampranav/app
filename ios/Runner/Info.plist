@@ -4,6 +4,9 @@
 <dict>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<!-- Saving the body-data comparison report image to the user's photo library (gal). -->
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>EleFit saves your body-data comparison report to your Photos.</string>
 	<!-- Disable Firebase's UIApplicationDelegate method swizzling. Both Firebase
 	     and OneSignal swizzle the notification-delegate methods; on a cold launch
 	     triggered by tapping a push (killed app), the two swizzles collide and the

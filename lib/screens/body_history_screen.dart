@@ -78,18 +78,23 @@ class _BodyHistoryScreenState extends State<BodyHistoryScreen> {
   }
 
   void _toggleSelect(BodyMeasurement m) {
-    setState(() {
-      final idx = _selected.indexWhere((x) => x.id == m.id);
-      if (idx >= 0) {
-        _selected.removeAt(idx);
-      } else if (_selected.length < 2) {
-        _selected.add(m);
-      } else {
-        // FIFO: replace the earliest-picked so a third tap "just works".
-        _selected.removeAt(0);
-        _selected.add(m);
-      }
-    });
+    final idx = _selected.indexWhere((x) => x.id == m.id);
+    if (idx >= 0) {
+      // Tapping an already-selected reading always deselects it.
+      setState(() => _selected.removeAt(idx));
+    } else if (_selected.length < 2) {
+      setState(() => _selected.add(m));
+    } else {
+      // Two are already selected. Do NOT auto-swap — the user must first
+      // deselect one (even if it's on another day) to change their pick.
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+              'You can compare 2 readings. Deselect one first to pick another.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
   }
 
   void _openComparison() {

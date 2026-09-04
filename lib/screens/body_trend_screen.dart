@@ -1,6 +1,14 @@
+import 'dart:io';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:gal/gal.dart';
 import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../models/body_metrics_catalog.dart';
 import '../models/member_model.dart';
@@ -29,6 +37,11 @@ class _BodyTrendScreenState extends State<BodyTrendScreen> {
   late final List<BodyMeasurement> _sorted;
   late String _selectedId;
 
+  final GlobalKey _boundaryKey = GlobalKey();
+  bool _sharing = false;
+  bool _saving = false;
+  bool get _busy => _sharing || _saving;
+
   @override
   void initState() {
     super.initState();
@@ -51,6 +64,79 @@ class _BodyTrendScreenState extends State<BodyTrendScreen> {
     return out;
   }
 
+  Widget _actionButtons() {
+    return Row(
+      children: [
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: _busy ? null : _save,
+            icon: const Icon(Icons.download_rounded, size: 20),
+            label: Text(_saving ? 'Saving…' : 'Save'),
+          ),
+        ),
+        const SizedBox(width: AppTheme.md),
+        Expanded(
+          child: ElevatedButton.icon(
+            onPressed: _busy ? null : _share,
+            icon: const Icon(Icons.ios_share_rounded, size: 20),
+            label: Text(_sharing ? 'Preparing…' : 'Share'),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<Uint8List?> _capturePng() async {
+    final boundary = _boundaryKey.currentContext?.findRenderObject()
+        as RenderRepaintBoundary?;
+    if (boundary == null) return null;
+    final image = await boundary.toImage(pixelRatio: 2.5);
+    final data = await image.toByteData(format: ui.ImageByteFormat.png);
+    return data?.buffer.asUint8List();
+  }
+
+  Future<void> _share() async {
+    if (_busy) return;
+    setState(() => _sharing = true);
+    try {
+      final bytes = await _capturePng();
+      if (bytes == null) throw 'Chart not ready yet';
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/elefit_${_metric.id}_trend.png');
+      await file.writeAsBytes(bytes);
+      await Share.shareXFiles([XFile(file.path)],
+          text: 'My EleFit ${_metric.name} trend');
+    } catch (e) {
+      _toast('Could not share: $e');
+    } finally {
+      if (mounted) setState(() => _sharing = false);
+    }
+  }
+
+  Future<void> _save() async {
+    if (_busy) return;
+    setState(() => _saving = true);
+    try {
+      final bytes = await _capturePng();
+      if (bytes == null) throw 'Chart not ready yet';
+      if (!await Gal.hasAccess()) await Gal.requestAccess();
+      await Gal.putImageBytes(bytes,
+          name: 'elefit_${_metric.id}_trend_${DateTime.now().millisecondsSinceEpoch}');
+      _toast('Saved to your gallery ✓');
+    } on GalException catch (e) {
+      _toast('Could not save: ${e.type.message}');
+    } catch (e) {
+      _toast('Could not save: $e');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  void _toast(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
   @override
   Widget build(BuildContext context) {
     final points = _points;
@@ -70,9 +156,25 @@ class _BodyTrendScreenState extends State<BodyTrendScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _summary(points),
-                  const SizedBox(height: AppTheme.md),
-                  _chartCard(points),
+                  // Everything inside this boundary is what Save/Share capture.
+                  RepaintBoundary(
+                    key: _boundaryKey,
+                    child: Container(
+                      color: AppTheme.bg,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _summary(points),
+                          const SizedBox(height: AppTheme.md),
+                          _chartCard(points),
+                        ],
+                      ),
+                    ),
+                  ),
+                  if (points.length >= 2) ...[
+                    const SizedBox(height: AppTheme.lg),
+                    _actionButtons(),
+                  ],
                 ],
               ),
             ),

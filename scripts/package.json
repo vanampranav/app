@@ -1,0 +1,9 @@
+{
+  "name": "elefit-admin-scripts",
+  "private": true,
+  "version": "1.0.0",
+  "description": "One-off admin/export scripts for EleFit (run locally with a service-account key)",
+  "dependencies": {
+    "firebase-admin": "^12.7.0"
+  }
+}

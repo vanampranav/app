@@ -40,6 +40,12 @@
     <uses-permission android:name="android.permission.health.WRITE_BODY_FAT"/>
     <uses-permission android:name="android.permission.health.WRITE_NUTRITION"/>
 
+    <!-- Saving the body-comparison report image to the gallery (gal package).
+         Android 10+ (API 29+) uses scoped storage and needs NO permission;
+         this covers Android 9 and below only. -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28"/>
+
     <application
         android:label="EleFit"
         android:name="${applicationName}"

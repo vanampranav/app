@@ -67,7 +67,8 @@ Areas: **App** = Flutter · **BE** = Python AI backend · **Web** = the-elefit-n
 
 **Follow-ups:**
 - ✅ DONE (2026-09-03) **Per-metric trend line** — `lib/screens/body_trend_screen.dart`: metric chip selector + fl_chart line chart of any metric over all readings (latest/change/low/high summary, date-labelled, touch tooltips, handles nulls & <2-point cases). Entry: `show_chart` icon in `BodyHistoryScreen` top bar, and tap any metric in the reading-detail sheet to open that metric's trend.
-- ✅ DONE (2026-09-03) **Share report as image** — `BodyComparisonReportScreen` now captures itself via built-in `RepaintBoundary` → PNG (via `path_provider`) → OS share sheet (`share_plus: ^10.1.4`, the only new dependency; capture needs no extra package). Share button in the app bar + a bottom "Share report" button. (Save-to-gallery is reachable via the share sheet; a dedicated gallery-save would need `gal`/permissions — not added.)
+- ✅ DONE (2026-09-03) **Share + Save report as image** — `BodyComparisonReportScreen` captures itself via built-in `RepaintBoundary` → PNG (shared `_capturePng()` helper). **Share** writes to a temp file (`path_provider`) → OS share sheet (`share_plus: ^10.1.4`). **Save** (added 2026-09-04) writes straight to the device gallery via `gal: ^2.3.x` (`Gal.putImageBytes`). Both appear as app-bar icons AND as a bottom Save/Share button row.
+  - Native config for `gal`: iOS `NSPhotoLibraryAddUsageDescription` in Info.plist; Android `WRITE_EXTERNAL_STORAGE` with `maxSdkVersion=28` (Android 10+ needs none). Adding these two native plugins requires a full rebuild + `pod install`.
   - Note: iPad share-sheet popover origin (`sharePositionOrigin`) not set — fine on phones; add if iPad support is needed.
 - TODO (optional housekeeping): adopt the shared catalog inside `MeasurementScreen` to de-duplicate its inline metric defs.
 

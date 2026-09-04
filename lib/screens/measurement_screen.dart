@@ -1,7 +1,14 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:gal/gal.dart';
 import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/device_model.dart';
 import '../models/member_model.dart';
@@ -117,7 +124,18 @@ class _MeasurementScreenState extends State<MeasurementScreen> {
   final MemberService _memberService = MemberService();
   
   WeightMeasurement? _latestMeasurement;
-  WeightMeasurement? _compareMeasurement;
+  // When set, the screen displays THIS past reading (tapped from the selector)
+  // instead of the latest one. Null = showing the latest reading.
+  WeightMeasurement? _viewingMeasurement;
+  WeightMeasurement? get _displayMeasurement =>
+      _viewingMeasurement ?? _latestMeasurement;
+  bool get _isViewingPast => _viewingMeasurement != null;
+
+  // Share/save of the current reading card as an image.
+  final GlobalKey _shareBoundaryKey = GlobalKey();
+  bool _sharing = false;
+  bool _saving = false;
+  bool get _busy => _sharing || _saving;
   Member? _activeMember;
   List<Member> _members = [];
   // True while switching members + re-initialising the SDK. Readings that arrive
@@ -144,7 +162,7 @@ class _MeasurementScreenState extends State<MeasurementScreen> {
         description: 'Body Mass Index (BMI) is a measure of your fitness level based on both your height and weight. This is calculated as weight (kg) divided by height (m²). The higher the BMI, the more likely you are to develop associated health problems though this is not a complete view of health and fitness.',
         scaleMin: 10,
         scaleMax: 35,
-        getValue: () => _latestMeasurement?.bmi,
+        getValue: () => _displayMeasurement?.bmi,
         ranges: [
           MetricRange(label: 'Thin', minValue: 0, maxValue: 18.5, color: const Color(0xFF4FC3F7), level: HealthLevel.thin),
           MetricRange(label: 'Standard', minValue: 18.5, maxValue: 25.0, color: const Color(0xFF81C784), level: HealthLevel.standard),
@@ -161,7 +179,7 @@ class _MeasurementScreenState extends State<MeasurementScreen> {
         description: 'Body Fat Percentage (BFP) is a percentage measurement of your fitness level based only on your weight. This is calculated as the body fat weight divided by the total body weight. The higher the body fat percentage, the more likely you are to develop associated health problems though this is not a complete view of health and fitness.',
         scaleMin: 0,
         scaleMax: 40,
-        getValue: () => _latestMeasurement?.bodyFat,
+        getValue: () => _displayMeasurement?.bodyFat,
         ranges: isMale ? [
           MetricRange(label: 'Thin', minValue: 0, maxValue: 10, color: const Color(0xFF4FC3F7), level: HealthLevel.thin),
           MetricRange(label: 'Standard', minValue: 10, maxValue: 20, color: const Color(0xFF81C784), level: HealthLevel.standard),
@@ -183,7 +201,7 @@ class _MeasurementScreenState extends State<MeasurementScreen> {
         description: 'Muscle Rate represents the percentage of your body weight that is muscle. A higher muscle rate indicates better physical fitness and metabolic health. Regular exercise, especially strength training, can help increase muscle rate.',
         scaleMin: 20,
         scaleMax: 60,
-        getValue: () => _latestMeasurement?.muscle,
+        getValue: () => _displayMeasurement?.muscle,
         ranges: isMale ? [
           MetricRange(label: 'Low', minValue: 0, maxValue: 33, color: const Color(0xFF4FC3F7), level: HealthLevel.low),
           MetricRange(label: 'Standard', minValue: 33, maxValue: 39, color: const Color(0xFF81C784), level: HealthLevel.standard),
@@ -223,7 +241,7 @@ class _MeasurementScreenState extends State<MeasurementScreen> {
         description: 'Subcutaneous fat is the fat stored directly under your skin. While some subcutaneous fat is normal and healthy, too much can lead to health issues. This type of fat can be reduced through diet and exercise.',
         scaleMin: 0,
         scaleMax: 30,
-        getValue: () => _latestMeasurement?.subcutaneousFat,
+        getValue: () => _displayMeasurement?.subcutaneousFat,
         ranges: isMale ? [
           MetricRange(label: 'Low', minValue: 0, maxValue: 8.6, color: const Color(0xFF4FC3F7), level: HealthLevel.low),
           MetricRange(label: 'Standard', minValue: 8.6, maxValue: 16.7, color: const Color(0xFF81C784), level: HealthLevel.standard),
@@ -245,7 +263,7 @@ class _MeasurementScreenState extends State<MeasurementScreen> {
         description: 'Visceral Fat is a type of body fat that\'s stored within the abdominal cavity. The more visceral fat your body carries, the more likely you are to develop associated health problems though this is not a complete view of health and fitness.',
         scaleMin: 0,
         scaleMax: 20,
-        getValue: () => _latestMeasurement?.visceralFat,
+        getValue: () => _displayMeasurement?.visceralFat,
         ranges: [
           MetricRange(label: 'Standard', minValue: 0, maxValue: 10, color: const Color(0xFF81C784), level: HealthLevel.standard),
           MetricRange(label: 'Too High', minValue: 10, maxValue: 100, color: const Color(0xFFE57373), level: HealthLevel.tooHigh),
@@ -260,7 +278,7 @@ class _MeasurementScreenState extends State<MeasurementScreen> {
         description: 'Body Water percentage is the total amount of fluid in the body expressed as a percentage of total body weight. Water plays a vital role in many of the body\'s processes, including temperature regulation, nutrient transport, and waste removal.',
         scaleMin: 40,
         scaleMax: 70,
-        getValue: () => _latestMeasurement?.water,
+        getValue: () => _displayMeasurement?.water,
         ranges: isMale ? [
           MetricRange(label: 'Low', minValue: 0, maxValue: 55, color: const Color(0xFFFFB74D), level: HealthLevel.low),
           MetricRange(label: 'Standard', minValue: 55, maxValue: 65, color: const Color(0xFF81C784), level: HealthLevel.standard),
@@ -280,7 +298,7 @@ class _MeasurementScreenState extends State<MeasurementScreen> {
         description: 'Skeletal Muscle is the type of muscle attached to bones that allows voluntary movement. Higher skeletal muscle mass is associated with better metabolic health, improved physical performance, and reduced risk of injury.',
         scaleMin: 20,
         scaleMax: 50,
-        getValue: () => _latestMeasurement?.skeletalMuscle,
+        getValue: () => _displayMeasurement?.skeletalMuscle,
         ranges: isMale ? [
           MetricRange(label: 'Low', minValue: 0, maxValue: 40, color: const Color(0xFF4FC3F7), level: HealthLevel.low),
           MetricRange(label: 'Standard', minValue: 40, maxValue: 60, color: const Color(0xFF81C784), level: HealthLevel.standard),
@@ -320,7 +338,7 @@ class _MeasurementScreenState extends State<MeasurementScreen> {
         description: 'Bone Mass is the estimated weight of bone mineral in your body. Healthy bone mass is crucial for overall skeletal health and helps prevent conditions like osteoporosis. Calcium-rich diet and weight-bearing exercises support bone health.',
         scaleMin: 1,
         scaleMax: 5,
-        getValue: () => _latestMeasurement?.boneMass,
+        getValue: () => _displayMeasurement?.boneMass,
         ranges: isMale ? [
           MetricRange(label: 'Low', minValue: 0, maxValue: 2.5, color: const Color(0xFFFFB74D), level: HealthLevel.low),
           MetricRange(label: 'Standard', minValue: 2.5, maxValue: 3.5, color: const Color(0xFF81C784), level: HealthLevel.standard),
@@ -340,7 +358,7 @@ class _MeasurementScreenState extends State<MeasurementScreen> {
         description: 'Protein percentage indicates the proportion of your body weight made up of protein. Proteins are essential for building and repairing tissues, and a healthy protein level supports muscle maintenance and immune function.',
         scaleMin: 10,
         scaleMax: 25,
-        getValue: () => _latestMeasurement?.protein,
+        getValue: () => _displayMeasurement?.protein,
         ranges: [
           MetricRange(label: 'Low', minValue: 0, maxValue: 16, color: const Color(0xFFFFB74D), level: HealthLevel.low),
           MetricRange(label: 'Standard', minValue: 16, maxValue: 20, color: const Color(0xFF81C784), level: HealthLevel.standard),
@@ -356,7 +374,7 @@ class _MeasurementScreenState extends State<MeasurementScreen> {
         description: 'Basal Metabolic Rate (BMR) is the minimum level of energy your body needs to function effectively while at rest. Individuals who exercise regularly tend to have higher BMR than people that are less active.',
         scaleMin: 1000,
         scaleMax: 2500,
-        getValue: () => _latestMeasurement?.bmr?.toDouble(),
+        getValue: () => _displayMeasurement?.bmr?.toDouble(),
         ranges: _getBmrRanges(isMale, age),
       ),
       BodyIndexMetric(
@@ -368,7 +386,7 @@ class _MeasurementScreenState extends State<MeasurementScreen> {
         description: 'Body Age is an estimation of your overall health age based on your body composition measurements. A body age lower than your actual age indicates good fitness, while a higher body age suggests room for improvement.',
         scaleMin: 15,
         scaleMax: 80,
-        getValue: () => _latestMeasurement?.physicalAge?.toDouble(),
+        getValue: () => _displayMeasurement?.physicalAge?.toDouble(),
         ranges: [
           MetricRange(label: 'Excellent', minValue: 0, maxValue: age.toDouble() - 5, color: const Color(0xFF4DB6AC), level: HealthLevel.excellent),
           MetricRange(label: 'Standard', minValue: age.toDouble() - 5, maxValue: age.toDouble() + 5, color: const Color(0xFF81C784), level: HealthLevel.standard),
@@ -498,9 +516,6 @@ class _MeasurementScreenState extends State<MeasurementScreen> {
         final measurements = await _memberService.getMeasurements(_activeMember!.id, limit: 2);
         if (measurements.isNotEmpty) {
           _latestMeasurement = WeightMeasurement.fromBodyMeasurement(measurements.first);
-          if (measurements.length > 1) {
-            _compareMeasurement = WeightMeasurement.fromBodyMeasurement(measurements[1]);
-          }
         }
       }
     } catch (e) {
@@ -541,6 +556,7 @@ class _MeasurementScreenState extends State<MeasurementScreen> {
 
       setState(() {
         _latestMeasurement = measurement;
+        _viewingMeasurement = null;
         _isConnected       = true;
       });
 
@@ -719,10 +735,7 @@ class _MeasurementScreenState extends State<MeasurementScreen> {
       setState(() {
         _latestMeasurement =
             WeightMeasurement.fromBodyMeasurement(measurements.first);
-        if (measurements.length > 1) {
-          _compareMeasurement =
-              WeightMeasurement.fromBodyMeasurement(measurements[1]);
-        }
+        _viewingMeasurement = null;
       });
     }
   }
@@ -737,7 +750,7 @@ class _MeasurementScreenState extends State<MeasurementScreen> {
       _activeMember = member;
       // Drop the previous member's reading so it can't be attributed here.
       _latestMeasurement = null;
-      _compareMeasurement = null;
+      _viewingMeasurement = null;
     });
 
     await _memberService.setActiveMember(member.id);
@@ -754,9 +767,6 @@ class _MeasurementScreenState extends State<MeasurementScreen> {
     setState(() {
       if (measurements.isNotEmpty) {
         _latestMeasurement = WeightMeasurement.fromBodyMeasurement(measurements.first);
-        if (measurements.length > 1) {
-          _compareMeasurement = WeightMeasurement.fromBodyMeasurement(measurements[1]);
-        }
       }
       _switchingMember = false;
     });
@@ -852,14 +862,27 @@ class _MeasurementScreenState extends State<MeasurementScreen> {
               child: SingleChildScrollView(
                 child: Column(
                   children: [
-                    _buildWeightCard(),
-                    _buildConnectionStatus(),
-                    _buildComparedSection(),
-                    _buildBodyIndexSection(),
+                    // Everything inside this boundary is what Save/Share capture.
+                    RepaintBoundary(
+                      key: _shareBoundaryKey,
+                      child: Container(
+                        color: AppTheme.bg,
+                        child: Column(
+                          children: [
+                            _buildWeightCard(),
+                            _buildConnectionStatus(),
+                            _buildComparedSection(),
+                            _buildBodyIndexSection(),
+                          ],
+                        ),
+                      ),
+                    ),
                     _buildDisclaimerSection(),
                     _buildTrendSection(),
                     // _buildBabyPetModeCard() removed
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 16),
+                    _buildShareBar(),
+                    const SizedBox(height: 24),
                   ],
                 ),
               ),
@@ -868,6 +891,81 @@ class _MeasurementScreenState extends State<MeasurementScreen> {
         ),
       ),
     );
+  }
+
+  Widget _buildShareBar() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(children: [
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: _busy ? null : _saveImage,
+            icon: const Icon(Icons.download_rounded, size: 20),
+            label: Text(_saving ? 'Saving…' : 'Save'),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: ElevatedButton.icon(
+            onPressed: _busy ? null : _shareImage,
+            icon: const Icon(Icons.ios_share_rounded, size: 20),
+            label: Text(_sharing ? 'Preparing…' : 'Share'),
+          ),
+        ),
+      ]),
+    );
+  }
+
+  /// Renders the reading card + body index to PNG bytes for Save/Share.
+  Future<Uint8List?> _captureReadingPng() async {
+    final boundary = _shareBoundaryKey.currentContext?.findRenderObject()
+        as RenderRepaintBoundary?;
+    if (boundary == null) return null;
+    final image = await boundary.toImage(pixelRatio: 2.5);
+    final data = await image.toByteData(format: ui.ImageByteFormat.png);
+    return data?.buffer.asUint8List();
+  }
+
+  Future<void> _shareImage() async {
+    if (_busy) return;
+    setState(() => _sharing = true);
+    try {
+      final bytes = await _captureReadingPng();
+      if (bytes == null) throw 'Nothing to share yet';
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/elefit_reading.png');
+      await file.writeAsBytes(bytes);
+      await Share.shareXFiles([XFile(file.path)],
+          text: 'My EleFit body stats');
+    } catch (e) {
+      _toastMsg('Could not share: $e');
+    } finally {
+      if (mounted) setState(() => _sharing = false);
+    }
+  }
+
+  Future<void> _saveImage() async {
+    if (_busy) return;
+    setState(() => _saving = true);
+    try {
+      final bytes = await _captureReadingPng();
+      if (bytes == null) throw 'Nothing to save yet';
+      if (!await Gal.hasAccess()) await Gal.requestAccess();
+      await Gal.putImageBytes(bytes,
+          name: 'elefit_reading_${DateTime.now().millisecondsSinceEpoch}');
+      _toastMsg('Saved to your gallery ✓');
+    } on GalException catch (e) {
+      _toastMsg('Could not save: ${e.type.message}');
+    } catch (e) {
+      _toastMsg('Could not save: $e');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  void _toastMsg(String m) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
   }
 
   Widget _buildAppBar() {
@@ -928,8 +1026,8 @@ class _MeasurementScreenState extends State<MeasurementScreen> {
   }
 
   Widget _buildWeightCard() {
-    final weight    = _latestMeasurement?.weight ?? 0.0;
-    final timestamp = _latestMeasurement?.timestamp ?? DateTime.now();
+    final weight    = _displayMeasurement?.weight ?? 0.0;
+    final timestamp = _displayMeasurement?.timestamp ?? DateTime.now();
 
     return Container(
       width: double.infinity,
@@ -995,23 +1093,23 @@ class _MeasurementScreenState extends State<MeasurementScreen> {
             ),
           ),
         ),
-        if (_latestMeasurement != null && weight > 0) ...[
+        if (_displayMeasurement != null && weight > 0) ...[
           const SizedBox(height: 16),
           // Quick metrics strip — always show if we have a measurement
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
               _quickStat('BMI',
-                  _latestMeasurement!.bmi?.toStringAsFixed(1), '',
+                  _displayMeasurement!.bmi?.toStringAsFixed(1), '',
                   AppTheme.lime),
               _quickStat('Body Fat',
-                  _latestMeasurement!.bodyFat?.toStringAsFixed(1), '%',
+                  _displayMeasurement!.bodyFat?.toStringAsFixed(1), '%',
                   const Color(0xFFFF8C42)),
               _quickStat('Muscle',
-                  _latestMeasurement!.muscle?.toStringAsFixed(1), '%',
+                  _displayMeasurement!.muscle?.toStringAsFixed(1), '%',
                   const Color(0xFF4ECDC4)),
               _quickStat('Water',
-                  _latestMeasurement!.water?.toStringAsFixed(1), '%',
+                  _displayMeasurement!.water?.toStringAsFixed(1), '%',
                   const Color(0xFF3B9EFF)),
             ],
           ),
@@ -1063,6 +1161,7 @@ class _MeasurementScreenState extends State<MeasurementScreen> {
   }
 
   Widget _buildComparedSection() {
+    final viewing = _isViewingPast;
     return GestureDetector(
       onTap: _showComparisonSelector,
       child: Container(
@@ -1071,7 +1170,11 @@ class _MeasurementScreenState extends State<MeasurementScreen> {
         decoration: BoxDecoration(
           color: AppTheme.surface1,
           borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-          border: Border.all(color: Colors.white.withOpacity(0.06)),
+          border: Border.all(
+            color: viewing
+                ? AppTheme.lime.withOpacity(0.4)
+                : Colors.white.withOpacity(0.06),
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1079,12 +1182,14 @@ class _MeasurementScreenState extends State<MeasurementScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Compared', style: AppTheme.headingSM),
+                Text(viewing ? 'Change since this reading' : 'Past readings',
+                    style: AppTheme.headingSM),
                 Row(
                   children: [
                     Text(
-                      _compareMeasurement != null
-                          ? DateFormat('MMM d · HH:mm').format(_compareMeasurement!.timestamp)
+                      viewing
+                          ? DateFormat('MMM d · HH:mm')
+                              .format(_viewingMeasurement!.timestamp)
                           : 'Select record',
                       style: AppTheme.bodyMD,
                     ),
@@ -1094,29 +1199,36 @@ class _MeasurementScreenState extends State<MeasurementScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                _buildCompareItem(
-                  'Weight', 
-                  _latestMeasurement?.weight, 
-                  _compareMeasurement?.weight, 
-                  'kg'
-                ),
-                _buildCompareItem(
-                  'BMI', 
-                  _latestMeasurement?.bmi, 
-                  _compareMeasurement?.bmi, 
-                  ''
-                ),
-                _buildCompareItem(
-                  'Body Fat', 
-                  _latestMeasurement?.bodyFat, 
-                  _compareMeasurement?.bodyFat, 
-                  '%'
-                ),
-              ],
-            ),
+            if (viewing) ...[
+              const SizedBox(height: 16),
+              // Change = latest − viewed (i.e. how you've changed since the
+              // reading you're looking at).
+              Row(
+                children: [
+                  _buildCompareItem('Weight', _latestMeasurement?.weight,
+                      _viewingMeasurement?.weight, 'kg'),
+                  _buildCompareItem('BMI', _latestMeasurement?.bmi,
+                      _viewingMeasurement?.bmi, ''),
+                  _buildCompareItem('Body Fat', _latestMeasurement?.bodyFat,
+                      _viewingMeasurement?.bodyFat, '%'),
+                ],
+              ),
+              const SizedBox(height: 12),
+              GestureDetector(
+                onTap: () => setState(() => _viewingMeasurement = null),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  const Icon(Icons.restore_rounded,
+                      size: 15, color: AppTheme.lime),
+                  const SizedBox(width: 6),
+                  Text('Back to latest',
+                      style: AppTheme.labelMD.copyWith(color: AppTheme.lime)),
+                ]),
+              ),
+            ] else ...[
+              const SizedBox(height: 8),
+              Text('Tap to open any past reading and view all its metrics.',
+                  style: AppTheme.bodyMD.copyWith(color: AppTheme.textSecondary)),
+            ],
           ],
         ),
       ),
@@ -1226,7 +1338,7 @@ class _MeasurementScreenState extends State<MeasurementScreen> {
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
               child: Row(children: [
-                Text('Compare Record', style: AppTheme.headingSM),
+                Text('View a past reading', style: AppTheme.headingSM),
                 const Spacer(),
                 GestureDetector(
                   onTap: () => Navigator.pop(context),
@@ -1257,11 +1369,11 @@ class _MeasurementScreenState extends State<MeasurementScreen> {
                       itemBuilder: (context, index) {
                         final m = measurements[index];
                         final isSelected =
-                            _compareMeasurement?.timestamp == m.timestamp;
+                            _viewingMeasurement?.timestamp == m.timestamp;
                         return GestureDetector(
                           onTap: () {
                             setState(() {
-                              _compareMeasurement =
+                              _viewingMeasurement =
                                   WeightMeasurement.fromBodyMeasurement(m);
                             });
                             Navigator.pop(context);
@@ -1656,30 +1768,30 @@ class _MeasurementScreenState extends State<MeasurementScreen> {
 
   // Calculate derived values
   double? _calculateLeanBodyMass() {
-    if (_latestMeasurement?.weight == null || _latestMeasurement?.bodyFat == null) return null;
-    final weight = _latestMeasurement!.weight;
-    final bodyFat = _latestMeasurement!.bodyFat!;
+    if (_displayMeasurement?.weight == null || _displayMeasurement?.bodyFat == null) return null;
+    final weight = _displayMeasurement!.weight;
+    final bodyFat = _displayMeasurement!.bodyFat!;
     return weight * (1 - bodyFat / 100);
   }
 
   double? _calculateMuscleMass() {
-    if (_latestMeasurement?.weight == null || _latestMeasurement?.muscle == null) return null;
-    return _latestMeasurement!.weight * _latestMeasurement!.muscle! / 100;
+    if (_displayMeasurement?.weight == null || _displayMeasurement?.muscle == null) return null;
+    return _displayMeasurement!.weight * _displayMeasurement!.muscle! / 100;
   }
 
   double? _calculateFatMass() {
-    if (_latestMeasurement?.weight == null || _latestMeasurement?.bodyFat == null) return null;
-    return _latestMeasurement!.weight * _latestMeasurement!.bodyFat! / 100;
+    if (_displayMeasurement?.weight == null || _displayMeasurement?.bodyFat == null) return null;
+    return _displayMeasurement!.weight * _displayMeasurement!.bodyFat! / 100;
   }
 
   double? _calculateWaterWeight() {
-    if (_latestMeasurement?.weight == null || _latestMeasurement?.water == null) return null;
-    return _latestMeasurement!.weight * _latestMeasurement!.water! / 100;
+    if (_displayMeasurement?.weight == null || _displayMeasurement?.water == null) return null;
+    return _displayMeasurement!.weight * _displayMeasurement!.water! / 100;
   }
 
   double? _calculateProteinMass() {
-    if (_latestMeasurement?.weight == null || _latestMeasurement?.protein == null) return null;
-    return _latestMeasurement!.weight * _latestMeasurement!.protein! / 100;
+    if (_displayMeasurement?.weight == null || _displayMeasurement?.protein == null) return null;
+    return _displayMeasurement!.weight * _displayMeasurement!.protein! / 100;
   }
 
   double? _calculateIdealWeight() {

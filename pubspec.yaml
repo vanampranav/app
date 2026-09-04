@@ -1,7 +1,7 @@
 name: elefit_app
 description: A new Flutter project.
 publish_to: 'none'
-version: 3.0.0+64
+version: 3.0.1+65
 
 
 environment:
@@ -61,6 +61,9 @@ dependencies:
   # Sharing the body-comparison report as an image (capture uses built-in
   # RepaintBoundary + path_provider; this only opens the OS share sheet)
   share_plus: ^10.1.4
+
+  # Saving the body-comparison report image to the device gallery
+  gal: ^2.3.0
 
   # Barcode scanning for nutrition food lookup
   mobile_scanner: ^6.0.0

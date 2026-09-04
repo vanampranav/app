@@ -1,8 +1,10 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:gal/gal.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -39,33 +41,65 @@ class _BodyComparisonReportScreenState
 
   final GlobalKey _boundaryKey = GlobalKey();
   bool _sharing = false;
+  bool _saving = false;
+
+  bool get _busy => _sharing || _saving;
+
+  /// Renders the whole report (even the off-screen part) to PNG bytes.
+  Future<Uint8List?> _capturePng() async {
+    final boundary = _boundaryKey.currentContext?.findRenderObject()
+        as RenderRepaintBoundary?;
+    if (boundary == null) return null;
+    final image = await boundary.toImage(pixelRatio: 2.5);
+    final data = await image.toByteData(format: ui.ImageByteFormat.png);
+    return data?.buffer.asUint8List();
+  }
 
   Future<void> _share() async {
-    if (_sharing) return;
+    if (_busy) return;
     setState(() => _sharing = true);
     try {
-      final boundary = _boundaryKey.currentContext?.findRenderObject()
-          as RenderRepaintBoundary?;
-      if (boundary == null) throw 'Report not ready yet';
-      final image = await boundary.toImage(pixelRatio: 2.5);
-      final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
-      if (bytes == null) throw 'Could not encode image';
+      final bytes = await _capturePng();
+      if (bytes == null) throw 'Report not ready yet';
       final dir = await getTemporaryDirectory();
       final file = File('${dir.path}/elefit_body_comparison.png');
-      await file.writeAsBytes(bytes.buffer.asUint8List());
+      await file.writeAsBytes(bytes);
       await Share.shareXFiles(
         [XFile(file.path)],
         text: 'My EleFit body data comparison',
       );
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not share the report: $e')),
-        );
-      }
+      _toast('Could not share the report: $e');
     } finally {
       if (mounted) setState(() => _sharing = false);
     }
+  }
+
+  Future<void> _save() async {
+    if (_busy) return;
+    setState(() => _saving = true);
+    try {
+      final bytes = await _capturePng();
+      if (bytes == null) throw 'Report not ready yet';
+      if (!await Gal.hasAccess()) await Gal.requestAccess();
+      await Gal.putImageBytes(
+        bytes,
+        name: 'elefit_body_comparison_${DateTime.now().millisecondsSinceEpoch}',
+      );
+      _toast('Saved to your gallery ✓');
+    } on GalException catch (e) {
+      _toast('Could not save: ${e.type.message}');
+    } catch (e) {
+      _toast('Could not save: $e');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  void _toast(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(msg)));
   }
 
   @override
@@ -92,6 +126,17 @@ class _BodyComparisonReportScreenState
             style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
         actions: [
           IconButton(
+            tooltip: 'Save to gallery',
+            icon: _saving
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: AppTheme.lime))
+                : const Icon(Icons.download_rounded),
+            onPressed: _busy ? null : _save,
+          ),
+          IconButton(
             tooltip: 'Share',
             icon: _sharing
                 ? const SizedBox(
@@ -100,7 +145,7 @@ class _BodyComparisonReportScreenState
                     child: CircularProgressIndicator(
                         strokeWidth: 2, color: AppTheme.lime))
                 : const Icon(Icons.ios_share_rounded),
-            onPressed: _sharing ? null : _share,
+            onPressed: _busy ? null : _share,
           ),
         ],
       ),
@@ -108,13 +153,24 @@ class _BodyComparisonReportScreenState
         child: Padding(
           padding: const EdgeInsets.fromLTRB(
               AppTheme.md, AppTheme.sm, AppTheme.md, AppTheme.md),
-          child: SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: _sharing ? null : _share,
-              icon: const Icon(Icons.ios_share_rounded, size: 20),
-              label: Text(_sharing ? 'Preparing…' : 'Share report'),
-            ),
+          child: Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _busy ? null : _save,
+                  icon: const Icon(Icons.download_rounded, size: 20),
+                  label: Text(_saving ? 'Saving…' : 'Save'),
+                ),
+              ),
+              const SizedBox(width: AppTheme.md),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _busy ? null : _share,
+                  icon: const Icon(Icons.ios_share_rounded, size: 20),
+                  label: Text(_sharing ? 'Preparing…' : 'Share'),
+                ),
+              ),
+            ],
           ),
         ),
       ),
