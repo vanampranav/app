@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/cart_model.dart';
 import '../screens/home_screen.dart';
-import '../screens/nutrition/nutrition_log_screen.dart';
+import '../screens/log_screen.dart';
 import '../screens/shop_screen.dart';
 import '../screens/performance_screen.dart';
 import '../screens/profile_screen.dart';
@@ -41,7 +41,7 @@ class _MainLayoutState extends State<MainLayout> {
     final Widget page;
     switch (index) {
       case 0:  page = const HomeScreen();           break;
-      case 1:  page = const NutritionLogScreen();   break;
+      case 1:  page = const LogScreen();            break;
       case 2:  page = const ShopScreen();           break;
       case 3:  page = const PerformanceScreen();     break;
       case 4:  page = const ProfileScreen();        break;

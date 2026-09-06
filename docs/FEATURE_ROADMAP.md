@@ -51,7 +51,24 @@ Areas: **App** = Flutter · **BE** = Python AI backend · **Web** = the-elefit-n
 - **Phase 2:** exercise detail sheet with animation + completion checkboxes + a "Today's Workout" card (Home/Performance) wired to streaks.
 - **Phase 3:** add / edit / delete exercises (catalog search or free-text custom).
 
-**Status:** Researched; source not yet chosen. Comparison demo built (`scratchpad/workout-source-comparison.html`).
+**Status:** Source chosen = **free-exercise-db** (public domain / Unlicense, 876 exercises). Decisions: logs stored **local-first** (SharedPreferences), catalog **bundled as an asset**.
+
+**✅ Phase 0 + 1 BUILT (2026-09-06, analyze clean):**
+- `assets/data/exercises.json` — bundled catalog (876 exercises, ~984 KB); registered in pubspec.
+- `lib/models/exercise.dart` — `Exercise` model; image URLs built against the jsDelivr CDN.
+- `lib/services/exercise_catalog_service.dart` — `ExerciseCatalog` singleton: load-once + search/filter + facets.
+- `lib/screens/workout/exercise_library_screen.dart` — search bar + muscle filter chips + 2-col grid (thumbnails via `cached_network_image`).
+- `lib/screens/workout/exercise_detail_screen.dart` — animated 2-frame demo (start↔end), target-muscle pills (primary/secondary), equipment/level/mechanic tags, numbered instructions.
+- Entry point: a **"Workout"** quick action on the Home screen.
+
+**✅ Phase 2 BUILT (2026-09-06, analyze clean) — workout logging + unified Log tab:**
+- `lib/models/workout_session.dart` — `WorkoutDay` / `RoutineExercise` / `SetLog` (per-set reps/weight/done; volume calc).
+- `lib/services/workout_service.dart` — local SharedPreferences store, per-date (`workout_day_<date>`) + a date index for history.
+- `lib/screens/workout/workout_log_screen.dart` — today's routine: progress bar, compact cards (thumbnail→demo, `sets×reps · muscle · done/total`), expand to log **per-set reps+weight** with check-off, mark-whole-exercise-done, add/remove sets, **Add exercise** (opens library picker → sets/reps/weight sheet), and **quick-start templates** (Full Body / Push / Pull / Legs — pick catalog exercises by muscle, preferring compound + common equipment).
+- `lib/screens/log_screen.dart` — **Food ⇄ Workout** segmented toggle hosting `NutritionLogScreen` + `WorkoutLogScreen` (IndexedStack). Wired into nav: bottom-nav tab 1 → `LogScreen`; Home "Log Food" → Food tab, Home "Workout" → Workout tab.
+- Exercise Library gained a `pickMode` (returns the selected `Exercise`).
+
+**Next: Phase 3** — map the AI-coach text workout plan to catalog exercises (auto-fill the routine with demos + checkable sets). **Phase 4** — StreakService tie-in on workout completion, Home "Today's Workout" card, rest timer, workout history screen + volume trend chart (fl_chart).
 
 ---
 
