@@ -91,6 +91,7 @@ flutter:
   uses-material-design: true
   
   assets:
+    - assets/data/exercises.json
     - assets/images/elefit_logo.png
     - assets/images/LogoIcon9.png
     - assets/videos/video3.mp4

@@ -12,11 +12,11 @@ import '../services/fitdays_service.dart';
 import '../models/device_model.dart';
 import '../models/cart_model.dart';
 import '../screens/ai_coach/ai_coach_screen.dart' as ai_coach;
-import '../screens/nutrition/nutrition_log_screen.dart';
 import '../screens/cart_screen.dart';
 import '../screens/shop_screen.dart';
 import '../widgets/main_layout.dart';
 import '../screens/measurement_screen.dart';
+import 'log_screen.dart';
 import '../services/member_service.dart';
 import '../services/streak_service.dart';
 import '../models/member_model.dart';
@@ -772,7 +772,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     EFPageRoute(
                       page: MainLayout(
                         currentIndex: 1,
-                        child: const NutritionLogScreen(),
+                        child: const LogScreen(),
                       ),
                     ),
                   ),
@@ -795,6 +795,22 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   label: 'Track\nWeight',
                   accentColor: AppTheme.lime,
                   onTap: _onTrackWeightTapped,
+                ),
+              ),
+              const SizedBox(width: AppTheme.sm),
+              Expanded(
+                child: EFQuickAction(
+                  icon: Icons.fitness_center_rounded,
+                  label: 'Work\nout',
+                  accentColor: AppTheme.lime,
+                  onTap: () => Navigator.of(context).pushReplacement(
+                    EFPageRoute(
+                      page: MainLayout(
+                        currentIndex: 1,
+                        child: const LogScreen(initialTab: 1),
+                      ),
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(width: AppTheme.sm),
