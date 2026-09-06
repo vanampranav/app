@@ -432,13 +432,42 @@ export class FatSecretProvider implements NutritionProvider {
     }
 
     let weightGrams: number | null = null;
-    if (
-      serving.metricUnit === "g" &&
-      typeof serving.metricAmount === "number" &&
-      !isNaN(serving.metricAmount)
-    ) {
+    const normDesc = serving.description
+      .toLowerCase()
+      .trim()
+      .replace(/\s+/g, " ");
+    const descGramMatch = normDesc.match(
+      /\b(\d+(?:\.\d+)?)\s*(?:g|gram|grams)\b/i
+    );
+    let gramPerServing: number | null = descGramMatch ?
+      parseFloat(descGramMatch[1]) :
+      null;
+
+    if (!gramPerServing || isNaN(gramPerServing) || gramPerServing <= 0) {
+      if (
+        serving.metricUnit === "g" &&
+        typeof serving.metricAmount === "number" &&
+        !isNaN(serving.metricAmount)
+      ) {
+        gramPerServing = serving.metricAmount;
+      } else if (
+        serving.metricUnit === "oz" &&
+        typeof serving.metricAmount === "number" &&
+        !isNaN(serving.metricAmount)
+      ) {
+        gramPerServing = serving.metricAmount * 28.3495;
+      } else if (
+        serving.metricUnit === "kg" &&
+        typeof serving.metricAmount === "number" &&
+        !isNaN(serving.metricAmount)
+      ) {
+        gramPerServing = serving.metricAmount * 1000;
+      }
+    }
+
+    if (gramPerServing && gramPerServing > 0) {
       weightGrams =
-        Math.round((serving.metricAmount * quantity + Number.EPSILON) * 100) /
+        Math.round((gramPerServing * quantity + Number.EPSILON) * 100) /
         100;
     }
 

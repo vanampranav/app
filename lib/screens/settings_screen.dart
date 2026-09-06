@@ -4,6 +4,7 @@ import '../theme/app_theme.dart';
 import '../services/shopify_service.dart';
 import '../services/health_service.dart';
 import 'add_member_screen.dart';
+import 'developer_options_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:elefit_app/utils/app_secure_storage.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -715,6 +716,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
                           content: Text('Bug reporting - Coming Soon'),
+                        ),
+                      );
+                    },
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.developer_mode_outlined),
+                    title: const Text('Developer Options'),
+                    subtitle: const Text('Test prepareMeal orchestration'),
+                    trailing: const Icon(Icons.arrow_forward_ios),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const DeveloperOptionsScreen(),
                         ),
                       );
                     },

@@ -73,6 +73,9 @@ dependencies:
   # Image picking for food logging
   image_picker: ^1.1.2
 
+  # Speech-to-text for Ask Ele voice input
+  speech_to_text: ^7.0.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

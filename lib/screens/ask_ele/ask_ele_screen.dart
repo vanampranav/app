@@ -1,0 +1,934 @@
+import 'dart:convert';
+import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../models/ask_ele_proposal.dart';
+import '../../models/food_models.dart';
+import '../../models/today_context.dart';
+import '../../services/ask_ele_context_service.dart';
+import '../../services/backend_service.dart';
+import '../../services/speech_input_service.dart';
+import '../../services/streak_service.dart';
+import '../../theme/app_theme.dart';
+import '../../widgets/ask_ele/ask_ele_input_bar.dart';
+import '../../widgets/ask_ele/ask_ele_meal_proposal_card.dart';
+import '../../widgets/ask_ele/ask_ele_message_bubble.dart';
+import '../../widgets/ask_ele/ask_ele_quick_action_chip.dart';
+import '../../widgets/ask_ele/ask_ele_summary_metric.dart';
+
+enum ChatMessageType { text, mealProposal }
+enum AskEleIntent { logMeal, dailyGuidance }
+
+class ChatMessage {
+  final String? text;
+  final MealProposal? proposal;
+  final bool isUser;
+  final ChatMessageType type;
+
+  ChatMessage.text({
+    required String this.text,
+    required this.isUser,
+  })  : proposal = null,
+        type = ChatMessageType.text;
+
+  ChatMessage.proposal({
+    required MealProposal this.proposal,
+  })  : text = null,
+        isUser = false,
+        type = ChatMessageType.mealProposal;
+}
+
+class PendingMealClarification {
+  final int itemIndex;
+  final String interpretedName;
+  final String status;
+  final String question;
+
+  PendingMealClarification({
+    required this.itemIndex,
+    required this.interpretedName,
+    required this.status,
+    required this.question,
+  });
+}
+
+class AskEleScreen extends StatefulWidget {
+  final String? initialQuery;
+  final int? caloriesConsumed;
+  final int? caloriesGoal;
+  final int? proteinGrams;
+  final int? proteinGoal;
+  final int? stepsCount;
+
+  const AskEleScreen({
+    super.key,
+    this.initialQuery,
+    this.caloriesConsumed,
+    this.caloriesGoal,
+    this.proteinGrams,
+    this.proteinGoal,
+    this.stepsCount,
+  });
+
+  @override
+  State<AskEleScreen> createState() => _AskEleScreenState();
+}
+
+class _AskEleScreenState extends State<AskEleScreen> {
+  final BackendService _backendService = BackendService();
+  final SpeechInputService _speechService = SpeechInputService();
+  final AskEleContextService _contextService = AskEleContextService();
+  final TextEditingController _inputController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+  final List<ChatMessage> _messages = [];
+
+  bool _isLoading = false;
+  bool _isLoggingMeal = false;
+  bool _isListening = false;
+  String _baseTextBeforeSpeech = '';
+
+  int? _caloriesConsumed;
+  int? _proteinGrams;
+
+  Map<String, dynamic>? _activeMealProposal;
+  PendingMealClarification? _pendingClarification;
+  final Set<String> _loggedOriginalTexts = {};
+
+  final List<String> _quickPrompts = [
+    'I had 2 idlis with chutney',
+    'Log a meal',
+    'Build my workout',
+    'Why is my weight stuck?',
+    'Adjust my calories',
+    'My progress',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _caloriesConsumed = widget.caloriesConsumed;
+    _proteinGrams = widget.proteinGrams;
+
+    if (widget.initialQuery != null && widget.initialQuery!.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _handleSendMessage(widget.initialQuery!);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _speechService.stopListening();
+    _inputController.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  String get _caloriesSummary {
+    if (_caloriesConsumed != null &&
+        widget.caloriesGoal != null &&
+        widget.caloriesGoal! > 0) {
+      return '$_caloriesConsumed / ${widget.caloriesGoal}';
+    }
+    if (_caloriesConsumed != null) {
+      return '$_caloriesConsumed kcal';
+    }
+    return '—';
+  }
+
+  String get _proteinSummary {
+    if (_proteinGrams != null &&
+        widget.proteinGoal != null &&
+        widget.proteinGoal! > 0) {
+      return '$_proteinGrams / ${widget.proteinGoal}g';
+    }
+    if (_proteinGrams != null) {
+      return '$_proteinGrams g';
+    }
+    return '—';
+  }
+
+  String get _stepsSummary {
+    if (widget.stepsCount != null && widget.stepsCount! > 0) {
+      final s = widget.stepsCount!;
+      if (s >= 10000) {
+        final thousands = (s / 1000).toStringAsFixed(1);
+        return '${thousands}k';
+      }
+      return '$s';
+    }
+    return '—';
+  }
+
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+  }
+
+  int _speechSessionId = 0;
+
+  Future<void> _handleMicTap() async {
+    if (_isListening) {
+      _speechSessionId++;
+      await _speechService.cancelListening();
+      if (mounted) {
+        setState(() {
+          _isListening = false;
+        });
+      }
+      return;
+    }
+
+    _baseTextBeforeSpeech = _inputController.text;
+    final currentSession = ++_speechSessionId;
+
+    setState(() {
+      _isListening = true;
+    });
+
+    await _speechService.startListening(
+      onResult: (transcript, isFinal) {
+        if (!mounted || currentSession != _speechSessionId) return;
+        final prefix = _baseTextBeforeSpeech.trim();
+        final combined = prefix.isEmpty ? transcript : '$prefix $transcript';
+        _inputController.text = combined;
+        _inputController.selection = TextSelection.fromPosition(
+          TextPosition(offset: _inputController.text.length),
+        );
+        if (isFinal) {
+          setState(() {
+            _isListening = false;
+          });
+        }
+      },
+      onError: (errorMsg) {
+        if (!mounted || currentSession != _speechSessionId) return;
+        setState(() {
+          _isListening = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(errorMsg)),
+        );
+      },
+      onStatusChanged: () {
+        if (mounted && currentSession == _speechSessionId) {
+          setState(() {
+            _isListening = _speechService.isListening;
+          });
+        }
+      },
+    );
+  }
+
+  AskEleIntent _classifyIntent(String query) {
+    final norm = query.toLowerCase().trim();
+
+    final questionMatch = RegExp(
+      r'\b(how am i doing|how is my day|hows my day|am i on track|how many|how much|what should i|what can i|recommend|recommendation|remaining|left|calories left|protein left|carbs left|fat left|today summary|my progress|should i eat|can i eat)\b',
+    );
+
+    if (questionMatch.hasMatch(norm) || norm.contains('?')) {
+      if (norm.startsWith('i had ') ||
+          norm.startsWith('i ate ') ||
+          norm.startsWith('log ') ||
+          norm.startsWith('add ')) {
+        if (!norm.contains('left') &&
+            !norm.contains('remaining') &&
+            !norm.contains('doing') &&
+            !norm.contains('on track') &&
+            !norm.contains('should i eat')) {
+          return AskEleIntent.logMeal;
+        }
+      }
+      return AskEleIntent.dailyGuidance;
+    }
+
+    final logMatch = RegExp(r'\b(i had|i ate|i drank|log|add|ate|had)\b');
+    if (logMatch.hasMatch(norm)) {
+      return AskEleIntent.logMeal;
+    }
+
+    return AskEleIntent.logMeal;
+  }
+
+  void _updateActiveProposalAndPendingClarification(
+      Map<String, dynamic> proposalMap) {
+    _activeMealProposal = proposalMap;
+    final proposal = MealProposal.fromJson(proposalMap);
+
+    _pendingClarification = null;
+
+    if (proposal.needsClarification && proposal.items.isNotEmpty) {
+      for (int i = 0; i < proposal.items.length; i++) {
+        final item = proposal.items[i];
+        if (!item.isResolved) {
+          final question = proposal.clarificationQuestion ??
+              item.clarificationQuestion ??
+              'How much ${item.interpretedName} did you have?';
+          _pendingClarification = PendingMealClarification(
+            itemIndex: i,
+            interpretedName: item.interpretedName,
+            status: item.status,
+            question: question,
+          );
+          break;
+        }
+      }
+    }
+  }
+
+  String? _parseMealTypeUpdate(String text) {
+    final norm = text.toLowerCase().trim().replaceAll(RegExp(r'\s+'), ' ');
+
+    if (norm.contains('?') ||
+        norm.startsWith('what ') ||
+        norm.startsWith('how ') ||
+        norm.startsWith('why ') ||
+        norm.startsWith('is ') ||
+        norm.startsWith('can ') ||
+        norm.startsWith('should ') ||
+        norm.contains('recommend')) {
+      return null;
+    }
+
+    if (norm == 'breakfast') return 'breakfast';
+    if (norm == 'lunch') return 'lunch';
+    if (norm == 'dinner') return 'dinner';
+    if (norm == 'snack' || norm == 'snacks' || norm == 'a snack') {
+      return 'snacks';
+    }
+
+    final explicitEditMatch = RegExp(
+      r'^(this is for|this is|make (this|it)|this was|actually|change (it|this) to|change to|for|as)\s+(breakfast|lunch|dinner|snack|snacks)$',
+    );
+
+    final match = explicitEditMatch.firstMatch(norm);
+    if (match != null) {
+      final mealStr = match.group(3) ?? match.group(2) ?? match.group(1);
+      if (mealStr != null) {
+        if (mealStr.contains('breakfast')) return 'breakfast';
+        if (mealStr.contains('lunch')) return 'lunch';
+        if (mealStr.contains('dinner')) return 'dinner';
+        if (mealStr.contains('snack')) return 'snacks';
+      }
+    }
+
+    return null;
+  }
+
+  MealType _parseMealTypeEnum(String? typeStr) {
+    if (typeStr == null) return MealType.snacks;
+    final norm = typeStr.toLowerCase().trim();
+    if (norm == 'breakfast') return MealType.breakfast;
+    if (norm == 'lunch') return MealType.lunch;
+    if (norm == 'dinner') return MealType.dinner;
+    return MealType.snacks;
+  }
+
+  String _formatMealTypeName(String? typeStr) {
+    if (typeStr == null || typeStr.isEmpty) return 'Meal';
+    final norm = typeStr.toLowerCase().trim();
+    if (norm == 'breakfast') return 'Breakfast';
+    if (norm == 'lunch') return 'Lunch';
+    if (norm == 'dinner') return 'Dinner';
+    return 'Snack';
+  }
+
+  Future<void> _handleConfirmAndLog(MealProposal proposal) async {
+    if (_isLoggingMeal || !proposal.readyToLog) return;
+
+    setState(() {
+      _isLoggingMeal = true;
+    });
+
+    try {
+      final now = DateTime.now();
+      final mealTypeEnum = _parseMealTypeEnum(proposal.mealType);
+
+      final List<MealEntry> entriesToSave = [];
+      for (int i = 0; i < proposal.items.length; i++) {
+        final item = proposal.items[i];
+        if (!item.isResolved || item.nutrition == null) {
+          throw Exception('Item "${item.interpretedName}" is not resolved.');
+        }
+
+        final entryId = 'ask_ele_${now.millisecondsSinceEpoch}_$i';
+        final foodName = item.matchedFoodName ?? item.interpretedName;
+        final fdcId = item.matchedFoodId ?? 'ask_ele';
+        final weight = item.weightGrams ?? 100.0;
+
+        final entry = MealEntry(
+          id: entryId,
+          foodName: foodName,
+          fdcId: fdcId,
+          weight: weight,
+          nutrition: item.nutrition!,
+          meal: mealTypeEnum,
+          timestamp: now,
+        );
+
+        entriesToSave.add(entry);
+      }
+
+      // Save each item to backend Firestore via saveMeal
+      final List<MealEntry> savedEntries = [];
+      for (final entry in entriesToSave) {
+        await _backendService.saveMeal(
+          entry,
+          source: 'ask_ele',
+          nutritionSource: 'fatsecret',
+        );
+        savedEntries.add(entry);
+      }
+
+      // Sync to local SharedPreferences for Nutrition screen & Home
+      final prefs = await SharedPreferences.getInstance();
+      final dateKey =
+          '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      final existingJson = prefs.getString('meal_entries_$dateKey');
+      final List<dynamic> existingList =
+          existingJson != null ? jsonDecode(existingJson) : [];
+      existingList.addAll(savedEntries.map((e) => e.toJson()));
+      await prefs.setString('meal_entries_$dateKey', jsonEncode(existingList));
+
+      // Update Home & Today's Summary keys
+      final homeKey = '${now.year}_${now.month}_${now.day}';
+      final totalCal = proposal.resolvedNutritionTotal?.calories ?? 0.0;
+      final totalProt = proposal.resolvedNutritionTotal?.protein ?? 0.0;
+      final totalCarbs = proposal.resolvedNutritionTotal?.carbs ?? 0.0;
+      final totalFat = proposal.resolvedNutritionTotal?.fat ?? 0.0;
+
+      final currentCal = prefs.getInt('cal_consumed_$homeKey') ?? 0;
+      final currentProt = prefs.getInt('protein_$homeKey') ?? 0;
+      final currentCarbs = prefs.getInt('carbs_$homeKey') ?? 0;
+      final currentFat = prefs.getInt('fat_$homeKey') ?? 0;
+
+      final newCal = currentCal + totalCal.round();
+      final newProt = currentProt + totalProt.round();
+      final newCarbs = currentCarbs + totalCarbs.round();
+      final newFat = currentFat + totalFat.round();
+
+      await prefs.setInt('cal_consumed_$homeKey', newCal);
+      await prefs.setInt('protein_$homeKey', newProt);
+      await prefs.setInt('carbs_$homeKey', newCarbs);
+      await prefs.setInt('fat_$homeKey', newFat);
+
+      await StreakService.recordActivity();
+
+      if (!mounted) return;
+
+      _loggedOriginalTexts.add(proposal.originalText);
+
+      setState(() {
+        _caloriesConsumed = newCal;
+        _proteinGrams = newProt;
+
+        // Clear active meal state
+        _activeMealProposal = null;
+        _pendingClarification = null;
+
+        final mealTypeName = _formatMealTypeName(proposal.mealType);
+        _messages.add(
+          ChatMessage.text(
+            text: 'Meal logged ✓',
+            isUser: false,
+          ),
+        );
+        _messages.add(
+          ChatMessage.text(
+            text:
+                '$mealTypeName added — ${totalCal.round()} kcal and ${totalProt.round()}g protein.',
+            isUser: false,
+          ),
+        );
+      });
+    } catch (e) {
+      debugPrint('Error logging meal in AskEleScreen: $e');
+      if (!mounted) return;
+      setState(() {
+        _messages.add(
+          ChatMessage.text(
+            text:
+                "I couldn't finish logging that meal. Your meal is still here — please try again.",
+            isUser: false,
+          ),
+        );
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoggingMeal = false;
+        });
+        _scrollToBottom();
+      }
+    }
+  }
+
+  Future<void> _handleSendMessage([String? overrideText]) async {
+    final query = (overrideText ?? _inputController.text).trim();
+
+    FocusScope.of(context).unfocus();
+
+    _speechSessionId++;
+    _baseTextBeforeSpeech = '';
+
+    if (_isListening || _speechService.isListening) {
+      _speechService.cancelListening();
+      if (mounted) {
+        setState(() {
+          _isListening = false;
+        });
+      }
+    }
+
+    _inputController.clear();
+
+    if (query.isEmpty || _isLoading || _isLoggingMeal) return;
+
+    setState(() {
+      _messages.add(ChatMessage.text(text: query, isUser: true));
+      _isLoading = true;
+    });
+
+    _scrollToBottom();
+
+    try {
+      final intent = _classifyIntent(query);
+      final mealTypeUpdate = _parseMealTypeUpdate(query);
+
+      if (intent == AskEleIntent.dailyGuidance) {
+        // Priority A: Context-Aware Daily Guidance (Guidance questions take precedence)
+        final todayContext = await _contextService.getTodayContext();
+        final guidanceText = await _backendService.getAskEleGuidance(
+          message: query,
+          todayContext: todayContext.toJson(),
+        );
+
+        if (!mounted) return;
+
+        setState(() {
+          _messages.add(ChatMessage.text(text: guidanceText, isUser: false));
+        });
+      } else if (mealTypeUpdate != null && _activeMealProposal != null) {
+        // Priority B: Meal Type Edit Command on Active Proposal
+        final updatedProposalMap =
+            await _backendService.updateMealProposalContext(
+          proposal: _activeMealProposal!,
+          mealType: mealTypeUpdate,
+        );
+
+        if (!mounted) return;
+
+        _updateActiveProposalAndPendingClarification(updatedProposalMap);
+        final updatedProposal = MealProposal.fromJson(updatedProposalMap);
+
+        String typeName = mealTypeUpdate;
+        if (typeName == 'snacks') typeName = 'a snack';
+
+        setState(() {
+          _messages.add(ChatMessage.proposal(proposal: updatedProposal));
+          _messages.add(
+            ChatMessage.text(
+              text: 'Got it — I changed this to $typeName.',
+              isUser: false,
+            ),
+          );
+
+          if (updatedProposal.needsClarification &&
+              updatedProposal.clarificationQuestion != null &&
+              updatedProposal.clarificationQuestion!.isNotEmpty) {
+            final nextQuestion = updatedProposal.clarificationQuestion!;
+            final lastMsg = _messages.isNotEmpty ? _messages.last.text : null;
+            if (lastMsg != nextQuestion) {
+              _messages.add(
+                ChatMessage.text(
+                  text: nextQuestion,
+                  isUser: false,
+                ),
+              );
+            }
+          }
+        });
+      } else if (_pendingClarification != null && _activeMealProposal != null) {
+        // Priority C: Item Clarification Answer
+        final itemIdx = _pendingClarification!.itemIndex;
+        final updatedProposalMap =
+            await _backendService.resolveMealClarification(
+          proposal: _activeMealProposal!,
+          itemIndex: itemIdx,
+          answer: query,
+        );
+
+        if (!mounted) return;
+
+        _updateActiveProposalAndPendingClarification(updatedProposalMap);
+        final updatedProposal = MealProposal.fromJson(updatedProposalMap);
+
+        setState(() {
+          _messages.add(ChatMessage.proposal(proposal: updatedProposal));
+
+          if (updatedProposal.needsClarification &&
+              updatedProposal.clarificationQuestion != null &&
+              updatedProposal.clarificationQuestion!.isNotEmpty) {
+            final nextQuestion = updatedProposal.clarificationQuestion!;
+            final lastMsg = _messages.isNotEmpty ? _messages.last.text : null;
+            if (lastMsg != nextQuestion) {
+              _messages.add(
+                ChatMessage.text(
+                  text: nextQuestion,
+                  isUser: false,
+                ),
+              );
+            }
+          }
+        });
+      } else if (intent == AskEleIntent.dailyGuidance) {
+        // Priority C: Context-Aware Daily Guidance
+        final todayContext = await _contextService.getTodayContext();
+        final guidanceText = await _backendService.getAskEleGuidance(
+          message: query,
+          todayContext: todayContext.toJson(),
+        );
+
+        if (!mounted) return;
+
+        setState(() {
+          _messages.add(ChatMessage.text(text: guidanceText, isUser: false));
+        });
+      } else {
+        // Priority D: New Meal Action Request
+        final proposalMap = await _backendService.prepareMeal(query);
+        final proposal = MealProposal.fromJson(proposalMap);
+
+        if (!mounted) return;
+
+        _updateActiveProposalAndPendingClarification(proposalMap);
+
+        setState(() {
+          if (proposal.items.isNotEmpty) {
+            _messages.add(
+              ChatMessage.text(
+                text: 'Got it — here\'s what I understood.',
+                isUser: false,
+              ),
+            );
+            _messages.add(ChatMessage.proposal(proposal: proposal));
+
+            if (proposal.needsClarification &&
+                proposal.clarificationQuestion != null &&
+                proposal.clarificationQuestion!.isNotEmpty) {
+              final question = proposal.clarificationQuestion!;
+              final lastMsg = _messages.isNotEmpty ? _messages.last.text : null;
+              if (lastMsg != question) {
+                _messages.add(
+                  ChatMessage.text(
+                    text: question,
+                    isUser: false,
+                  ),
+                );
+              }
+            }
+          } else {
+            final question = proposal.clarificationQuestion ??
+                'I couldn\'t identify any foods in that meal. Try describing what you ate, e.g. "2 idlis with chutney".';
+            _messages.add(ChatMessage.text(text: question, isUser: false));
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('Error in AskEleScreen message routing: $e');
+      if (!mounted) return;
+      setState(() {
+        _messages.add(
+          ChatMessage.text(
+            text: 'I couldn\'t work that out right now. Try again in a moment.',
+            isUser: false,
+          ),
+        );
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+        _scrollToBottom();
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppTheme.bg,
+      appBar: AppBar(
+        backgroundColor: AppTheme.bg,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded,
+              color: Colors.white, size: 20),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text('Ask Ele', style: AppTheme.headingSM),
+                const SizedBox(width: 6),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppTheme.purple,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    'BETA',
+                    style: AppTheme.labelSM.copyWith(
+                      fontSize: 9,
+                      color: AppTheme.lime,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            Text(
+              'Your AI Fitness Assistant',
+              style: AppTheme.bodySM.copyWith(color: AppTheme.textSecondary),
+            ),
+          ],
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.history_rounded,
+                color: AppTheme.textSecondary),
+            onPressed: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Chat history - Coming Soon'),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+      body: GestureDetector(
+        onTap: () => FocusScope.of(context).unfocus(),
+        behavior: HitTestBehavior.translucent,
+        child: Column(
+          children: [
+            // ── Today's Summary Section ─────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppTheme.md,
+                vertical: AppTheme.sm,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'TODAY\'S SUMMARY',
+                    style: AppTheme.labelSM.copyWith(
+                      letterSpacing: 1.2,
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: AppTheme.xs),
+                  Row(
+                    children: [
+                      AskEleSummaryMetric(
+                        label: 'Calories',
+                        value: _caloriesSummary,
+                        icon: Icons.local_fire_department_rounded,
+                      ),
+                      const SizedBox(width: AppTheme.xs),
+                      AskEleSummaryMetric(
+                        label: 'Protein',
+                        value: _proteinSummary,
+                        icon: Icons.fitness_center_rounded,
+                      ),
+                      const SizedBox(width: AppTheme.xs),
+                      AskEleSummaryMetric(
+                        label: 'Steps',
+                        value: _stepsSummary,
+                        icon: Icons.directions_walk_rounded,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const Divider(color: AppTheme.divider, height: 1),
+
+            // ── Conversation Content ───────────────────────────────────────────
+            Expanded(
+              child: ListView(
+                controller: _scrollController,
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: const EdgeInsets.all(AppTheme.md),
+                children: [
+                // Ele Initial Welcome Card
+                Container(
+                  padding: const EdgeInsets.all(AppTheme.md),
+                  decoration: BoxDecoration(
+                    gradient: AppTheme.purpleGradient,
+                    borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                    border: Border.all(
+                      color: AppTheme.purple.withValues(alpha: 0.5),
+                    ),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: AppTheme.lime.withValues(alpha: 0.15),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.auto_awesome_rounded,
+                          color: AppTheme.lime,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: AppTheme.md),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Hi! I\'m Ele, your AI fitness assistant.',
+                              style: AppTheme.headingSM.copyWith(fontSize: 15),
+                            ),
+                            const SizedBox(height: AppTheme.xs),
+                            Text(
+                              'You can ask me anything about nutrition, workouts, progress, or your goals.',
+                              style: AppTheme.bodyMD.copyWith(
+                                color: AppTheme.textPrimary.withValues(alpha: 0.9),
+                                height: 1.35,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: AppTheme.lg),
+
+                // Quick Prompts Section
+                if (_messages.isEmpty) ...[
+                  Text(
+                    'Try something like:',
+                    style: AppTheme.labelMD.copyWith(
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: AppTheme.sm),
+                  Wrap(
+                    spacing: AppTheme.xs,
+                    runSpacing: AppTheme.xs,
+                    children: _quickPrompts.map((prompt) {
+                      return AskEleQuickActionChip(
+                        label: prompt,
+                        icon: Icons.chat_bubble_outline_rounded,
+                        onTap: () {
+                          _inputController.text = prompt;
+                          _handleSendMessage();
+                        },
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: AppTheme.lg),
+                ],
+
+                // Conversation Message List
+                ..._messages.map((msg) {
+                  if (msg.type == ChatMessageType.mealProposal &&
+                      msg.proposal != null) {
+                    final isLogged = _loggedOriginalTexts.contains(
+                        msg.proposal!.originalText);
+                    return AskEleMealProposalCard(
+                      proposal: msg.proposal!,
+                      onConfirmAndLog: () => _handleConfirmAndLog(msg.proposal!),
+                      isLogging: _isLoggingMeal,
+                      isLogged: isLogged,
+                    );
+                  }
+                  return AskEleMessageBubble(
+                    text: msg.text ?? '',
+                    isUser: msg.isUser,
+                  );
+                }),
+
+                // Ele Loading State
+                if (_isLoading) ...[
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8.0),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 28,
+                          height: 28,
+                          decoration: BoxDecoration(
+                            color: AppTheme.purple,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: AppTheme.lime.withValues(alpha: 0.5),
+                            ),
+                          ),
+                          child: const Icon(
+                            Icons.auto_awesome_rounded,
+                            color: AppTheme.lime,
+                            size: 14,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Ele is working it out...',
+                          style: AppTheme.bodySM.copyWith(
+                            color: AppTheme.textSecondary,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        const SizedBox(
+                          width: 12,
+                          height: 12,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 1.5,
+                            color: AppTheme.lime,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+
+          // ── Bottom Persistent Input Bar ────────────────────────────────────
+          AskEleInputBar(
+            controller: _inputController,
+            onSend: _handleSendMessage,
+            onMicTap: _handleMicTap,
+            isLoading: _isLoading || _isLoggingMeal,
+            isListening: _isListening,
+          ),
+        ],
+      ),
+    ),
+  );
+}
+}

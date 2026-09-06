@@ -117,6 +117,108 @@ class BackendService {
     }
   }
 
+  /// Calls the `resolveMealClarification` Cloud Function to update an existing proposal item.
+  /// Relies on Firebase Authentication context (request.auth).
+  Future<Map<String, dynamic>> resolveMealClarification({
+    required Map<String, dynamic> proposal,
+    required int itemIndex,
+    required String answer,
+  }) async {
+    try {
+      final HttpsCallable callable =
+          _functions.httpsCallable('resolveMealClarification');
+      final Map<String, dynamic> payload = {
+        'proposal': proposal,
+        'itemIndex': itemIndex,
+        'answer': answer,
+        'localHour': DateTime.now().hour,
+      };
+
+      final HttpsCallableResult result = await callable.call(payload);
+
+      final normalized =
+          _normalizeFirebaseValue(result.data) as Map<String, dynamic>;
+
+      final updatedProposal = normalized['proposal'];
+      if (updatedProposal is Map<String, dynamic>) {
+        return updatedProposal;
+      }
+      return {'data': updatedProposal};
+    } on FirebaseFunctionsException catch (e) {
+      debugPrint('FirebaseFunctionsException in resolveMealClarification: ${e.code} - ${e.message}');
+      rethrow;
+    } catch (e) {
+      debugPrint('Error calling resolveMealClarification: $e');
+      rethrow;
+    }
+  }
+
+  /// Calls the `updateMealProposalContext` Cloud Function to update mealType context.
+  /// Relies on Firebase Authentication context (request.auth).
+  Future<Map<String, dynamic>> updateMealProposalContext({
+    required Map<String, dynamic> proposal,
+    required String mealType,
+  }) async {
+    try {
+      final HttpsCallable callable =
+          _functions.httpsCallable('updateMealProposalContext');
+      final Map<String, dynamic> payload = {
+        'proposal': proposal,
+        'mealType': mealType,
+      };
+
+      final HttpsCallableResult result = await callable.call(payload);
+
+      final normalized =
+          _normalizeFirebaseValue(result.data) as Map<String, dynamic>;
+
+      final updatedProposal = normalized['proposal'];
+      if (updatedProposal is Map<String, dynamic>) {
+        return updatedProposal;
+      }
+      return {'data': updatedProposal};
+    } on FirebaseFunctionsException catch (e) {
+      debugPrint('FirebaseFunctionsException in updateMealProposalContext: ${e.code} - ${e.message}');
+      rethrow;
+    } catch (e) {
+      debugPrint('Error calling updateMealProposalContext: $e');
+      rethrow;
+    }
+  }
+
+  /// Calls the `getAskEleGuidance` Cloud Function to generate contextual guidance.
+  /// Relies on Firebase Authentication context (request.auth).
+  Future<String> getAskEleGuidance({
+    required String message,
+    required Map<String, dynamic> todayContext,
+  }) async {
+    try {
+      final HttpsCallable callable =
+          _functions.httpsCallable('getAskEleGuidance');
+      final Map<String, dynamic> payload = {
+        'message': message,
+        'todayContext': todayContext,
+      };
+
+      final HttpsCallableResult result = await callable.call(payload);
+
+      final normalized =
+          _normalizeFirebaseValue(result.data) as Map<String, dynamic>;
+
+      final text = normalized['responseText'];
+      if (text is String && text.trim().isNotEmpty) {
+        return text.trim();
+      }
+      return "I couldn't generate guidance right now. Try asking again in a moment.";
+    } on FirebaseFunctionsException catch (e) {
+      debugPrint('FirebaseFunctionsException in getAskEleGuidance: ${e.code} - ${e.message}');
+      rethrow;
+    } catch (e) {
+      debugPrint('Error calling getAskEleGuidance: $e');
+      rethrow;
+    }
+  }
+
   /// Calls the `searchFoods` v2 Cloud Function to query backend nutrition providers.
   /// Relies on Firebase Authentication context (request.auth).
   Future<List<Map<String, dynamic>>> searchFoods(String query) async {

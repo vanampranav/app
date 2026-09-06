@@ -29,3 +29,9 @@ export interface InterpretMealInput {
     suggestedMealType?: MealType | null;
   };
 }
+
+export interface GetGuidanceInput {
+  message: string;
+  todayContext: Record<string, unknown>;
+  uid: string;
+}

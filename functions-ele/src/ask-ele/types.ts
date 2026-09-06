@@ -28,6 +28,8 @@ export interface MealProposalItem {
   matchConfidence: number;
 
   status: MealProposalItemStatus;
+
+  clarificationQuestion: string | null;
 }
 
 export interface MealProposal {
@@ -45,6 +47,10 @@ export interface MealProposal {
   needsClarification: boolean;
 
   clarificationQuestion: string | null;
+
+  resolvedItemCount: number;
+  unresolvedItemCount: number;
+  resolvedNutritionTotal: NutritionData | null;
 }
 
 export interface PrepareMealInput {

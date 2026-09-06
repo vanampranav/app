@@ -1,5 +1,6 @@
 import {AiProvider} from "../ai-provider";
 import {
+  GetGuidanceInput,
   InterpretMealInput,
   MealInterpretation,
   MealType,
@@ -61,6 +62,14 @@ export class OpenAiProvider implements AiProvider {
         "Do NOT fabricate nutrition facts.\n" +
         "Do NOT search external food databases.\n" +
         "Do NOT create MealEntry records.\n\n" +
+        "Speech Transcription Food Normalization:\n" +
+        "- Input text may come from voice transcripts with phonetic " +
+        "speech errors (e.g. 'doll' for 'dal', 'samber' for 'sambar').\n" +
+        "- Use meal and culinary context to recognize likely food errors.\n" +
+        "- If context/confidence are high, normalize food name.\n" +
+        "- If confidence is uncertain, set needsClarification = true " +
+        "and set clarificationQuestion (e.g. 'Did you mean dal?').\n" +
+        "- Never silently change a genuinely ambiguous word.\n\n" +
         "Extract:\n" +
         "- foods (name, quantity, unit, modifiers)\n" +
         "- mealType (breakfast, lunch, dinner, snacks, or null)\n" +
@@ -69,7 +78,7 @@ export class OpenAiProvider implements AiProvider {
         "- needsClarification (true ONLY if food identity is unclear)\n" +
         "- clarificationQuestion (question if needsClarification)\n\n" +
         "Preserve culturally specific food names such as: idli, dosa, " +
-        "sambar, chutney, filter coffee, roti, upma, poha, biryani.\n" +
+        "dal, sambar, chutney, filter coffee, roti, upma, poha, biryani.\n" +
         "Do not convert them into generic western equivalents.\n\n" +
         "If quantity is not provided, use null.\n" +
         "If unit is not reasonably known, use null.\n" +
@@ -375,5 +384,114 @@ export class OpenAiProvider implements AiProvider {
         (parsed.clarificationQuestion as string).trim() :
         null,
     };
+  }
+
+  /**
+   * Generates practical, context-aware daily guidance using EleFit user data.
+   *
+   * @param {GetGuidanceInput} input - Message and structured todayContext.
+   * @return {Promise<string>} Guidance response text.
+   */
+  async getGuidance(input: GetGuidanceInput): Promise<string> {
+    const model = process.env.ASK_ELE_MODEL || "gpt-5.6-luna";
+    const userPrompt =
+      "User Question: \"" +
+      input.message +
+      "\"\n\n" +
+      "User EleFit Context:\n" +
+      JSON.stringify(input.todayContext, null, 2);
+
+    const requestPayload = {
+      model,
+      instructions:
+        "You are Ele, the AI fitness assistant for EleFit.\n" +
+        "Your job is to provide clear, practical, personalized daily " +
+        "fitness and nutrition guidance based on the user's real " +
+        "EleFit context.\n\n" +
+        "Formatting & Presentation Rules:\n" +
+        "- Do NOT output markdown markers like **, ##, ###, or `.\n" +
+        "- Format responses using short, clean, scannable lines separated " +
+        "by line breaks.\n" +
+        "- When presenting daily stats, put metrics on separate lines " +
+        "with clean emojis (e.g. 🔥 953 / 2,737 kcal, " +
+        "💪 26 / 149g protein, 👟 2,862 steps).\n" +
+        "- When giving meal ideas, present them as clean " +
+        "scannable lists\n" +
+        "(e.g. 🍗 Chicken, 🍚 Rice, 🥦 Veggies).\n" +
+        "- Keep paragraphs short (2-5 brief blocks max).\n\n" +
+        "Principles:\n" +
+        "- Answer the user's question directly and first.\n" +
+        "- Use the provided EleFit user data (calories " +
+        "consumed/goal/remaining, protein consumed/goal/remaining, " +
+        "carbs, fat, steps, today's logged meals).\n" +
+        "- Distinguish targets from consumed/remaining values clearly.\n" +
+        "- Explain the reasoning behind your suggestion.\n" +
+        "- Prioritize actionable, encouraging advice.\n" +
+        "- Avoid shaming or judgmental language.\n" +
+        "- Never invent or hallucinate foods or measurements the user " +
+        "did not log.\n" +
+        "- Acknowledge missing data if any is absent.\n" +
+        "- Do NOT calculate fake workouts or hallucinate weight trends.",
+      input: [
+        {
+          role: "user",
+          content: userPrompt,
+        },
+      ],
+    };
+
+    const response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${this.apiKey}`,
+      },
+      body: JSON.stringify(requestPayload),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new Error(
+        `OpenAI Guidance request failed: HTTP ${response.status} ${errorBody}`
+      );
+    }
+
+    const json = (await response.json()) as Record<string, unknown>;
+
+    let rawText: string | null = null;
+    if (typeof json.output_text === "string" && json.output_text.trim()) {
+      rawText = json.output_text;
+    } else if (Array.isArray(json.output)) {
+      for (const item of json.output) {
+        if (!item || typeof item !== "object") continue;
+        const obj = item as Record<string, unknown>;
+        if (typeof obj.output_text === "string" && obj.output_text.trim()) {
+          rawText = obj.output_text;
+          break;
+        }
+        if (obj.type === "message" && Array.isArray(obj.content)) {
+          for (const c of obj.content) {
+            if (!c || typeof c !== "object") continue;
+            const cObj = c as Record<string, unknown>;
+            if (
+              (cObj.type === "text" || cObj.type === "output_text") &&
+              typeof cObj.text === "string" &&
+              cObj.text.trim()
+            ) {
+              rawText = cObj.text;
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    if (!rawText || !rawText.trim()) {
+      return (
+        "I couldn't generate guidance right now. Try asking again in a moment."
+      );
+    }
+
+    return rawText.trim();
   }
 }

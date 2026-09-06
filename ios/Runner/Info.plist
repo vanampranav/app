@@ -55,6 +55,10 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>EleFit uses your camera to take photos of your meals and your challenge progress, and to scan barcodes for nutrition logging.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>EleFit needs microphone access so you can speak your meals and fitness questions to Ask Ele.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>EleFit uses speech recognition so you can speak your meals, workouts, and fitness questions to Ask Ele.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>EleFit needs access to your photos to log meals and to add progress and payment photos for challenges.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>

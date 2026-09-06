@@ -12,6 +12,7 @@ import '../services/fitdays_service.dart';
 import '../models/device_model.dart';
 import '../models/cart_model.dart';
 import '../screens/ai_coach/ai_coach_screen.dart' as ai_coach;
+import 'ask_ele/ask_ele_screen.dart';
 import '../screens/nutrition/nutrition_log_screen.dart';
 import '../screens/cart_screen.dart';
 import '../screens/shop_screen.dart';
@@ -495,6 +496,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _buildGreetingHeader(),
+                  const SizedBox(height: AppTheme.md),
+                  _buildHomeAskEleCard(),
                   const SizedBox(height: AppTheme.lg),
                   _buildCalorieHero(),
                   const SizedBox(height: AppTheme.md),
@@ -574,6 +577,155 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ),
         ),
       ],
+    );
+  }
+
+  // ─── Home Ask Ele card ───────────────────────────────────────────────────────
+
+  Widget _buildHomeAskEleCard() {
+    void openAskEle([String? query]) {
+      Navigator.push(
+        context,
+        EFPageRoute(
+          page: AskEleScreen(
+            initialQuery: query,
+            caloriesConsumed: _caloriesConsumed,
+            caloriesGoal: _caloriesGoal > 0 ? _caloriesGoal : null,
+            proteinGrams: _proteinG,
+            proteinGoal: _proteinGoal > 0 ? _proteinGoal : null,
+            stepsCount: _stepsToday > 0 ? _stepsToday : null,
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: AppTheme.md),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => openAskEle(),
+          borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+          child: Container(
+            padding: const EdgeInsets.all(AppTheme.md),
+            decoration: BoxDecoration(
+              gradient: AppTheme.purpleGradient,
+              borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+              border: Border.all(
+                color: AppTheme.purple.withValues(alpha: 0.5),
+              ),
+              boxShadow: AppTheme.shadowPurple,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    EFTag(label: 'ASK ELE', color: AppTheme.lime),
+                    const SizedBox(width: AppTheme.xs),
+                    EFTag(label: 'BETA', color: AppTheme.purpleLight),
+                  ],
+                ),
+                const SizedBox(height: AppTheme.sm),
+                Text(
+                  'What\'s your next fitness decision?',
+                  style: AppTheme.headingSM.copyWith(fontSize: 16),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Ask anything about your meals, workouts, progress, or goals.',
+                  style: AppTheme.bodySM.copyWith(
+                    color: AppTheme.textPrimary.withValues(alpha: 0.85),
+                  ),
+                ),
+                const SizedBox(height: AppTheme.md),
+                GestureDetector(
+                  onTap: () => openAskEle(),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppTheme.md,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppTheme.bg.withValues(alpha: 0.6),
+                      borderRadius:
+                          BorderRadius.circular(AppTheme.radiusPill),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.15),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Ask Ele anything...',
+                            style: AppTheme.bodyMD.copyWith(
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                        ),
+                        Container(
+                          width: 32,
+                          height: 32,
+                          decoration: const BoxDecoration(
+                            color: AppTheme.lime,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.auto_awesome_rounded,
+                            color: Colors.black,
+                            size: 16,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: AppTheme.sm),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  physics: const BouncingScrollPhysics(),
+                  child: Row(
+                    children: [
+                      _buildCompactChip('Log a meal', () => openAskEle('Log a meal')),
+                      const SizedBox(width: AppTheme.xs),
+                      _buildCompactChip('Build my workout', () => openAskEle('Build my workout')),
+                      const SizedBox(width: AppTheme.xs),
+                      _buildCompactChip('My progress', () => openAskEle('My progress')),
+                      const SizedBox(width: AppTheme.xs),
+                      _buildCompactChip('Adjust my calories', () => openAskEle('Adjust my calories')),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCompactChip(String label, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: AppTheme.surface3.withValues(alpha: 0.6),
+          borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.1),
+          ),
+        ),
+        child: Text(
+          label,
+          style: AppTheme.bodySM.copyWith(
+            fontSize: 11,
+            color: AppTheme.textPrimary.withValues(alpha: 0.9),
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ),
     );
   }
 
@@ -785,7 +937,17 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   label: 'Ask\nEle',
                   accentColor: AppTheme.lime,
                   onTap: () => Navigator.push(
-                      context, EFPageRoute(page: const ai_coach.AiCoachScreen())),
+                    context,
+                    EFPageRoute(
+                      page: AskEleScreen(
+                        caloriesConsumed: _caloriesConsumed,
+                        caloriesGoal: _caloriesGoal > 0 ? _caloriesGoal : null,
+                        proteinGrams: _proteinG,
+                        proteinGoal: _proteinGoal > 0 ? _proteinGoal : null,
+                        stepsCount: _stepsToday > 0 ? _stepsToday : null,
+                      ),
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(width: AppTheme.sm),

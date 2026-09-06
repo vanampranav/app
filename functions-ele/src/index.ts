@@ -914,3 +914,227 @@ export const prepareMeal = onCall(
     }
   }
 );
+
+export const resolveMealClarification = onCall(
+  {
+    secrets: [fatSecretConsumerKey, fatSecretConsumerSecret],
+  },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError(
+        "unauthenticated",
+        "Authentication required to resolve meal clarification."
+      );
+    }
+
+    const uid = request.auth.uid;
+    const {proposal, itemIndex, answer} = request.data || {};
+
+    if (!proposal || !Array.isArray(proposal.items)) {
+      throw new HttpsError(
+        "invalid-argument",
+        "Valid proposal object is required."
+      );
+    }
+
+    if (
+      typeof itemIndex !== "number" ||
+      itemIndex < 0 ||
+      itemIndex >= proposal.items.length
+    ) {
+      throw new HttpsError(
+        "invalid-argument",
+        "Valid itemIndex is required."
+      );
+    }
+
+    if (typeof answer !== "string" || !answer.trim()) {
+      throw new HttpsError(
+        "invalid-argument",
+        "Non-empty answer string is required."
+      );
+    }
+
+    if (answer.length > 200) {
+      throw new HttpsError(
+        "invalid-argument",
+        "Answer exceeds max length of 200 characters."
+      );
+    }
+
+    const targetItem = proposal.items[itemIndex];
+    if (targetItem.status === "resolved") {
+      throw new HttpsError(
+        "invalid-argument",
+        "Target item is already resolved."
+      );
+    }
+
+    const fatKey = fatSecretConsumerKey.value();
+    const fatSecret = fatSecretConsumerSecret.value();
+
+    if (!fatKey || !fatSecret) {
+      logger.error("Required backend secrets are not configured.");
+      throw new HttpsError(
+        "internal",
+        "Backend service credentials are not configured."
+      );
+    }
+
+    const nutritionProvider = getNutritionProvider(fatKey, fatSecret);
+
+    try {
+      const updatedProposal =
+        await MealOrchestrator.resolveMealClarification(
+          proposal,
+          itemIndex,
+          answer,
+          nutritionProvider
+        );
+
+      logger.info("Meal clarification resolved successfully", {
+        uid,
+        itemIndex,
+        targetItem: targetItem.interpretedName,
+        answer,
+        readyToLog: updatedProposal.readyToLog,
+        needsClarification: updatedProposal.needsClarification,
+      });
+
+      return {
+        success: true,
+        proposal: updatedProposal,
+      };
+    } catch (error) {
+      const errorMsg =
+        error instanceof Error ? error.message : String(error);
+      logger.error("Meal clarification resolution failed", {
+        uid,
+        itemIndex,
+        error: errorMsg,
+      });
+
+      throw new HttpsError(
+        "internal",
+        "Unable to resolve meal clarification."
+      );
+    }
+  }
+);
+
+export const updateMealProposalContext = onCall(
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError(
+        "unauthenticated",
+        "Authentication required to update meal proposal context."
+      );
+    }
+
+    const uid = request.auth.uid;
+    const {proposal, mealType} = request.data || {};
+
+    if (!proposal || !Array.isArray(proposal.items)) {
+      throw new HttpsError(
+        "invalid-argument",
+        "Valid proposal object is required."
+      );
+    }
+
+    if (typeof mealType !== "string" || !mealType.trim()) {
+      throw new HttpsError(
+        "invalid-argument",
+        "Non-empty mealType string is required."
+      );
+    }
+
+    try {
+      const updatedProposal =
+        MealOrchestrator.updateMealProposalContext(
+          proposal,
+          mealType
+        );
+
+      logger.info("Meal proposal context updated successfully", {
+        uid,
+        mealType: updatedProposal.mealType,
+        readyToLog: updatedProposal.readyToLog,
+        needsClarification: updatedProposal.needsClarification,
+      });
+
+      return {
+        success: true,
+        proposal: updatedProposal,
+      };
+    } catch (error) {
+      const errorMsg =
+        error instanceof Error ? error.message : String(error);
+      logger.error("Meal proposal context update failed", {
+        uid,
+        error: errorMsg,
+      });
+
+      throw new HttpsError(
+        "internal",
+        "Unable to update meal proposal context."
+      );
+    }
+  }
+);
+
+export const getAskEleGuidance = onCall(
+  {secrets: [openAiApiKey]},
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError(
+        "unauthenticated",
+        "Authentication required to request Ask Ele guidance."
+      );
+    }
+
+    const uid = request.auth.uid;
+    const {message, todayContext} = request.data || {};
+
+    if (typeof message !== "string" || !message.trim()) {
+      throw new HttpsError(
+        "invalid-argument",
+        "Non-empty message string is required."
+      );
+    }
+
+    try {
+      const aiProvider = getAiProvider(openAiApiKey.value());
+
+      const responseText = await aiProvider.getGuidance({
+        message,
+        todayContext:
+          todayContext && typeof todayContext === "object" ?
+            (todayContext as Record<string, unknown>) :
+            {},
+        uid,
+      });
+
+      logger.info("Ask Ele guidance generated successfully", {
+        uid,
+        messageLength: message.length,
+      });
+
+      return {
+        success: true,
+        responseText,
+      };
+    } catch (error) {
+      const errorMsg =
+        error instanceof Error ? error.message : String(error);
+      logger.error("Ask Ele guidance generation failed", {
+        uid,
+        error: errorMsg,
+      });
+
+      throw new HttpsError(
+        "internal",
+        "Unable to generate Ask Ele guidance."
+      );
+    }
+  }
+);
