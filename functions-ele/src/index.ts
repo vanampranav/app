@@ -6,7 +6,7 @@ import {initializeApp, getApps} from "firebase-admin/app";
 import {getFirestore, FieldValue, Timestamp} from "firebase-admin/firestore";
 import {getNutritionProvider} from "./nutrition/provider-factory";
 import {getAiProvider} from "./ai/provider-factory";
-import {MealType} from "./ai/types";
+import {MealType, RecommendationContextInput} from "./ai/types";
 import {MealOrchestrator} from "./ask-ele/meal-orchestrator";
 
 if (getApps().length === 0) {
@@ -1083,7 +1083,9 @@ export const updateMealProposalContext = onCall(
 );
 
 export const getAskEleGuidance = onCall(
-  {secrets: [openAiApiKey]},
+  {
+    secrets: [openAiApiKey, fatSecretConsumerKey, fatSecretConsumerSecret],
+  },
   async (request) => {
     if (!request.auth) {
       throw new HttpsError(
@@ -1093,7 +1095,7 @@ export const getAskEleGuidance = onCall(
     }
 
     const uid = request.auth.uid;
-    const {message, todayContext} = request.data || {};
+    const {message, todayContext, recommendationContext} = request.data || {};
 
     if (typeof message !== "string" || !message.trim()) {
       throw new HttpsError(
@@ -1105,23 +1107,61 @@ export const getAskEleGuidance = onCall(
     try {
       const aiProvider = getAiProvider(openAiApiKey.value());
 
-      const responseText = await aiProvider.getGuidance({
+      const guidanceResult = await aiProvider.getGuidance({
         message,
         todayContext:
           todayContext && typeof todayContext === "object" ?
             (todayContext as Record<string, unknown>) :
             {},
+        recommendationContext:
+          recommendationContext && typeof recommendationContext === "object" ?
+            (recommendationContext as RecommendationContextInput) :
+            null,
         uid,
       });
+
+      let proposal = null;
+
+      if (
+        guidanceResult.preparedMealText &&
+        guidanceResult.preparedMealText.trim()
+      ) {
+        const fatKey = fatSecretConsumerKey.value();
+        const fatSecret = fatSecretConsumerSecret.value();
+
+        if (fatKey && fatSecret) {
+          const nutritionProvider = getNutritionProvider(fatKey, fatSecret);
+          proposal = await MealOrchestrator.prepareMeal(
+            {
+              text: guidanceResult.preparedMealText,
+              suggestedMealType:
+                guidanceResult.suggestedMealType ||
+                guidanceResult.recommendation?.mealType ||
+                null,
+            },
+            aiProvider,
+            nutritionProvider
+          );
+        }
+      }
 
       logger.info("Ask Ele guidance generated successfully", {
         uid,
         messageLength: message.length,
+        responseType: guidanceResult.responseType,
+        hasRecommendation: !!guidanceResult.recommendation,
+        hasPreparedMeal: !!guidanceResult.preparedMealText,
+        hasProposal: !!proposal,
       });
 
       return {
         success: true,
-        responseText,
+        responseType: guidanceResult.responseType,
+        responseText: guidanceResult.responseText,
+        recommendation: guidanceResult.recommendation,
+        preparedMealText: guidanceResult.preparedMealText ?? null,
+        suggestedMealType: guidanceResult.suggestedMealType ?? null,
+        proposal: proposal ?? null,
       };
     } catch (error) {
       const errorMsg =
@@ -1138,3 +1178,87 @@ export const getAskEleGuidance = onCall(
     }
   }
 );
+
+export const saveRecommendationFeedback = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError(
+      "unauthenticated",
+      "Authentication required to save feedback."
+    );
+  }
+
+  const uid = request.auth.uid;
+  const data = request.data;
+
+  if (!data || typeof data !== "object") {
+    throw new HttpsError(
+      "invalid-argument",
+      "Payload must be an object."
+    );
+  }
+
+  const recommendationId =
+    typeof data.recommendationId === "string" ?
+      data.recommendationId.trim() :
+      "";
+  const optionId =
+    typeof data.optionId === "string" ? data.optionId.trim() : "";
+  const action = typeof data.action === "string" ? data.action.trim() : "";
+
+  const validActions = ["liked", "disliked", "refreshed", "selected"];
+  if (!validActions.includes(action)) {
+    throw new HttpsError(
+      "invalid-argument",
+      "Invalid action. Must be one of: liked, disliked, refreshed, selected."
+    );
+  }
+
+  const feedbackId =
+    typeof data.feedbackId === "string" && data.feedbackId.trim() ?
+      data.feedbackId.trim() :
+      `fb_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
+  const feedbackDoc = {
+    feedbackId,
+    recommendationId: recommendationId || null,
+    optionId: optionId || null,
+    action,
+    createdAt: FieldValue.serverTimestamp(),
+  };
+
+  const docRef = db
+    .collection("users")
+    .doc(uid)
+    .collection("recommendationFeedback")
+    .doc(feedbackId);
+
+  try {
+    await docRef.set(feedbackDoc, {merge: true});
+
+    logger.info("Recommendation feedback recorded", {
+      uid,
+      feedbackId,
+      action,
+      recommendationId,
+      optionId,
+    });
+
+    return {
+      success: true,
+      feedbackId,
+      message: "Feedback recorded successfully",
+    };
+  } catch (error) {
+    const errorMsg =
+      error instanceof Error ? error.message : String(error);
+    logger.error("Failed to record recommendation feedback", {
+      uid,
+      error: errorMsg,
+    });
+
+    throw new HttpsError(
+      "internal",
+      `Failed to record recommendation feedback: ${errorMsg}`
+    );
+  }
+});

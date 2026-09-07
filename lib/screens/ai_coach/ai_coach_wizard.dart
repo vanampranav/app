@@ -311,6 +311,7 @@ class _AiCoachWizardState extends State<AiCoachWizard> {
       // Keep _isLoading = true while we deduct credits and save — this prevents
       // the frozen blank-screen glitch between generation and navigation.
 
+      String savedPlanId = '';
       if (_fbService.isLoggedIn) {
         // Deduct 1 credit before saving the plan
         try {
@@ -322,7 +323,7 @@ class _AiCoachWizardState extends State<AiCoachWizard> {
 
         // Save the generated fitness plan to the subcollection for multi-plan support
         try {
-          await _fbService.saveUserPlan(finalPlan);
+          savedPlanId = await _fbService.saveUserPlan(finalPlan);
         } catch (e) {
           debugPrint('Failed to save fitness plan: $e');
         }
@@ -330,13 +331,128 @@ class _AiCoachWizardState extends State<AiCoachWizard> {
 
       if (mounted) {
         Navigator.pop(context); // close bottom sheet
-        Navigator.push(context, MaterialPageRoute(builder: (context) => AiCoachSchedulePlanScreen(plan: finalPlan)));
+        if (savedPlanId.isNotEmpty) {
+          _showPostGenerationSheet(savedPlanId, finalPlan);
+        } else {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => AiCoachSchedulePlanScreen(plan: finalPlan),
+            ),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
         setState(() { _isLoading = false; _errorMsg = e.toString(); });
       }
     }
+  }
+
+  void _showPostGenerationSheet(String planId, FitnessPlan plan) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF141414),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (ctx) {
+        return Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: AppTheme.accentColor.withOpacity(0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: const Center(
+                  child: Text('✨', style: TextStyle(fontSize: 24)),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Plan Created!',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                plan.name,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: AppTheme.accentColor,
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: () async {
+                  try {
+                    await _fbService.setActivePlan(planId);
+                  } catch (e) {
+                    debugPrint('Failed to set active plan: $e');
+                  }
+                  if (!ctx.mounted) return;
+                  Navigator.pop(ctx);
+                  Navigator.push(
+                    ctx,
+                    MaterialPageRoute(
+                      builder: (_) => AiCoachSchedulePlanScreen(plan: plan),
+                    ),
+                  );
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.accentColor,
+                  foregroundColor: Colors.black,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+                child: const Text(
+                  'Use This Plan',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900),
+                ),
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  Navigator.push(
+                    ctx,
+                    MaterialPageRoute(
+                      builder: (_) => AiCoachSchedulePlanScreen(plan: plan),
+                    ),
+                  );
+                },
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  side: BorderSide(color: Colors.white.withOpacity(0.2)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+                child: const Text(
+                  'View Plan',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   bool _checkProfileDiffers() {

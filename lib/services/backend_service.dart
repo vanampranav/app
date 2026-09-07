@@ -186,11 +186,12 @@ class BackendService {
     }
   }
 
-  /// Calls the `getAskEleGuidance` Cloud Function to generate contextual guidance.
+  /// Calls the `getAskEleGuidance` Cloud Function to generate contextual guidance & recommendations.
   /// Relies on Firebase Authentication context (request.auth).
-  Future<String> getAskEleGuidance({
+  Future<Map<String, dynamic>> getAskEleGuidance({
     required String message,
     required Map<String, dynamic> todayContext,
+    Map<String, dynamic>? recommendationContext,
   }) async {
     try {
       final HttpsCallable callable =
@@ -199,22 +200,52 @@ class BackendService {
         'message': message,
         'todayContext': todayContext,
       };
+      if (recommendationContext != null) {
+        payload['recommendationContext'] = recommendationContext;
+      }
 
       final HttpsCallableResult result = await callable.call(payload);
 
       final normalized =
           _normalizeFirebaseValue(result.data) as Map<String, dynamic>;
 
-      final text = normalized['responseText'];
-      if (text is String && text.trim().isNotEmpty) {
-        return text.trim();
-      }
-      return "I couldn't generate guidance right now. Try asking again in a moment.";
+      return normalized;
     } on FirebaseFunctionsException catch (e) {
       debugPrint('FirebaseFunctionsException in getAskEleGuidance: ${e.code} - ${e.message}');
       rethrow;
     } catch (e) {
       debugPrint('Error calling getAskEleGuidance: $e');
+      rethrow;
+    }
+  }
+
+  /// Saves recommendation feedback (liked, disliked, refreshed, selected) to Firestore.
+  /// Relies on Firebase Authentication context (request.auth).
+  Future<Map<String, dynamic>> saveRecommendationFeedback({
+    required String action,
+    String? recommendationId,
+    String? optionId,
+  }) async {
+    try {
+      final HttpsCallable callable =
+          _functions.httpsCallable('saveRecommendationFeedback');
+      final Map<String, dynamic> payload = {
+        'action': action,
+        if (recommendationId != null) 'recommendationId': recommendationId,
+        if (optionId != null) 'optionId': optionId,
+      };
+
+      final HttpsCallableResult result = await callable.call(payload);
+
+      final normalized =
+          _normalizeFirebaseValue(result.data) as Map<String, dynamic>;
+
+      return normalized;
+    } on FirebaseFunctionsException catch (e) {
+      debugPrint('FirebaseFunctionsException in saveRecommendationFeedback: ${e.code} - ${e.message}');
+      rethrow;
+    } catch (e) {
+      debugPrint('Error calling saveRecommendationFeedback: $e');
       rethrow;
     }
   }

@@ -895,11 +895,11 @@ class EFNavBar extends StatelessWidget {
   }) : super(key: key);
 
   static const _items = [
-    _NavItem(icon: Icons.home_outlined,              activeIcon: Icons.home_rounded,              label: 'Home'),
-    _NavItem(icon: Icons.restaurant_menu_outlined,   activeIcon: Icons.restaurant_menu_rounded,   label: 'Nutrition'),
-    _NavItem(icon: Icons.storefront_outlined,        activeIcon: Icons.storefront_rounded,        label: 'Shop'),
-    _NavItem(icon: Icons.insights_outlined,           activeIcon: Icons.insights,                  label: 'Performance'),
-    _NavItem(icon: Icons.person_outline,             activeIcon: Icons.person_rounded,            label: 'Profile'),
+    _NavItem(icon: Icons.home_outlined,            activeIcon: Icons.home_rounded,            label: 'Home'),
+    _NavItem(icon: Icons.restaurant_menu_outlined, activeIcon: Icons.restaurant_menu_rounded, label: 'Nutrition'),
+    _NavItem(icon: Icons.auto_awesome,              activeIcon: Icons.auto_awesome,            label: 'Ask Ele'),
+    _NavItem(icon: Icons.insights_outlined,         activeIcon: Icons.insights,                label: 'Performance'),
+    _NavItem(icon: Icons.person_outline,           activeIcon: Icons.person_rounded,          label: 'Profile'),
   ];
 
   @override
@@ -922,6 +922,54 @@ class EFNavBar extends StatelessWidget {
   Widget _buildItem(BuildContext context, int i) {
     final active = selectedIndex == i;
     final item = _items[i];
+
+    if (i == 2) {
+      // Prominent Center Treatment for "Ask Ele"
+      return Expanded(
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => onItemSelected(i),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: active ? AppTheme.lime : AppTheme.surface2,
+                  border: Border.all(
+                    color: active
+                        ? AppTheme.lime
+                        : AppTheme.lime.withValues(alpha: 0.4),
+                    width: active ? 2 : 1.5,
+                  ),
+                  boxShadow: active ? AppTheme.shadowLime : [],
+                ),
+                child: Center(
+                  child: Icon(
+                    item.icon,
+                    size: 20,
+                    color: active ? Colors.black : AppTheme.lime,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 3),
+              AnimatedDefaultTextStyle(
+                duration: const Duration(milliseconds: 200),
+                style: AppTheme.labelSM.copyWith(
+                  fontSize: 10,
+                  color: active ? AppTheme.lime : AppTheme.textSecondary,
+                  fontWeight: active ? FontWeight.w900 : FontWeight.w700,
+                ),
+                child: Text(item.label),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     final Widget iconWidget = Icon(
       active ? item.activeIcon : item.icon,
