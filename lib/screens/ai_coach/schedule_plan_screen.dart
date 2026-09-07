@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import '../../models/ai_coach_models.dart';
 import '../../theme/app_theme.dart';
 import '../../services/pdf_service.dart';
+import '../ask_ele/ask_ele_screen.dart';
 import '../profile_screen.dart';
-import 'ai_coach_screen.dart';
 
 const List<String> _MEAL_TIMES = ['Breakfast', 'Lunch', 'Snacks', 'Dinner'];
 
@@ -88,7 +88,7 @@ class _AiCoachSchedulePlanScreenState extends State<AiCoachSchedulePlanScreen> {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  const Expanded(child: Text('Weekly Schedule', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900))),
+                  const Expanded(child: Text('Weekly Plan', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900))),
                   // Download button
                   GestureDetector(
                     onTap: _downloadPDF,
@@ -247,15 +247,29 @@ class _AiCoachSchedulePlanScreenState extends State<AiCoachSchedulePlanScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  _buildNavIcon(Icons.auto_awesome, 'AI ASSISTANT', false, () => Navigator.pop(context)),
-                  _buildNavIcon(Icons.calendar_today_outlined, 'WEEKLY SCHEDULE', true, () {}),
-                  _buildNavIcon(Icons.person_outline, 'PROFILE', false, () {
+                  _buildNavIcon(Icons.auto_awesome, 'Ask Ele', false, () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const AskEleScreen(),
+                      ),
+                    );
+                  }),
+                  _buildNavIcon(Icons.calendar_today_outlined, 'My Plan', true, () {
+                    Navigator.pop(context);
+                  }),
+                  _buildNavIcon(Icons.person_outline, 'Profile', false, () {
                     Navigator.push(context,
                         MaterialPageRoute(builder: (_) => ProfileScreen(
                           showAiCoachNav: true,
                           onAiAssistantTap: () {
-                            Navigator.pop(context); // pop Profile → Schedule
-                            Navigator.pop(context); // pop Schedule → AI Coach
+                            Navigator.pop(context);
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const AskEleScreen(),
+                              ),
+                            );
                           },
                           onWeeklyScheduleTap: () => Navigator.pop(context),
                         )));

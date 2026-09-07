@@ -1,5 +1,3 @@
-import 'package:flutter/foundation.dart';
-
 class AiCoachProfile {
   String name;
   int age;
@@ -184,6 +182,7 @@ class FitnessPlan {
   final String goal;
   final String workoutFocus;
   final DateTime generatedDate;
+  final DateTime? startDate;
   final List<DayMeals> weeklyMeals;     // index 0-6 = Day 1-7
   final List<DayWorkout> weeklyWorkouts; // index 0-6 = Day 1-7
 
@@ -195,11 +194,14 @@ class FitnessPlan {
     this.goal = 'Get Fit',
     this.workoutFocus = 'MIXED CARDIO AND STRENGTH',
     DateTime? generatedDate,
+    this.startDate,
     required this.weeklyMeals,
     required this.weeklyWorkouts,
   }) : generatedDate = generatedDate ?? DateTime.now();
 
-  FitnessPlan copyWith({String? id, String? name}) {
+  DateTime get effectiveStartDate => startDate ?? generatedDate;
+
+  FitnessPlan copyWith({String? id, String? name, DateTime? startDate}) {
     return FitnessPlan(
       id: id ?? this.id,
       name: name ?? this.name,
@@ -208,6 +210,7 @@ class FitnessPlan {
       goal: goal,
       workoutFocus: workoutFocus,
       generatedDate: generatedDate,
+      startDate: startDate ?? this.startDate,
       weeklyMeals: weeklyMeals,
       weeklyWorkouts: weeklyWorkouts,
     );
@@ -222,12 +225,18 @@ class FitnessPlan {
       'goal': goal,
       'workoutFocus': workoutFocus,
       'generatedDate': generatedDate.toIso8601String(),
+      if (startDate != null) 'startDate': startDate!.toIso8601String(),
       'weeklyMeals': weeklyMeals.map((m) => m.toJson()).toList(),
       'weeklyWorkouts': weeklyWorkouts.map((w) => w.toJson()).toList(),
     };
   }
 
   factory FitnessPlan.fromJson(Map<String, dynamic> json) {
+    DateTime? parsedStart;
+    if (json['startDate'] != null) {
+      parsedStart = DateTime.tryParse(json['startDate'].toString());
+    }
+
     return FitnessPlan(
       id: json['id']?.toString() ?? '',
       name: json['name']?.toString() ?? '',
@@ -236,6 +245,7 @@ class FitnessPlan {
       goal: json['goal']?.toString() ?? '',
       workoutFocus: json['workoutFocus']?.toString() ?? '',
       generatedDate: DateTime.tryParse(json['generatedDate']?.toString() ?? '') ?? DateTime.now(),
+      startDate: parsedStart,
       weeklyMeals: (json['weeklyMeals'] as List?)?.map((m) => DayMeals.fromJson(m)).toList() ?? [],
       weeklyWorkouts: (json['weeklyWorkouts'] as List?)?.map((w) => DayWorkout.fromJson(w)).toList() ?? [],
     );

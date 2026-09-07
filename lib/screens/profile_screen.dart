@@ -163,21 +163,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          _buildAiNavIcon(context, Icons.auto_awesome, 'AI ASSISTANT', false, () {
+          _buildAiNavIcon(context, Icons.auto_awesome, 'Ask Ele', false, () {
             if (widget.onAiAssistantTap != null) {
               widget.onAiAssistantTap!();
             } else {
               Navigator.pop(context);
             }
           }),
-          _buildAiNavIcon(context, Icons.calendar_today_outlined, 'WEEKLY SCHEDULE', false, () {
+          _buildAiNavIcon(context, Icons.calendar_today_outlined, 'My Plan', false, () {
             if (widget.onWeeklyScheduleTap != null) {
               widget.onWeeklyScheduleTap!();
             } else {
               Navigator.pop(context);
             }
           }),
-          _buildAiNavIcon(context, Icons.person_outline, 'PROFILE', true, () {}),
+          _buildAiNavIcon(context, Icons.person_outline, 'Profile', true, () {}),
         ],
       ),
     );

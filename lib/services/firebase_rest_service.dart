@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:elefit_app/utils/app_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -352,11 +353,14 @@ class FirebaseRestService {
     if (_uid == null || _idToken == null) throw Exception('Not logged in');
 
     final planName = plan.name.isNotEmpty ? plan.name : 'Fitness Plan - ${_fmtDate(plan.generatedDate)}';
+    final effectiveStart = plan.startDate ?? plan.generatedDate;
+
     // Store using the same schema as the Next.js app so both platforms can read each other's plans
     final fields = <String, dynamic>{
       'name': {'stringValue': planName},
       'goal': {'stringValue': plan.goal},
       'planGenerationDate': {'stringValue': plan.generatedDate.toIso8601String()},
+      'startDate': {'stringValue': effectiveStart.toIso8601String()},
       'createdAt': {'timestampValue': DateTime.now().toUtc().toIso8601String()},
       'calculatedData': {
         'mapValue': {
@@ -370,7 +374,7 @@ class FirebaseRestService {
         },
       },
       // Keep planData as a fallback for the Flutter app's own reader
-      'planData': {'stringValue': jsonEncode(plan.toJson())},
+      'planData': {'stringValue': jsonEncode(plan.copyWith(startDate: effectiveStart).toJson())},
     };
 
     final url = '$_firestoreUrl/users/$_uid/aiCoachSchedules';
@@ -386,10 +390,60 @@ class FirebaseRestService {
 
     // Keep legacy fitnessPlan field in sync for backward compat
     try {
-      await updateUserProfile({'fitnessPlan': jsonEncode(plan.copyWith(id: planId, name: planName).toJson())});
+      await updateUserProfile({'fitnessPlan': jsonEncode(plan.copyWith(id: planId, name: planName, startDate: effectiveStart).toJson())});
     } catch (_) {}
 
     return planId;
+  }
+
+  /// Returns the current active plan ID from user's Firestore profile or SharedPreferences.
+  Future<String?> getActivePlanId() async {
+    if (_uid == null || _idToken == null) {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString('active_fitness_plan_id');
+    }
+
+    try {
+      final profile = await getUserProfile();
+      final activeId = profile?['activeFitnessPlanId']?.toString();
+      if (activeId != null && activeId.isNotEmpty) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('active_fitness_plan_id', activeId);
+        return activeId;
+      }
+    } catch (e) {
+      debugPrint('Error getting active plan ID from profile: $e');
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('active_fitness_plan_id');
+  }
+
+  /// Sets the active fitness plan ID for the authenticated user.
+  Future<void> setActivePlan(String planId) async {
+    if (_uid == null || _idToken == null) throw Exception('Not logged in');
+
+    await updateUserProfile({'activeFitnessPlanId': planId});
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('active_fitness_plan_id', planId);
+  }
+
+  /// Clears the active fitness plan for the authenticated user.
+  Future<void> clearActivePlan() async {
+    if (_uid == null || _idToken == null) throw Exception('Not logged in');
+
+    await updateUserProfile({'activeFitnessPlanId': ''});
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('active_fitness_plan_id');
+  }
+
+  /// Returns the full active FitnessPlan, or null if no active plan is configured.
+  Future<FitnessPlan?> getActivePlan() async {
+    final activeId = await getActivePlanId();
+    if (activeId == null || activeId.isEmpty) return null;
+    return getPlanById(activeId);
   }
 
   /// Fetch all saved plan summaries for the current user, newest first.

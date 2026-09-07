@@ -1,5 +1,6 @@
 import {
   GetGuidanceInput,
+  GetGuidanceOutput,
   InterpretMealInput,
   MealInterpretation,
 } from "./types";
@@ -24,9 +25,9 @@ export interface AiProvider {
    * Generates practical, context-aware daily guidance using EleFit user data.
    *
    * @param {GetGuidanceInput} input - Message, today's context, and UID.
-   * @return {Promise<string>} Guidance response text.
+   * @return {Promise<GetGuidanceOutput>} Guidance output with schema.
    */
   getGuidance(
     input: GetGuidanceInput
-  ): Promise<string>;
+  ): Promise<GetGuidanceOutput>;
 }

@@ -933,19 +933,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               const SizedBox(width: AppTheme.sm),
               Expanded(
                 child: EFQuickAction(
-                  icon: Icons.auto_awesome_rounded,
-                  label: 'Ask\nEle',
+                  icon: Icons.calendar_today_rounded,
+                  label: 'My\nPlan',
                   accentColor: AppTheme.lime,
                   onTap: () => Navigator.push(
                     context,
                     EFPageRoute(
-                      page: AskEleScreen(
-                        caloriesConsumed: _caloriesConsumed,
-                        caloriesGoal: _caloriesGoal > 0 ? _caloriesGoal : null,
-                        proteinGrams: _proteinG,
-                        proteinGoal: _proteinGoal > 0 ? _proteinGoal : null,
-                        stepsCount: _stepsToday > 0 ? _stepsToday : null,
-                      ),
+                      page: const ai_coach.MyPlanScreen(),
                     ),
                   ),
                 ),

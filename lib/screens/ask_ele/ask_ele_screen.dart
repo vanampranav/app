@@ -2,8 +2,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/ask_ele_proposal.dart';
+import '../../models/ask_ele_recommendation.dart';
 import '../../models/food_models.dart';
-import '../../models/today_context.dart';
 import '../../services/ask_ele_context_service.dart';
 import '../../services/backend_service.dart';
 import '../../services/speech_input_service.dart';
@@ -11,16 +11,18 @@ import '../../services/streak_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/ask_ele/ask_ele_input_bar.dart';
 import '../../widgets/ask_ele/ask_ele_meal_proposal_card.dart';
+import '../../widgets/ask_ele/ask_ele_meal_recommendation_card.dart';
 import '../../widgets/ask_ele/ask_ele_message_bubble.dart';
 import '../../widgets/ask_ele/ask_ele_quick_action_chip.dart';
 import '../../widgets/ask_ele/ask_ele_summary_metric.dart';
 
-enum ChatMessageType { text, mealProposal }
+enum ChatMessageType { text, mealProposal, mealRecommendation }
 enum AskEleIntent { logMeal, dailyGuidance }
 
 class ChatMessage {
   final String? text;
   final MealProposal? proposal;
+  final MealRecommendationResponse? recommendation;
   final bool isUser;
   final ChatMessageType type;
 
@@ -28,13 +30,22 @@ class ChatMessage {
     required String this.text,
     required this.isUser,
   })  : proposal = null,
+        recommendation = null,
         type = ChatMessageType.text;
 
   ChatMessage.proposal({
     required MealProposal this.proposal,
   })  : text = null,
+        recommendation = null,
         isUser = false,
         type = ChatMessageType.mealProposal;
+
+  ChatMessage.recommendation({
+    required MealRecommendationResponse this.recommendation,
+  })  : text = null,
+        proposal = null,
+        isUser = false,
+        type = ChatMessageType.mealRecommendation;
 }
 
 class PendingMealClarification {
@@ -49,6 +60,48 @@ class PendingMealClarification {
     required this.status,
     required this.question,
   });
+}
+
+class RecommendationContext {
+  final String mealType;
+  final List<String> suggestedFoods;
+  final String? recommendationId;
+  final String? selectedOptionId;
+  final List<MealRecommendationOption>? options;
+
+  RecommendationContext({
+    required this.mealType,
+    required this.suggestedFoods,
+    this.recommendationId,
+    this.selectedOptionId,
+    this.options,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'mealType': mealType,
+        'suggestedFoods': suggestedFoods,
+        if (recommendationId != null) 'recommendationId': recommendationId,
+        if (selectedOptionId != null) 'selectedOptionId': selectedOptionId,
+        if (options != null)
+          'options': options!.map((o) => o.toJson()).toList(),
+      };
+
+  factory RecommendationContext.fromJson(Map<String, dynamic> json) {
+    final rawList = json['suggestedFoods'] as List<dynamic>? ?? [];
+    final rawOptions = json['options'] as List<dynamic>? ?? [];
+    return RecommendationContext(
+      mealType: json['mealType'] as String? ?? 'snack',
+      suggestedFoods: rawList.map((e) => e.toString()).toList(),
+      recommendationId: json['recommendationId'] as String?,
+      selectedOptionId: json['selectedOptionId'] as String?,
+      options: rawOptions.isNotEmpty
+          ? rawOptions
+              .map((e) => MealRecommendationOption.fromJson(
+                  Map<String, dynamic>.from(e as Map)))
+              .toList()
+          : null,
+    );
+  }
 }
 
 class AskEleScreen extends StatefulWidget {
@@ -91,6 +144,7 @@ class _AskEleScreenState extends State<AskEleScreen> {
 
   Map<String, dynamic>? _activeMealProposal;
   PendingMealClarification? _pendingClarification;
+  RecommendationContext? _activeRecommendationContext;
   final Set<String> _loggedOriginalTexts = {};
 
   final List<String> _quickPrompts = [
@@ -224,6 +278,26 @@ class _AskEleScreenState extends State<AskEleScreen> {
         }
       },
     );
+  }
+
+  bool _isConversationalLogCommand(String query) {
+    final norm = query.toLowerCase().trim().replaceAll(RegExp(r'[^\w\s]'), '');
+    const logCommands = {
+      'log it',
+      'yes log it',
+      'go ahead',
+      'add it',
+      'log this',
+      'confirm',
+      'yes log',
+      'please log it',
+      'log',
+      'save it',
+      'save meal',
+      'log meal',
+      'yes',
+    };
+    return logCommands.contains(norm);
   }
 
   AskEleIntent _classifyIntent(String query) {
@@ -429,9 +503,10 @@ class _AskEleScreenState extends State<AskEleScreen> {
         _caloriesConsumed = newCal;
         _proteinGrams = newProt;
 
-        // Clear active meal state
+        // Clear active meal and recommendation state
         _activeMealProposal = null;
         _pendingClarification = null;
+        _activeRecommendationContext = null;
 
         final mealTypeName = _formatMealTypeName(proposal.mealType);
         _messages.add(
@@ -470,6 +545,69 @@ class _AskEleScreenState extends State<AskEleScreen> {
     }
   }
 
+  void _handleOptionSelection(
+    MealRecommendationResponse rec,
+    MealRecommendationOption option,
+  ) {
+    try {
+      _backendService.saveRecommendationFeedback(
+        action: 'selected',
+        recommendationId: rec.recommendationId,
+        optionId: option.optionId,
+      ).catchError((e) {
+        debugPrint('Feedback save error (ignored): $e');
+        return <String, dynamic>{};
+      });
+    } catch (e) {
+      debugPrint('Failed to send selection feedback: $e');
+    }
+
+    _activeRecommendationContext = RecommendationContext(
+      mealType: rec.mealType,
+      suggestedFoods: option.foods,
+      recommendationId: rec.recommendationId,
+      selectedOptionId: option.optionId,
+      options: rec.options,
+    );
+
+    _handleSendMessage("I'll choose ${option.title}");
+  }
+
+  void _handleRecommendationRefresh(MealRecommendationResponse rec) {
+    try {
+      _backendService.saveRecommendationFeedback(
+        action: 'refreshed',
+        recommendationId: rec.recommendationId,
+      ).catchError((e) {
+        debugPrint('Feedback save error (ignored): $e');
+        return <String, dynamic>{};
+      });
+    } catch (e) {
+      debugPrint('Failed to send refresh feedback: $e');
+    }
+
+    _handleSendMessage('Give me a different ${rec.mealType} recommendation');
+  }
+
+  void _handleOptionFeedback(
+    String recommendationId,
+    String optionId,
+    String action,
+  ) {
+    try {
+      _backendService.saveRecommendationFeedback(
+        action: action,
+        recommendationId: recommendationId,
+        optionId: optionId,
+      ).catchError((e) {
+        debugPrint('Feedback save error (ignored): $e');
+        return <String, dynamic>{};
+      });
+    } catch (e) {
+      debugPrint('Failed to send option feedback: $e');
+    }
+  }
+
   Future<void> _handleSendMessage([String? overrideText]) async {
     final query = (overrideText ?? _inputController.text).trim();
 
@@ -501,22 +639,83 @@ class _AskEleScreenState extends State<AskEleScreen> {
     try {
       final intent = _classifyIntent(query);
       final mealTypeUpdate = _parseMealTypeUpdate(query);
+      final isLogCmd = _isConversationalLogCommand(query);
 
-      if (intent == AskEleIntent.dailyGuidance) {
-        // Priority A: Context-Aware Daily Guidance (Guidance questions take precedence)
-        final todayContext = await _contextService.getTodayContext();
-        final guidanceText = await _backendService.getAskEleGuidance(
-          message: query,
-          todayContext: todayContext.toJson(),
+      // 1. ACTIVE MEAL CLARIFICATION ANSWER
+      if (_pendingClarification != null &&
+          _activeMealProposal != null &&
+          mealTypeUpdate == null &&
+          !isLogCmd) {
+        final itemIdx = _pendingClarification!.itemIndex;
+        final updatedProposalMap =
+            await _backendService.resolveMealClarification(
+          proposal: _activeMealProposal!,
+          itemIndex: itemIdx,
+          answer: query,
         );
 
         if (!mounted) return;
 
+        _updateActiveProposalAndPendingClarification(updatedProposalMap);
+        final updatedProposal = MealProposal.fromJson(updatedProposalMap);
+
         setState(() {
-          _messages.add(ChatMessage.text(text: guidanceText, isUser: false));
+          _messages.add(ChatMessage.proposal(proposal: updatedProposal));
+
+          if (updatedProposal.needsClarification &&
+              updatedProposal.clarificationQuestion != null &&
+              updatedProposal.clarificationQuestion!.isNotEmpty) {
+            final nextQuestion = updatedProposal.clarificationQuestion!;
+            final lastMsg = _messages.isNotEmpty ? _messages.last.text : null;
+            if (lastMsg != nextQuestion) {
+              _messages.add(
+                ChatMessage.text(
+                  text: nextQuestion,
+                  isUser: false,
+                ),
+              );
+            }
+          }
         });
-      } else if (mealTypeUpdate != null && _activeMealProposal != null) {
-        // Priority B: Meal Type Edit Command on Active Proposal
+        return;
+      }
+
+      // 2. CONVERSATIONAL "LOG IT" COMMAND
+      if (isLogCmd) {
+        if (_activeMealProposal != null) {
+          final proposal = MealProposal.fromJson(_activeMealProposal!);
+          if (proposal.readyToLog) {
+            await _handleConfirmAndLog(proposal);
+            return;
+          } else {
+            final missingQ = proposal.clarificationQuestion ??
+                'We still need a few more details before logging this meal.';
+            setState(() {
+              _messages.add(
+                ChatMessage.text(
+                  text: missingQ,
+                  isUser: false,
+                ),
+              );
+            });
+            return;
+          }
+        } else {
+          setState(() {
+            _messages.add(
+              ChatMessage.text(
+                text:
+                    "There's no active meal ready to log right now. What did you eat?",
+                isUser: false,
+              ),
+            );
+          });
+          return;
+        }
+      }
+
+      // 3. EXPLICIT MEAL TYPE EDIT COMMAND ON ACTIVE PROPOSAL
+      if (mealTypeUpdate != null && _activeMealProposal != null) {
         final updatedProposalMap =
             await _backendService.updateMealProposalContext(
           proposal: _activeMealProposal!,
@@ -555,66 +754,52 @@ class _AskEleScreenState extends State<AskEleScreen> {
             }
           }
         });
-      } else if (_pendingClarification != null && _activeMealProposal != null) {
-        // Priority C: Item Clarification Answer
-        final itemIdx = _pendingClarification!.itemIndex;
-        final updatedProposalMap =
-            await _backendService.resolveMealClarification(
-          proposal: _activeMealProposal!,
-          itemIndex: itemIdx,
-          answer: query,
-        );
+        return;
+      }
 
-        if (!mounted) return;
-
-        _updateActiveProposalAndPendingClarification(updatedProposalMap);
-        final updatedProposal = MealProposal.fromJson(updatedProposalMap);
-
-        setState(() {
-          _messages.add(ChatMessage.proposal(proposal: updatedProposal));
-
-          if (updatedProposal.needsClarification &&
-              updatedProposal.clarificationQuestion != null &&
-              updatedProposal.clarificationQuestion!.isNotEmpty) {
-            final nextQuestion = updatedProposal.clarificationQuestion!;
-            final lastMsg = _messages.isNotEmpty ? _messages.last.text : null;
-            if (lastMsg != nextQuestion) {
-              _messages.add(
-                ChatMessage.text(
-                  text: nextQuestion,
-                  isUser: false,
-                ),
-              );
-            }
-          }
-        });
-      } else if (intent == AskEleIntent.dailyGuidance) {
-        // Priority C: Context-Aware Daily Guidance
+      // 4. RECOMMENDATION FOLLOW-UP / GUIDANCE / RECOMMENDATION REQUEST
+      if (_activeRecommendationContext != null ||
+          intent == AskEleIntent.dailyGuidance) {
         final todayContext = await _contextService.getTodayContext();
-        final guidanceText = await _backendService.getAskEleGuidance(
+        final guidanceData = await _backendService.getAskEleGuidance(
           message: query,
           todayContext: todayContext.toJson(),
+          recommendationContext: _activeRecommendationContext?.toJson(),
         );
 
         if (!mounted) return;
 
-        setState(() {
-          _messages.add(ChatMessage.text(text: guidanceText, isUser: false));
-        });
-      } else {
-        // Priority D: New Meal Action Request
-        final proposalMap = await _backendService.prepareMeal(query);
-        final proposal = MealProposal.fromJson(proposalMap);
+        final responseText =
+            guidanceData['responseText'] as String? ?? '';
 
-        if (!mounted) return;
+        // Update recommendation context if returned
+        MealRecommendationResponse? structuredRec;
+        if (guidanceData['recommendation'] is Map<String, dynamic>) {
+          final recMap = Map<String, dynamic>.from(
+              guidanceData['recommendation'] as Map);
+          _activeRecommendationContext =
+              RecommendationContext.fromJson(recMap);
+          if (recMap['options'] is List &&
+              (recMap['options'] as List).isNotEmpty) {
+            structuredRec = MealRecommendationResponse.fromJson(recMap);
+          }
+        }
 
-        _updateActiveProposalAndPendingClarification(proposalMap);
+        // If backend returned a prepared proposal (because quantities were provided for recommendation)
+        if (guidanceData['proposal'] is Map<String, dynamic>) {
+          final proposalMap = Map<String, dynamic>.from(
+              guidanceData['proposal'] as Map);
+          _updateActiveProposalAndPendingClarification(proposalMap);
+          final proposal = MealProposal.fromJson(proposalMap);
 
-        setState(() {
-          if (proposal.items.isNotEmpty) {
+          setState(() {
+            if (responseText.isNotEmpty) {
+              _messages
+                  .add(ChatMessage.text(text: responseText, isUser: false));
+            }
             _messages.add(
               ChatMessage.text(
-                text: 'Got it — here\'s what I understood.',
+                text: "Got it — here's what I understood.",
                 isUser: false,
               ),
             );
@@ -623,24 +808,118 @@ class _AskEleScreenState extends State<AskEleScreen> {
             if (proposal.needsClarification &&
                 proposal.clarificationQuestion != null &&
                 proposal.clarificationQuestion!.isNotEmpty) {
-              final question = proposal.clarificationQuestion!;
-              final lastMsg = _messages.isNotEmpty ? _messages.last.text : null;
-              if (lastMsg != question) {
-                _messages.add(
-                  ChatMessage.text(
-                    text: question,
-                    isUser: false,
-                  ),
-                );
-              }
+              _messages.add(
+                ChatMessage.text(
+                  text: proposal.clarificationQuestion!,
+                  isUser: false,
+                ),
+              );
             }
-          } else {
-            final question = proposal.clarificationQuestion ??
-                'I couldn\'t identify any foods in that meal. Try describing what you ate, e.g. "2 idlis with chutney".';
-            _messages.add(ChatMessage.text(text: question, isUser: false));
+          });
+          return;
+        }
+
+        // If backend returned preparedMealText (fallback if proposal not pre-computed)
+        final preparedMealText =
+            guidanceData['preparedMealText'] as String?;
+        final suggestedMealType =
+            guidanceData['suggestedMealType'] as String?;
+        if (preparedMealText != null && preparedMealText.isNotEmpty) {
+          final proposalMap = await _backendService.prepareMeal(
+            preparedMealText,
+            suggestedMealType: suggestedMealType ??
+                _activeRecommendationContext?.mealType,
+          );
+          final proposal = MealProposal.fromJson(proposalMap);
+
+          if (!mounted) return;
+
+          _updateActiveProposalAndPendingClarification(proposalMap);
+
+          setState(() {
+            if (responseText.isNotEmpty) {
+              _messages
+                  .add(ChatMessage.text(text: responseText, isUser: false));
+            }
+            _messages.add(
+              ChatMessage.text(
+                text: "Got it — here's what I understood.",
+                isUser: false,
+              ),
+            );
+            _messages.add(ChatMessage.proposal(proposal: proposal));
+
+            if (proposal.needsClarification &&
+                proposal.clarificationQuestion != null &&
+                proposal.clarificationQuestion!.isNotEmpty) {
+              _messages.add(
+                ChatMessage.text(
+                  text: proposal.clarificationQuestion!,
+                  isUser: false,
+                ),
+              );
+            }
+          });
+          return;
+        }
+
+        // Standard guidance or structured recommendation cards
+        setState(() {
+          if (responseText.isNotEmpty) {
+            _messages
+                .add(ChatMessage.text(text: responseText, isUser: false));
+          }
+          if (structuredRec != null) {
+            _messages.add(
+              ChatMessage.recommendation(recommendation: structuredRec),
+            );
           }
         });
+        return;
       }
+
+      // 5. NEW MEAL LOG ACTION
+      final proposalMap = await _backendService.prepareMeal(query);
+      final proposal = MealProposal.fromJson(proposalMap);
+
+      if (!mounted) return;
+
+      _updateActiveProposalAndPendingClarification(proposalMap);
+
+      // Clear active recommendation if starting a completely independent new meal log
+      _activeRecommendationContext = null;
+
+      setState(() {
+        if (proposal.items.isNotEmpty) {
+          _messages.add(
+            ChatMessage.text(
+              text: 'Got it — here\'s what I understood.',
+              isUser: false,
+            ),
+          );
+          _messages.add(ChatMessage.proposal(proposal: proposal));
+
+          if (proposal.needsClarification &&
+              proposal.clarificationQuestion != null &&
+              proposal.clarificationQuestion!.isNotEmpty) {
+            final question = proposal.clarificationQuestion!;
+            final lastMsg =
+                _messages.isNotEmpty ? _messages.last.text : null;
+            if (lastMsg != question) {
+              _messages.add(
+                ChatMessage.text(
+                  text: question,
+                  isUser: false,
+                ),
+              );
+            }
+          }
+        } else {
+          final question = proposal.clarificationQuestion ??
+              'I couldn\'t identify any foods in that meal. Try describing what you ate, e.g. "2 idlis with chutney".';
+          _messages.add(ChatMessage.text(text: question, isUser: false));
+        }
+      });
     } catch (e) {
       debugPrint('Error in AskEleScreen message routing: $e');
       if (!mounted) return;
@@ -679,7 +958,7 @@ class _AskEleScreenState extends State<AskEleScreen> {
           children: [
             Row(
               children: [
-                Text('Ask Ele', style: AppTheme.headingSM),
+                const Text('Ask Ele', style: AppTheme.headingSM),
                 const SizedBox(width: 6),
                 Container(
                   padding:
@@ -863,6 +1142,22 @@ class _AskEleScreenState extends State<AskEleScreen> {
                       onConfirmAndLog: () => _handleConfirmAndLog(msg.proposal!),
                       isLogging: _isLoggingMeal,
                       isLogged: isLogged,
+                    );
+                  }
+                  if (msg.type == ChatMessageType.mealRecommendation &&
+                      msg.recommendation != null) {
+                    return AskEleMealRecommendationCard(
+                      recommendation: msg.recommendation!,
+                      selectedOptionId:
+                          _activeRecommendationContext?.selectedOptionId,
+                      onOptionSelected: (option) => _handleOptionSelection(
+                          msg.recommendation!, option),
+                      onFeedback: (optionId, action) => _handleOptionFeedback(
+                          msg.recommendation!.recommendationId,
+                          optionId,
+                          action),
+                      onRefresh: () =>
+                          _handleRecommendationRefresh(msg.recommendation!),
                     );
                   }
                   return AskEleMessageBubble(

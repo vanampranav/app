@@ -1,8 +1,12 @@
 import {AiProvider} from "../ai-provider";
 import {
   GetGuidanceInput,
+  GetGuidanceOutput,
+  GuidanceResponseType,
   InterpretMealInput,
   MealInterpretation,
+  MealRecommendationData,
+  MealRecommendationOption,
   MealType,
   MealTypeSource,
 } from "../types";
@@ -387,57 +391,193 @@ export class OpenAiProvider implements AiProvider {
   }
 
   /**
-   * Generates practical, context-aware daily guidance using EleFit user data.
+   * Generates practical, context-aware daily guidance and recommendations.
    *
-   * @param {GetGuidanceInput} input - Message and structured todayContext.
-   * @return {Promise<string>} Guidance response text.
+   * @param {GetGuidanceInput} input - Message, todayContext, and context.
+   * @return {Promise<GetGuidanceOutput>} Guidance response object.
    */
-  async getGuidance(input: GetGuidanceInput): Promise<string> {
+  async getGuidance(input: GetGuidanceInput): Promise<GetGuidanceOutput> {
     const model = process.env.ASK_ELE_MODEL || "gpt-5.6-luna";
     const userPrompt =
       "User Question: \"" +
       input.message +
       "\"\n\n" +
       "User EleFit Context:\n" +
-      JSON.stringify(input.todayContext, null, 2);
+      JSON.stringify(input.todayContext, null, 2) +
+      "\n\n" +
+      "Active Recommendation Context:\n" +
+      JSON.stringify(input.recommendationContext ?? null, null, 2);
 
     const requestPayload = {
       model,
       instructions:
-        "You are Ele, the AI fitness assistant for EleFit.\n" +
-        "Your job is to provide clear, practical, personalized daily " +
-        "fitness and nutrition guidance based on the user's real " +
-        "EleFit context.\n\n" +
-        "Formatting & Presentation Rules:\n" +
-        "- Do NOT output markdown markers like **, ##, ###, or `.\n" +
-        "- Format responses using short, clean, scannable lines separated " +
-        "by line breaks.\n" +
-        "- When presenting daily stats, put metrics on separate lines " +
-        "with clean emojis (e.g. 🔥 953 / 2,737 kcal, " +
-        "💪 26 / 149g protein, 👟 2,862 steps).\n" +
-        "- When giving meal ideas, present them as clean " +
-        "scannable lists\n" +
-        "(e.g. 🍗 Chicken, 🍚 Rice, 🥦 Veggies).\n" +
-        "- Keep paragraphs short (2-5 brief blocks max).\n\n" +
-        "Principles:\n" +
-        "- Answer the user's question directly and first.\n" +
-        "- Use the provided EleFit user data (calories " +
-        "consumed/goal/remaining, protein consumed/goal/remaining, " +
-        "carbs, fat, steps, today's logged meals).\n" +
-        "- Distinguish targets from consumed/remaining values clearly.\n" +
-        "- Explain the reasoning behind your suggestion.\n" +
-        "- Prioritize actionable, encouraging advice.\n" +
-        "- Avoid shaming or judgmental language.\n" +
-        "- Never invent or hallucinate foods or measurements the user " +
-        "did not log.\n" +
-        "- Acknowledge missing data if any is absent.\n" +
-        "- Do NOT calculate fake workouts or hallucinate weight trends.",
+        "You are Ele, the AI fitness and nutrition coach for EleFit.\n" +
+        "Your job is to provide clear, practical, personalized guidance " +
+        "and structured 2-3 meal recommendation options based on the user's " +
+        "real EleFit context.\n\n" +
+        "TARGETS & PLAN CONTEXT RULES:\n" +
+        "- WHEN TARGETS EXIST in TodayContext (calorieTarget/proteinTarget " +
+        "non-null): Ele gives precise remaining-target guidance.\n" +
+        "- WHEN TARGETS DO NOT EXIST (calorieTarget is null): Ele MUST NOT " +
+        "invent a target or claim a precise amount remaining. Ele provides " +
+        "general contextual guidance using available data (logged meals, " +
+        "steps).\n" +
+        "- PLANNED vs ACTUAL DISTINCTION: TodayContext may contain " +
+        "'activePlan' with today's scheduled meals and workout. Never " +
+        "claim that scheduled meals/workouts were consumed unless they " +
+        "appear in 'mealsLogged'.\n" +
+        "- WHEN USER ASKS 'What should I eat for dinner?':\n" +
+        "  * WITH activePlan: Consider today's scheduled dinner first, " +
+        "compare with actual meals logged today, consider remaining " +
+        "targets if present, and recommend whether to follow or adjust.\n" +
+        "  * WITHOUT activePlan: Use today's actual logs and targets to " +
+        "offer recommendations.\n" +
+        "- WHEN USER ASKS 'What workout do I have today?':\n" +
+        "  * WITH activePlan & plannedWorkout: Answer from today's " +
+        "planned workout (name, duration, exercises).\n" +
+        "  * WITHOUT activePlan: State clearly that no active workout plan " +
+        "is scheduled for today and offer general advice. Do NOT invent " +
+        "a scheduled workout.\n\n" +
+        "ROLES & BEHAVIORS:\n" +
+        "1. MEAL RECOMMENDATIONS:\n" +
+        "- When the user asks what to eat (e.g. 'What should I eat for " +
+        "dinner?', 'What should I eat?', 'Any protein ideas?', " +
+        "'What can I eat with 700 kcal left?'), analyze TodayContext " +
+        "(calories remaining, protein remaining, logged meals, activePlan).\n" +
+        "- Return EXACTLY 2 OR 3 meaningfully different, realistic meal " +
+        "options in 'recommendation.options'. Do NOT return 1 option, and " +
+        "do NOT return more than 3 options.\n" +
+        "- Set responseType = 'meal_recommendation'.\n" +
+        "- Populate 'recommendation' with { recommendationId, mealType, " +
+        "options: [...] }.\n" +
+        "- Each option must have: optionId (e.g. 'opt_1', 'opt_2', " +
+        "'opt_3'), title, foods array, rationale, estimatedCalories, " +
+        "estimatedProtein, estimatedCarbs, estimatedFat, confidence.\n" +
+        "- If exact nutrition cannot be confidently estimated from " +
+        "context, return null for estimated macros. " +
+        "Do NOT invent fake precision.\n" +
+        "- Keep responseText concise (1-2 sentences introducing options). " +
+        "Do NOT output raw markdown formatting (no **, ##, ###, `).\n\n" +
+        "2. RECOMMENDATION FOLLOW-UPS (SELECTION / ACCEPTANCE / " +
+        "REFINEMENT):\n" +
+        "- If active Recommendation Context is provided ({ mealType, " +
+        "options }), and the user's message selects or references an " +
+        "option (e.g. 'I'll take option 2', 'the paneer option', " +
+        "'option 1', 'the second one', 'I'll do that one', 'I'll do " +
+        "chicken and rice'):\n" +
+        "  a) IF QUANTITIES ARE MISSING:\n" +
+        "     - Identify the selected option's title/foods.\n" +
+        "     - Ask a short, friendly clarification question asking for " +
+        "quantities (e.g., 'You picked Paneer & Roti. How much paneer and " +
+        "roti are you planning?').\n" +
+        "     - Set responseType = 'recommendation_followup'.\n" +
+        "     - Set preparedMealText = null.\n" +
+        "  b) IF QUANTITIES ARE PROVIDED (e.g. '200 grams chicken and 150 " +
+        "grams rice'):\n" +
+        "     - Normalize the meal description with quantities and mealType " +
+        "into preparedMealText (e.g. '200 grams chicken and 150 grams " +
+        "rice for dinner').\n" +
+        "     - Set suggestedMealType to the recommendation's mealType.\n" +
+        "     - Set responseType = 'recommendation_followup'.\n" +
+        "     - Set responseText = '' or a brief confirmation.\n\n" +
+        "3. GENERAL GUIDANCE:\n" +
+        "- If the user asks a general progress or guidance question (e.g. " +
+        "'How am I doing today?', 'How much protein do I have left?', " +
+        "'What workout do I have today?'):\n" +
+        "- Set responseType = 'guidance'.\n" +
+        "- Set recommendation = null.\n" +
+        "- Answer directly using real values from TodayContext.\n\n" +
+        "FORMATTING RULES:\n" +
+        "- NO markdown syntax (no **, ##, ###, `).\n" +
+        "- Short, clean lines separated by line breaks.\n" +
+        "- Emojis for list items (🍗, 🍚, 🥦, 🔥, 💪, 👟).\n" +
+        "- Keep responseText brief (2-3 lines max).",
       input: [
         {
           role: "user",
           content: userPrompt,
         },
       ],
+      text: {
+        format: {
+          type: "json_schema",
+          name: "guidance_response",
+          strict: true,
+          schema: {
+            type: "object",
+            properties: {
+              responseType: {
+                type: "string",
+                enum: [
+                  "guidance",
+                  "meal_recommendation",
+                  "recommendation_followup",
+                ],
+              },
+              responseText: {type: "string"},
+              recommendation: {
+                type: ["object", "null"],
+                properties: {
+                  recommendationId: {type: "string"},
+                  mealType: {
+                    type: "string",
+                    enum: ["breakfast", "lunch", "dinner", "snacks"],
+                  },
+                  options: {
+                    type: "array",
+                    minItems: 2,
+                    maxItems: 3,
+                    items: {
+                      type: "object",
+                      properties: {
+                        optionId: {type: "string"},
+                        title: {type: "string"},
+                        foods: {
+                          type: "array",
+                          items: {type: "string"},
+                        },
+                        rationale: {type: "string"},
+                        estimatedCalories: {type: ["number", "null"]},
+                        estimatedProtein: {type: ["number", "null"]},
+                        estimatedCarbs: {type: ["number", "null"]},
+                        estimatedFat: {type: ["number", "null"]},
+                        confidence: {type: "number"},
+                      },
+                      required: [
+                        "optionId",
+                        "title",
+                        "foods",
+                        "rationale",
+                        "estimatedCalories",
+                        "estimatedProtein",
+                        "estimatedCarbs",
+                        "estimatedFat",
+                        "confidence",
+                      ],
+                      additionalProperties: false,
+                    },
+                  },
+                },
+                required: ["recommendationId", "mealType", "options"],
+                additionalProperties: false,
+              },
+              preparedMealText: {type: ["string", "null"]},
+              suggestedMealType: {
+                type: ["string", "null"],
+                enum: ["breakfast", "lunch", "dinner", "snacks", null],
+              },
+            },
+            required: [
+              "responseType",
+              "responseText",
+              "recommendation",
+              "preparedMealText",
+              "suggestedMealType",
+            ],
+            additionalProperties: false,
+          },
+        },
+      },
     };
 
     const response = await fetch("https://api.openai.com/v1/responses", {
@@ -487,11 +627,127 @@ export class OpenAiProvider implements AiProvider {
     }
 
     if (!rawText || !rawText.trim()) {
-      return (
-        "I couldn't generate guidance right now. Try asking again in a moment."
-      );
+      return {
+        responseType: "guidance",
+        responseText:
+          "I couldn't generate guidance right now. " +
+          "Try asking again in a moment.",
+        recommendation: null,
+        preparedMealText: null,
+        suggestedMealType: null,
+      };
     }
 
-    return rawText.trim();
+    try {
+      const parsed = JSON.parse(rawText) as Record<string, unknown>;
+      const responseType =
+        (parsed.responseType as GuidanceResponseType) || "guidance";
+      const responseText = (parsed.responseText as string) || "";
+
+      let recommendation: MealRecommendationData | null = null;
+      if (parsed.recommendation && typeof parsed.recommendation === "object") {
+        const recObj = parsed.recommendation as Record<string, unknown>;
+        const rawOptions = Array.isArray(recObj.options) ? recObj.options : [];
+        const optionsList: MealRecommendationOption[] = rawOptions.map(
+          (opt: Record<string, unknown>, idx: number) => {
+            const rawFoods = Array.isArray(opt.foods) ? opt.foods : [];
+            return {
+              optionId:
+                typeof opt.optionId === "string" ?
+                  opt.optionId :
+                  `opt_${idx + 1}`,
+              title: typeof opt.title === "string" ? opt.title : "Meal Option",
+              foods: rawFoods.map((f) => String(f)),
+              rationale: typeof opt.rationale === "string" ? opt.rationale : "",
+              estimatedCalories:
+                typeof opt.estimatedCalories === "number" ?
+                  opt.estimatedCalories :
+                  null,
+              estimatedProtein:
+                typeof opt.estimatedProtein === "number" ?
+                  opt.estimatedProtein :
+                  null,
+              estimatedCarbs:
+                typeof opt.estimatedCarbs === "number" ?
+                  opt.estimatedCarbs :
+                  null,
+              estimatedFat:
+                typeof opt.estimatedFat === "number" ?
+                  opt.estimatedFat :
+                  null,
+              confidence:
+                typeof opt.confidence === "number" ? opt.confidence : 0.9,
+            };
+          }
+        );
+
+        // Enforce maximum 3 options server-side
+        const validatedOptions = optionsList.slice(0, 3);
+
+        // Collect all suggested foods across options for quick context
+        const allSuggestedFoods: string[] = [];
+        for (const opt of validatedOptions) {
+          for (const f of opt.foods) {
+            if (!allSuggestedFoods.includes(f)) {
+              allSuggestedFoods.push(f);
+            }
+          }
+        }
+
+        recommendation = {
+          recommendationId:
+            typeof recObj.recommendationId === "string" ?
+              recObj.recommendationId :
+              `rec_${Date.now()}`,
+          mealType: (recObj.mealType as MealType) || "dinner",
+          options: validatedOptions,
+          suggestedFoods: allSuggestedFoods,
+        };
+      }
+
+      // Server-side validation for meal_recommendation: 2-3 options required
+      if (responseType === "meal_recommendation") {
+        if (!recommendation || recommendation.options.length < 2) {
+          return {
+            responseType: "guidance",
+            responseText:
+              responseText.trim() ||
+              "I have a few meal suggestions based on your targets. " +
+              "Let me know what you'd like to eat!",
+            recommendation: null,
+            preparedMealText: null,
+            suggestedMealType: null,
+          };
+        }
+      }
+
+      const preparedMealText =
+        typeof parsed.preparedMealText === "string" &&
+        parsed.preparedMealText.trim().length > 0 ?
+          parsed.preparedMealText.trim() :
+          null;
+
+      const suggestedMealType =
+        typeof parsed.suggestedMealType === "string" &&
+        parsed.suggestedMealType.trim().length > 0 ?
+          (parsed.suggestedMealType.trim() as MealType) :
+          null;
+
+      return {
+        responseType,
+        responseText: responseText.trim(),
+        recommendation,
+        preparedMealText,
+        suggestedMealType,
+      };
+    } catch {
+      return {
+        responseType: "guidance",
+        responseText: rawText.trim(),
+        recommendation: null,
+        preparedMealText: null,
+        suggestedMealType: null,
+      };
+    }
   }
 }
