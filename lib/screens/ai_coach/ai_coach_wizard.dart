@@ -3,6 +3,7 @@ import '../../theme/app_theme.dart';
 import '../../models/ai_coach_models.dart';
 import '../../services/ai_coach_service.dart';
 import '../../services/firebase_rest_service.dart';
+import '../../services/workout_plan_importer.dart';
 import 'schedule_plan_screen.dart';
 
 class AiCoachWizard extends StatefulWidget {
@@ -399,8 +400,10 @@ class _AiCoachWizardState extends State<AiCoachWizard> {
                 onPressed: () async {
                   try {
                     await _fbService.setActivePlan(planId);
+                    // Materialize the plan's 7 workout days into the workout log.
+                    await WorkoutPlanImporter.instance.importPlan(plan);
                   } catch (e) {
-                    debugPrint('Failed to set active plan: $e');
+                    debugPrint('Failed to set active plan / import workouts: $e');
                   }
                   if (!ctx.mounted) return;
                   Navigator.pop(ctx);

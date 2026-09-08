@@ -47,10 +47,13 @@ const _templates = <_WorkoutTemplate>[
 
 class _WorkoutLogScreenState extends State<WorkoutLogScreen> {
   final _service = WorkoutService.instance;
-  final DateTime _date = DateTime.now();
+  DateTime _date = _dateOnly(DateTime.now());
   WorkoutDay _day = WorkoutDay(date: WorkoutDay.keyFor(DateTime.now()));
   bool _loading = true;
   final Set<int> _expanded = {};
+  Set<String> _loggedDates = {}; // date keys that have a workout (week-strip dots)
+
+  static DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
 
   @override
   void initState() {
@@ -60,14 +63,37 @@ class _WorkoutLogScreenState extends State<WorkoutLogScreen> {
 
   Future<void> _load() async {
     final day = await _service.getDay(_date);
+    final logged = await _service.loggedDates();
     if (!mounted) return;
     setState(() {
       _day = day;
+      _loggedDates = logged.toSet();
       _loading = false;
     });
   }
 
-  Future<void> _save() => _service.saveDay(_day);
+  Future<void> _selectDate(DateTime d) async {
+    final day = await _service.getDay(d);
+    if (!mounted) return;
+    setState(() {
+      _date = _dateOnly(d);
+      _day = day;
+      _expanded.clear();
+    });
+  }
+
+  Future<void> _save() async {
+    await _service.saveDay(_day);
+    final key = WorkoutDay.keyFor(_date);
+    if (!mounted) return;
+    setState(() {
+      if (_day.exercises.isEmpty) {
+        _loggedDates.remove(key);
+      } else {
+        _loggedDates.add(key);
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -76,7 +102,9 @@ class _WorkoutLogScreenState extends State<WorkoutLogScreen> {
     }
     return Column(
       children: [
-        _header(),
+        _topBar(),
+        _weekStrip(),
+        if (_day.exercises.isNotEmpty) _progressBar(),
         Expanded(
           child: _day.exercises.isEmpty
               ? _emptyState()
@@ -84,8 +112,7 @@ class _WorkoutLogScreenState extends State<WorkoutLogScreen> {
                   padding: const EdgeInsets.fromLTRB(
                       AppTheme.md, 0, AppTheme.md, AppTheme.xl),
                   children: [
-                    for (int i = 0; i < _day.exercises.length; i++)
-                      _exerciseCard(i),
+                    ..._groupedExerciseWidgets(),
                     const SizedBox(height: AppTheme.md),
                     _addButton(),
                   ],
@@ -95,41 +122,201 @@ class _WorkoutLogScreenState extends State<WorkoutLogScreen> {
     );
   }
 
-  // ── Header + progress ──────────────────────────────────────────────────────
-  Widget _header() {
-    final done = _day.completedCount;
-    final total = _day.total;
+  // ── Top bar: title + calendar picker (matches the Nutrition tab) ───────────
+  Widget _topBar() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(AppTheme.md, AppTheme.md, AppTheme.md, AppTheme.sm),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      padding: const EdgeInsets.fromLTRB(AppTheme.md, AppTheme.sm, AppTheme.xs, 0),
+      child: Row(
         children: [
-          Row(
-            children: [
-              Text(DateFormat('EEEE · MMM d').format(_date),
-                  style: AppTheme.headingSM),
-              const Spacer(),
-              if (total > 0)
-                Text('$done / $total done',
-                    style: AppTheme.labelMD.copyWith(
-                        color: done == total ? AppTheme.lime : AppTheme.textSecondary)),
-            ],
+          const Text('Workout', style: AppTheme.headingLG),
+          const Spacer(),
+          IconButton(
+            icon: const Icon(Icons.calendar_today_outlined,
+                color: AppTheme.textSecondary, size: 20),
+            onPressed: _pickDate,
           ),
-          if (total > 0) ...[
-            const SizedBox(height: AppTheme.sm),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(AppTheme.radiusPill),
-              child: LinearProgressIndicator(
-                value: _day.progress,
-                minHeight: 8,
-                backgroundColor: AppTheme.surface2,
-                valueColor: const AlwaysStoppedAnimation(AppTheme.lime),
-              ),
-            ),
-          ],
         ],
       ),
     );
+  }
+
+  static const _shortDays = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+
+  List<DateTime> get _last7Days {
+    final today = DateTime.now();
+    return List.generate(7, (i) {
+      final d = today.subtract(Duration(days: 6 - i));
+      return DateTime(d.year, d.month, d.day);
+    });
+  }
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _date,
+      firstDate: DateTime(2020),
+      lastDate: _dateOnly(DateTime.now()),
+    );
+    if (picked != null) _selectDate(picked);
+  }
+
+  // ── 7-day strip (same style as the Nutrition tab) ──────────────────────────
+  Widget _weekStrip() {
+    final days = _last7Days;
+    final today = _dateOnly(DateTime.now());
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, AppTheme.sm, 4, AppTheme.sm),
+      child: Row(
+        children: days.map((day) {
+          final isActive = _dateOnly(day) == _date;
+          final hasWorkout = _loggedDates.contains(WorkoutDay.keyFor(day));
+          final isFuture = day.isAfter(today);
+          return Expanded(
+            child: GestureDetector(
+              onTap: isFuture ? null : () => _selectDate(day),
+              child: Column(children: [
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  height: 5,
+                  width: 5,
+                  margin: const EdgeInsets.only(bottom: 5),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: hasWorkout
+                        ? (isActive
+                            ? AppTheme.lime
+                            : AppTheme.lime.withValues(alpha: 0.4))
+                        : Colors.transparent,
+                  ),
+                ),
+                Text(
+                  day.day.toString().padLeft(2, '0'),
+                  style: TextStyle(
+                    color: isFuture
+                        ? AppTheme.textTertiary
+                        : isActive
+                            ? Colors.white
+                            : const Color(0xFF454545),
+                    fontSize: isActive ? 18 : 16,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  _shortDays[day.weekday % 7],
+                  style: TextStyle(
+                    color: isFuture
+                        ? AppTheme.textTertiary
+                        : isActive
+                            ? Colors.white
+                            : const Color(0xFF454545),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  height: 2,
+                  width: isActive ? 18 : 0,
+                  decoration: BoxDecoration(
+                    color: AppTheme.lime,
+                    borderRadius: BorderRadius.circular(1),
+                  ),
+                ),
+              ]),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _progressBar() {
+    final done = _day.completedCount;
+    final total = _day.total;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(AppTheme.md, 0, AppTheme.md, AppTheme.sm),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Text(DateFormat('EEEE, MMM d').format(_date),
+                style: AppTheme.labelMD.copyWith(color: AppTheme.textSecondary)),
+            const Spacer(),
+            Text('$done / $total done',
+                style: AppTheme.labelMD.copyWith(
+                    color: done == total
+                        ? AppTheme.lime
+                        : AppTheme.textSecondary)),
+          ]),
+          const SizedBox(height: AppTheme.sm),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+            child: LinearProgressIndicator(
+              value: _day.progress,
+              minHeight: 8,
+              backgroundColor: AppTheme.surface2,
+              valueColor: const AlwaysStoppedAnimation(AppTheme.lime),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Group a day's exercises by body-region category ────────────────────────
+  static const Map<String, String> _muscleCategory = {
+    'chest': 'Chest',
+    'lats': 'Back', 'middle back': 'Back', 'lower back': 'Back', 'traps': 'Back',
+    'quadriceps': 'Legs', 'hamstrings': 'Legs', 'glutes': 'Legs',
+    'calves': 'Legs', 'adductors': 'Legs', 'abductors': 'Legs',
+    'shoulders': 'Shoulders', 'neck': 'Shoulders',
+    'biceps': 'Arms', 'triceps': 'Arms', 'forearms': 'Arms',
+    'abdominals': 'Core',
+  };
+
+  String _categoryOf(RoutineExercise ex) {
+    if (ex.primaryMuscles.isEmpty) return 'Other';
+    return _muscleCategory[ex.primaryMuscles.first.toLowerCase()] ?? 'Other';
+  }
+
+  List<Widget> _groupedExerciseWidgets() {
+    final order = <String>[];
+    final groups = <String, List<int>>{};
+    for (int i = 0; i < _day.exercises.length; i++) {
+      final cat = _categoryOf(_day.exercises[i]);
+      if (!groups.containsKey(cat)) {
+        groups[cat] = [];
+        order.add(cat);
+      }
+      groups[cat]!.add(i);
+    }
+    // Single group → no need for section headers.
+    if (order.length <= 1) {
+      return [for (int i = 0; i < _day.exercises.length; i++) _exerciseCard(i)];
+    }
+    final widgets = <Widget>[];
+    for (final cat in order) {
+      final idxs = groups[cat]!;
+      final done = idxs.where((i) => _day.exercises[i].completed).length;
+      widgets.add(Padding(
+        padding: const EdgeInsets.fromLTRB(4, AppTheme.sm, 4, 4),
+        child: Row(children: [
+          Text(cat.toUpperCase(),
+              style: AppTheme.labelMD.copyWith(color: AppTheme.textSecondary)),
+          const SizedBox(width: 8),
+          Text('$done/${idxs.length}',
+              style: AppTheme.bodySM.copyWith(color: AppTheme.textTertiary)),
+        ]),
+      ));
+      for (final i in idxs) {
+        widgets.add(_exerciseCard(i));
+      }
+    }
+    return widgets;
   }
 
   // ── Exercise card (collapsed + expandable set log) ─────────────────────────
@@ -327,7 +514,7 @@ class _WorkoutLogScreenState extends State<WorkoutLogScreen> {
           const SizedBox(height: AppTheme.xl),
           const Icon(Icons.fitness_center_rounded, size: 52, color: AppTheme.textTertiary),
           const SizedBox(height: AppTheme.md),
-          const Text('No workout yet today', style: AppTheme.headingSM),
+          const Text('No workout for this day', style: AppTheme.headingSM),
           const SizedBox(height: AppTheme.sm),
           Text('Add exercises from the library, or start from a template.',
               textAlign: TextAlign.center,
@@ -374,7 +561,7 @@ class _WorkoutLogScreenState extends State<WorkoutLogScreen> {
     return SizedBox(
       width: double.infinity,
       child: OutlinedButton.icon(
-        onPressed: _addExercise,
+        onPressed: _showAddMenu,
         icon: const Icon(Icons.add_rounded),
         label: const Text('Add exercise'),
       ),
@@ -466,7 +653,101 @@ class _WorkoutLogScreenState extends State<WorkoutLogScreen> {
     );
   }
 
-  Future<void> _addExercise() async {
+  void _showAddMenu() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppTheme.surface1,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(
+            leading: const Icon(Icons.search_rounded, color: AppTheme.lime),
+            title: const Text('From exercise library',
+                style: TextStyle(color: AppTheme.textPrimary)),
+            subtitle: const Text('Browse 800+ exercises with demos'),
+            onTap: () {
+              Navigator.pop(ctx);
+              _addFromLibrary();
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.edit_rounded, color: AppTheme.lime),
+            title: const Text('Custom exercise',
+                style: TextStyle(color: AppTheme.textPrimary)),
+            subtitle: const Text('Add your own by name'),
+            onTap: () {
+              Navigator.pop(ctx);
+              _addCustomExercise();
+            },
+          ),
+          const SizedBox(height: AppTheme.sm),
+        ]),
+      ),
+    );
+  }
+
+  Future<void> _addCustomExercise() async {
+    final nameCtrl = TextEditingController();
+    int sets = 3, reps = 10;
+    final result = await showModalBottomSheet<RoutineExercise>(
+      context: context,
+      backgroundColor: AppTheme.surface1,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModal) => Padding(
+          padding: EdgeInsets.fromLTRB(AppTheme.lg, 0, AppTheme.lg,
+              AppTheme.lg + MediaQuery.of(ctx).viewInsets.bottom),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Custom exercise', style: AppTheme.headingSM),
+              const SizedBox(height: AppTheme.md),
+              TextField(
+                controller: nameCtrl,
+                autofocus: true,
+                textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(
+                    hintText: 'Exercise name (e.g. Cable Fly)'),
+              ),
+              const SizedBox(height: AppTheme.md),
+              _stepper('Sets', sets, (v) => setModal(() => sets = v.clamp(1, 20))),
+              const SizedBox(height: AppTheme.sm),
+              _stepper('Reps', reps, (v) => setModal(() => reps = v.clamp(1, 100))),
+              const SizedBox(height: AppTheme.lg),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    final name = nameCtrl.text.trim();
+                    if (name.isEmpty) return;
+                    Navigator.pop(
+                      ctx,
+                      RoutineExercise(
+                        exerciseId: 'custom_${DateTime.now().millisecondsSinceEpoch}',
+                        name: name,
+                        primaryMuscles: const [],
+                        targetSets: sets,
+                        targetReps: reps,
+                        sets: List.generate(sets, (_) => SetLog(reps: reps)),
+                      ),
+                    );
+                  },
+                  child: const Text('Add to workout'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (result == null || !mounted) return;
+    setState(() => _day.exercises.add(result));
+    _save();
+  }
+
+  Future<void> _addFromLibrary() async {
     final picked = await Navigator.push<Exercise>(
       context,
       MaterialPageRoute(builder: (_) => const ExerciseLibraryScreen(pickMode: true)),

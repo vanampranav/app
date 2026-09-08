@@ -68,7 +68,18 @@ Areas: **App** = Flutter · **BE** = Python AI backend · **Web** = the-elefit-n
 - `lib/screens/log_screen.dart` — **Food ⇄ Workout** segmented toggle hosting `NutritionLogScreen` + `WorkoutLogScreen` (IndexedStack). Wired into nav: bottom-nav tab 1 → `LogScreen`; Home "Log Food" → Food tab, Home "Workout" → Workout tab.
 - Exercise Library gained a `pickMode` (returns the selected `Exercise`).
 
-**Next: Phase 3** — map the AI-coach text workout plan to catalog exercises (auto-fill the routine with demos + checkable sets). **Phase 4** — StreakService tie-in on workout completion, Home "Today's Workout" card, rest timer, workout history screen + volume trend chart (fl_chart).
+**✅ Phase 2b BUILT (2026-09-08, analyze clean) — 7-day workout view + categories + custom exercises:**
+- **Week strip** in `workout_log_screen.dart` — 7 day cells (Mon-start) with prev/next-week nav, today highlight, and a dot on days that have a logged workout; tap a day to view/edit it (`WorkoutService` was already date-keyed).
+- **Category grouping** — a day's exercises group by body region (Chest/Back/Legs/Shoulders/Arms/Core/Other) with section headers + per-group done count (only when 2+ groups).
+- **Custom exercises** — "Add exercise" now offers *From library* (catalog) **or** *Custom exercise* (free-text name + sets/reps, stored as a `RoutineExercise` with a `custom_<ts>` id, no demo).
+
+**✅ Phase 3 BUILT (2026-09-08, analyze clean) — AI Coach → workout:**
+- `lib/services/workout_plan_importer.dart` — `WorkoutPlanImporter.importPlan(FitnessPlan)`: for each of the 7 `weeklyWorkouts`, dates the day from `effectiveStartDate`, parses each free-text exercise (name + optional `NxM` sets/reps → defaults 3×10), resolves the name to a catalog `Exercise` (fuzzy: normalized exact → all-query-tokens-present with light stemming + equipment/conciseness tie-break), and writes a `WorkoutDay` via `WorkoutService`. Skips rest days; won't clobber a day the user already logged (unless `overwrite`).
+- Wired into **both** "Use This Plan" paths: `ai_coach_wizard.dart` (post-generation) and `ai_coach_screen.dart._setActivePlan` (plans list) — right after `setActivePlan`; the screen shows "… · N workout days added".
+- **Accuracy (measured against the real 876-exercise catalog, 50 realistic AI names): ~90% resolve to a catalog demo.** Misses (→ name-only custom, still loggable/checkable): exercises free-exercise-db lacks (Burpees, Jumping Jacks, Wall Sit) or naming variants (Chest Fly, Bicycle Crunch). Matched names sometimes map to a variant (e.g. "Bench Press" → "Bench Press - Powerlifting") — correct movement, specific variant.
+- **Known limitation:** the AI-coach parser strips per-exercise sets/reps, so imported exercises default to **3×10** (user can edit). Carrying the AI's prescribed sets/reps would need a small parser enhancement (keep the "— 4×8" and pass it through) — optional follow-up.
+
+**Phase 4** — plan → meal-log prefill (approach TBD: numeric-macro prefill vs Ask-Ele `prepareMeal`), StreakService on workout completion, Home "Today's Workout" card, rest timer, volume trend chart.
 
 ---
 

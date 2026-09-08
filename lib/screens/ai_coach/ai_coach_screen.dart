@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/ai_coach_models.dart';
 import '../../services/firebase_rest_service.dart';
+import '../../services/workout_plan_importer.dart';
 import '../../theme/app_theme.dart';
 import '../ask_ele/ask_ele_screen.dart';
 import '../profile_screen.dart';
@@ -929,10 +930,19 @@ class _PlansSheetState extends State<_PlansSheet> {
   Future<void> _setActivePlan(String planId) async {
     try {
       await widget.fbService.setActivePlan(planId);
+      // Materialize the plan's 7 workout days into the workout log.
+      WorkoutImportResult? imp;
+      final plan = await widget.fbService.getPlanById(planId);
+      if (plan != null) {
+        imp = await WorkoutPlanImporter.instance.importPlan(plan);
+      }
       if (mounted) {
         setState(() => _activePlanId = planId);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Plan set as active ✓'),
+        final extra = (imp != null && imp.daysImported > 0)
+            ? ' · ${imp.daysImported} workout days added'
+            : '';
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Plan set as active ✓$extra'),
           behavior: SnackBarBehavior.floating,
         ));
       }

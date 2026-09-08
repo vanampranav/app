@@ -896,7 +896,7 @@ class EFNavBar extends StatelessWidget {
 
   static const _items = [
     _NavItem(icon: Icons.home_outlined,            activeIcon: Icons.home_rounded,            label: 'Home'),
-    _NavItem(icon: Icons.restaurant_menu_outlined, activeIcon: Icons.restaurant_menu_rounded, label: 'Nutrition'),
+    _NavItem(icon: Icons.event_note_outlined,      activeIcon: Icons.event_note_rounded,      label: 'Log'),
     _NavItem(icon: Icons.auto_awesome,              activeIcon: Icons.auto_awesome,            label: 'Ask Ele'),
     _NavItem(icon: Icons.insights_outlined,         activeIcon: Icons.insights,                label: 'Performance'),
     _NavItem(icon: Icons.person_outline,           activeIcon: Icons.person_rounded,          label: 'Profile'),

@@ -245,6 +245,182 @@ exports.notifyAdminOnResubmission = onDocumentUpdated(
   }
 );
 
+// ═════════════════════════════════════════════════════════════════════════════
+// KLAVIYO MARKETING EVENTS
+//
+// Fire events into Klaviyo so the marketing team's Flows send the emails.
+// These are SEPARATE functions from the OneSignal push ones above — a Klaviyo
+// failure only affects Klaviyo (logged), never push or the app's Firestore
+// writes. The private key is a secret:  firebase functions:secrets:set KLAVIYO_API_KEY
+// See docs/KLAVIYO_GUIDE.md for the full event list + how marketing uses it.
+// ═════════════════════════════════════════════════════════════════════════════
+const { trackEvent } = require("./klaviyo");
+const functionsV1 = require("firebase-functions/v1");
+const KLAVIYO_API_KEY = defineSecret("KLAVIYO_API_KEY");
+
+// Klaviyo profiles are keyed by email; look it up from users/{uid}. (Emails
+// dedupe against the Shopify-synced profiles automatically — no duplicates.)
+async function getUserContact(userId) {
+  if (!userId) return null;
+  try {
+    const snap = await admin.firestore().collection("users").doc(userId).get();
+    if (!snap.exists) return null;
+    const u = snap.data() || {};
+    const email = String(u.email || "").toLowerCase().trim();
+    if (!email) return null;
+    const name = u.name || u.fullName || u.displayName || "";
+    return {
+      email,
+      first_name: u.firstName || u.first_name || (name ? String(name).split(" ")[0] : undefined),
+      last_name: u.lastName || u.last_name || undefined,
+    };
+  } catch (e) {
+    logger.error("Klaviyo getUserContact failed", { userId, error: String(e) });
+    return null;
+  }
+}
+
+// New app user → "Signed Up (App)". A Firebase Auth onCreate trigger, so it
+// fires for EVERY new user (email/password signups AND Shopify-bridge users).
+// (The base app doesn't create a users/{uid} doc on signup, so we key off Auth.)
+exports.klaviyoOnSignup = functionsV1
+  .runWith({ secrets: ["KLAVIYO_API_KEY"] })
+  .auth.user()
+  .onCreate(async (user) => {
+    const email = String(user.email || "").toLowerCase().trim();
+    if (!email) return;
+    const name = user.displayName || "";
+    await trackEvent(process.env.KLAVIYO_API_KEY, {
+      metric: "Signed Up (App)",
+      email,
+      profileProps: { first_name: name ? name.split(" ")[0] : undefined },
+      properties: { source: "elefit_app", uid: user.uid },
+      uniqueId: `signup_${user.uid}`,
+    });
+  });
+
+// Joined a challenge → "Joined Challenge".
+exports.klaviyoOnParticipantJoin = onDocumentCreated(
+  {
+    document: "challenges/{challengeId}/participants/{userId}",
+    region: "us-central1",
+    secrets: [KLAVIYO_API_KEY],
+  },
+  async (event) => {
+    const p = event.data && event.data.data ? event.data.data() : {};
+    const contact = await getUserContact(event.params.userId);
+    if (!contact) return;
+    const title = await getChallengeTitle(event.params.challengeId);
+    await trackEvent(KLAVIYO_API_KEY.value(), {
+      metric: "Joined Challenge",
+      email: contact.email,
+      profileProps: { first_name: contact.first_name, last_name: contact.last_name },
+      properties: {
+        challengeId: event.params.challengeId,
+        challengeName: title,
+        packageName: p.selectedPackageName || null,
+        amountDue: p.amountDue != null ? p.amountDue : null,
+        currency: p.currency || null,
+      },
+      uniqueId: `join_${event.params.challengeId}_${event.params.userId}`,
+    });
+  }
+);
+
+// Payment proof submitted → "Challenge Payment Submitted".
+exports.klaviyoOnPaymentSubmit = onDocumentCreated(
+  { document: "paymentRecords/{paymentId}", region: "us-central1", secrets: [KLAVIYO_API_KEY] },
+  async (event) => {
+    const pay = event.data && event.data.data ? event.data.data() : {};
+    const contact = await getUserContact(pay.userId);
+    if (!contact) return;
+    const title = await getChallengeTitle(pay.challengeId);
+    await trackEvent(KLAVIYO_API_KEY.value(), {
+      metric: "Challenge Payment Submitted",
+      email: contact.email,
+      properties: {
+        challengeId: pay.challengeId || null,
+        challengeName: title,
+        amount: pay.amount != null ? pay.amount : null,
+        method: pay.paymentMethod || null,
+      },
+      uniqueId: `paysub_${event.params.paymentId}`,
+    });
+  }
+);
+
+// Baseline / weekly / final submission created → a typed event.
+exports.klaviyoOnSubmission = onDocumentCreated(
+  { document: "challengeSubmissions/{submissionId}", region: "us-central1", secrets: [KLAVIYO_API_KEY] },
+  async (event) => {
+    const s = event.data && event.data.data ? event.data.data() : {};
+    if (s.reviewStatus !== "submitted") return;
+    const contact = await getUserContact(s.userId);
+    if (!contact) return;
+    const title = await getChallengeTitle(s.challengeId);
+    const metric =
+      s.type === "baseline" ? "Challenge Baseline Submitted"
+      : s.type === "weeklyCheckIn" ? "Challenge Weekly Check-in"
+      : s.type === "finalSubmission" ? "Challenge Final Submitted"
+      : "Challenge Submission";
+    await trackEvent(KLAVIYO_API_KEY.value(), {
+      metric,
+      email: contact.email,
+      properties: { challengeId: s.challengeId || null, challengeName: title, type: s.type || null },
+      uniqueId: `sub_${event.params.submissionId}`,
+    });
+  }
+);
+
+// Participant transitions → approval / activation / disqualification / result.
+exports.klaviyoOnParticipantUpdate = onDocumentUpdated(
+  {
+    document: "challenges/{challengeId}/participants/{userId}",
+    region: "us-central1",
+    secrets: [KLAVIYO_API_KEY],
+  },
+  async (event) => {
+    const before = event.data && event.data.before ? event.data.before.data() : {};
+    const after = event.data && event.data.after ? event.data.after.data() : {};
+
+    const fire = async (metric, extra, idSuffix) => {
+      const contact = await getUserContact(event.params.userId);
+      if (!contact) return;
+      const title = await getChallengeTitle(event.params.challengeId);
+      await trackEvent(KLAVIYO_API_KEY.value(), {
+        metric,
+        email: contact.email,
+        properties: {
+          challengeId: event.params.challengeId,
+          challengeName: title,
+          ...(extra || {}),
+        },
+        uniqueId: `${metric.replace(/\s+/g, "_")}_${event.params.challengeId}_${event.params.userId}${idSuffix || ""}`,
+      });
+    };
+
+    if (before.paymentStatus !== "paid" && after.paymentStatus === "paid") {
+      await fire("Challenge Payment Approved");
+    }
+    if (before.paymentStatus !== "failed" && after.paymentStatus === "failed") {
+      await fire("Challenge Payment Rejected", { reason: after.paymentFailureReason || null });
+    }
+    if (before.status !== "active" && after.status === "active") {
+      await fire("Challenge Activated");
+    }
+    if (!before.disqualified && after.disqualified === true) {
+      await fire("Challenge Disqualified", { reason: after.disqualificationReason || null });
+    }
+    if (!before.finalPlacement && after.finalPlacement) {
+      await fire(
+        "Challenge Result",
+        { placement: after.finalPlacement, awardLabel: after.awardLabel || null },
+        `_${after.finalPlacement}`
+      );
+    }
+  }
+);
+
 // ─────────────────────────────────────────────────────────────────────────────
 // syncShopifyPassword: sets a Shopify customer's Firebase password to their
 // Shopify password (mirrors the coach app's intent, but reliably, server-side).
