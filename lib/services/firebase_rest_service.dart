@@ -4,21 +4,20 @@ import 'package:http/http.dart' as http;
 import 'package:elefit_app/utils/app_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/ai_coach_models.dart';
-import '../config/secrets.dart';
+import '../config/app_environment.dart';
 import 'ai_coach_parser.dart';
 
 /// Firebase REST API Service — avoids SDK version conflicts entirely.
 /// Uses identitytoolkit.googleapis.com for Auth and firestore.googleapis.com for Firestore.
 class FirebaseRestService {
-  static const String _apiKey = Secrets.firebaseApiKey;
-  static const String _projectId = 'getfit-with-elefit';
-  static const String _authUrl    = 'https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=$_apiKey';
-  static const String _signUpUrl  = 'https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=$_apiKey';
-  static const String _resetUrl   = 'https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=$_apiKey';
-  static const String _updateUrl  = 'https://identitytoolkit.googleapis.com/v1/accounts:update?key=$_apiKey';
-  static const String _customTokenUrl = 'https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=$_apiKey';
-  static const String _firestoreUrl = 'https://firestore.googleapis.com/v1/projects/$_projectId/databases/(default)/documents';
-  static const String _tokenRefreshUrl = 'https://securetoken.googleapis.com/v1/token?key=$_apiKey';
+  static String get _apiKey => AppEnvironment.firebaseApiKey;
+  static String get _authUrl => AppEnvironment.authRestUrl('signInWithPassword');
+  static String get _signUpUrl => AppEnvironment.authRestUrl('signUp');
+  static String get _resetUrl => AppEnvironment.authRestUrl('sendOobCode');
+  static String get _updateUrl => AppEnvironment.authRestUrl('update');
+  static String get _customTokenUrl => AppEnvironment.customTokenRestUrl;
+  static String get _firestoreUrl => AppEnvironment.firestoreRestUrl;
+  static String get _tokenRefreshUrl => 'https://securetoken.googleapis.com/v1/token?key=$_apiKey';
 
   static const String _prefIdToken = 'fb_id_token';
   static const String _prefUid = 'fb_uid';

@@ -2,10 +2,10 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:elefit_app/services/firebase_rest_service.dart';
 import 'package:elefit_app/services/shopify_service.dart';
+import '../config/app_environment.dart';
 
 /// The deployed `mintFirebaseToken` Cloud Function.
-const String _mintTokenUrl =
-    'https://us-central1-getfit-with-elefit.cloudfunctions.net/mintFirebaseToken';
+String get _mintTokenUrl => AppEnvironment.mintTokenUrl;
 
 /// Signs a user into Firebase, bridging Shopify/AI-coach accounts WITHOUT ever
 /// changing their password:

@@ -6,6 +6,7 @@ import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'services/analytics_service.dart';
 import 'services/firebase_rest_service.dart';
+import 'config/app_environment.dart';
 import 'firebase_options.dart';
 import 'models/cart_model.dart';
 import 'models/wishlist_model.dart';
@@ -67,15 +68,19 @@ void main() async {
 
   // Initialize Firebase (core + SDK for the Challenge feature + Crashlytics)
   try {
+    AppEnvironment.validate();
     await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
+      options: AppEnvironment.firebaseOptions,
     );
+    AppEnvironment.verifyPostInitialization();
     // Route uncaught framework errors to Crashlytics
     FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
-    debugPrint('Firebase initialized successfully');
+    debugPrint('Firebase initialized successfully for env="${AppEnvironment.current.name}" (project="${AppEnvironment.projectId}")');
   } catch (e) {
     debugPrint('Firebase initialization failed: $e');
-    // Continue without Firebase - OneSignal handles notifications
+    if (AppEnvironment.isDev) {
+      rethrow; // In DEV mode, fail fast immediately so developers notice unconfigured state
+    }
   }
 
   // Everything below is best-effort: a failure must NEVER stop runApp from

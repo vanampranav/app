@@ -1,9 +1,11 @@
 import {
+  ClassifyTurnInput,
   GetGuidanceInput,
   GetGuidanceOutput,
   InterpretMealInput,
   MealInterpretation,
 } from "./types";
+import {TurnClassificationResult} from "../ask-ele/types";
 
 /**
  * Interface representing a provider-independent AI service adapter.
@@ -30,4 +32,14 @@ export interface AiProvider {
   getGuidance(
     input: GetGuidanceInput
   ): Promise<GetGuidanceOutput>;
+
+  /**
+   * Classifies user turn into structured TurnClassificationResult & mutations.
+   *
+   * @param {ClassifyTurnInput} input - Message and active session state.
+   * @return {Promise<TurnClassificationResult>} Classified turn result.
+   */
+  classifyTurnAndMutations?(
+    input: ClassifyTurnInput
+  ): Promise<TurnClassificationResult>;
 }

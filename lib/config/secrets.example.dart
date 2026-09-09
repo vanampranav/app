@@ -1,8 +1,11 @@
 // Copy this file to secrets.dart and fill in your actual credentials.
 // secrets.dart is gitignored — never commit real credentials.
 class Secrets {
-  // Firebase REST API key (Web API key from Firebase console → Project settings)
-  static const String firebaseApiKey = 'your-firebase-web-api-key';
+  // Production Firebase REST API key
+  static const String firebaseApiKey = 'your-firebase-prod-web-api-key';
+
+  // DEV Firebase REST API key
+  static const String devFirebaseApiKey = 'your-firebase-dev-web-api-key';
 
   // FatSecret Platform API — OAuth 1.0a credentials
   static const String fatSecretConsumerKey = 'your-fatsecret-consumer-key';

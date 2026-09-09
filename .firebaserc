@@ -1,0 +1,7 @@
+{
+  "projects": {
+    "default": "getfit-with-elefit",
+    "prod": "getfit-with-elefit",
+    "dev": "elefit-dev"
+  }
+}

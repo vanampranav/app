@@ -142,6 +142,7 @@ class _AskEleScreenState extends State<AskEleScreen> {
   int? _caloriesConsumed;
   int? _proteinGrams;
 
+  late final String _sessionId;
   Map<String, dynamic>? _activeMealProposal;
   PendingMealClarification? _pendingClarification;
   RecommendationContext? _activeRecommendationContext;
@@ -159,6 +160,7 @@ class _AskEleScreenState extends State<AskEleScreen> {
   @override
   void initState() {
     super.initState();
+    _sessionId = 'session_${DateTime.now().millisecondsSinceEpoch}';
     _caloriesConsumed = widget.caloriesConsumed;
     _proteinGrams = widget.proteinGrams;
 
@@ -637,125 +639,89 @@ class _AskEleScreenState extends State<AskEleScreen> {
     _scrollToBottom();
 
     try {
-      final intent = _classifyIntent(query);
-      final mealTypeUpdate = _parseMealTypeUpdate(query);
       final isLogCmd = _isConversationalLogCommand(query);
 
-      // 1. ACTIVE MEAL CLARIFICATION ANSWER
-      if (_pendingClarification != null &&
-          _activeMealProposal != null &&
-          mealTypeUpdate == null &&
-          !isLogCmd) {
-        final itemIdx = _pendingClarification!.itemIndex;
-        final updatedProposalMap =
-            await _backendService.resolveMealClarification(
-          proposal: _activeMealProposal!,
-          itemIndex: itemIdx,
-          answer: query,
-        );
+      // 1. CONVERSATIONAL "LOG IT" COMMAND ON READY PROPOSAL
+      if (isLogCmd && _activeMealProposal != null) {
+        final proposal = MealProposal.fromJson(_activeMealProposal!);
+        if (proposal.readyToLog) {
+          await _handleConfirmAndLog(proposal);
+          return;
+        }
+      }
 
-        if (!mounted) return;
+      // 2. UNIFIED BACKEND CONVERSATION SESSION TURN PROCESSING
+      final todayContext = await _contextService.getTodayContext();
+      final turnResult = await _backendService.processConversationTurn(
+        sessionId: _sessionId,
+        message: query,
+        todayContext: todayContext.toJson(),
+        recommendationContext: _activeRecommendationContext?.toJson(),
+      );
 
-        _updateActiveProposalAndPendingClarification(updatedProposalMap);
-        final updatedProposal = MealProposal.fromJson(updatedProposalMap);
+      if (!mounted) return;
+
+      final responseText = turnResult['responseText'] as String? ?? '';
+
+      // Render updated MealProposal
+      if (turnResult['proposal'] is Map<String, dynamic>) {
+        final proposalMap =
+            Map<String, dynamic>.from(turnResult['proposal'] as Map);
+        _updateActiveProposalAndPendingClarification(proposalMap);
+        final proposal = MealProposal.fromJson(proposalMap);
 
         setState(() {
-          _messages.add(ChatMessage.proposal(proposal: updatedProposal));
+          if (responseText.isNotEmpty &&
+              responseText != proposal.clarificationQuestion &&
+              !responseText.startsWith('Could you clarify') &&
+              !responseText.startsWith('Updated meal')) {
+            _messages.add(ChatMessage.text(text: responseText, isUser: false));
+          }
+          _messages.add(ChatMessage.proposal(proposal: proposal));
 
-          if (updatedProposal.needsClarification &&
-              updatedProposal.clarificationQuestion != null &&
-              updatedProposal.clarificationQuestion!.isNotEmpty) {
-            final nextQuestion = updatedProposal.clarificationQuestion!;
-            final lastMsg = _messages.isNotEmpty ? _messages.last.text : null;
-            if (lastMsg != nextQuestion) {
-              _messages.add(
-                ChatMessage.text(
-                  text: nextQuestion,
-                  isUser: false,
-                ),
-              );
+          if (proposal.needsClarification &&
+              proposal.clarificationQuestion != null &&
+              proposal.clarificationQuestion!.isNotEmpty) {
+            final nextQ = proposal.clarificationQuestion!;
+            final lastText =
+                _messages.isNotEmpty ? _messages.last.text : null;
+            if (lastText != nextQ) {
+              _messages.add(ChatMessage.text(text: nextQ, isUser: false));
             }
           }
         });
         return;
       }
 
-      // 2. CONVERSATIONAL "LOG IT" COMMAND
-      if (isLogCmd) {
-        if (_activeMealProposal != null) {
-          final proposal = MealProposal.fromJson(_activeMealProposal!);
-          if (proposal.readyToLog) {
-            await _handleConfirmAndLog(proposal);
-            return;
-          } else {
-            final missingQ = proposal.clarificationQuestion ??
-                'We still need a few more details before logging this meal.';
-            setState(() {
-              _messages.add(
-                ChatMessage.text(
-                  text: missingQ,
-                  isUser: false,
-                ),
-              );
-            });
-            return;
-          }
-        } else {
+      // Render updated MealRecommendation
+      if (turnResult['recommendation'] is Map<String, dynamic>) {
+        final recMap =
+            Map<String, dynamic>.from(turnResult['recommendation'] as Map);
+        _activeRecommendationContext =
+            RecommendationContext.fromJson(recMap);
+        if (recMap['options'] is List &&
+            (recMap['options'] as List).isNotEmpty) {
+          final structuredRec = MealRecommendationResponse.fromJson(recMap);
           setState(() {
+            if (responseText.isNotEmpty) {
+              _messages.add(
+                  ChatMessage.text(text: responseText, isUser: false));
+            }
             _messages.add(
-              ChatMessage.text(
-                text:
-                    "There's no active meal ready to log right now. What did you eat?",
-                isUser: false,
-              ),
+              ChatMessage.recommendation(recommendation: structuredRec),
             );
           });
           return;
         }
       }
 
-      // 3. EXPLICIT MEAL TYPE EDIT COMMAND ON ACTIVE PROPOSAL
-      if (mealTypeUpdate != null && _activeMealProposal != null) {
-        final updatedProposalMap =
-            await _backendService.updateMealProposalContext(
-          proposal: _activeMealProposal!,
-          mealType: mealTypeUpdate,
-        );
-
-        if (!mounted) return;
-
-        _updateActiveProposalAndPendingClarification(updatedProposalMap);
-        final updatedProposal = MealProposal.fromJson(updatedProposalMap);
-
-        String typeName = mealTypeUpdate;
-        if (typeName == 'snacks') typeName = 'a snack';
-
-        setState(() {
-          _messages.add(ChatMessage.proposal(proposal: updatedProposal));
-          _messages.add(
-            ChatMessage.text(
-              text: 'Got it — I changed this to $typeName.',
-              isUser: false,
-            ),
-          );
-
-          if (updatedProposal.needsClarification &&
-              updatedProposal.clarificationQuestion != null &&
-              updatedProposal.clarificationQuestion!.isNotEmpty) {
-            final nextQuestion = updatedProposal.clarificationQuestion!;
-            final lastMsg = _messages.isNotEmpty ? _messages.last.text : null;
-            if (lastMsg != nextQuestion) {
-              _messages.add(
-                ChatMessage.text(
-                  text: nextQuestion,
-                  isUser: false,
-                ),
-              );
-            }
-          }
-        });
-        return;
-      }
+      // General guidance / response
+      setState(() {
+        if (responseText.isNotEmpty) {
+          _messages.add(ChatMessage.text(text: responseText, isUser: false));
+        }
+      });
+    } catch (e) {
 
       // 4. RECOMMENDATION FOLLOW-UP / GUIDANCE / RECOMMENDATION REQUEST
       if (_activeRecommendationContext != null ||

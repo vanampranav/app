@@ -118,33 +118,42 @@ function isUnitMatch(
       /\b1?\s*idli\b/i.test(normDesc) ||
       /\b1?\s*dosa\b/i.test(normDesc) ||
       /\b1?\s*item\b/i.test(normDesc) ||
-      /\b1?\s*slice\b/i.test(normDesc)
+      /\b1?\s*slice\b/i.test(normDesc) ||
+      /\b1?\s*(large|medium|small|whole|unit|serving)\b/i.test(normDesc) ||
+      normMetric === "serving" ||
+      normMetric === "item" ||
+      normMetric === "unit" ||
+      normMetric === "piece"
     );
   }
 
   if (normReqUnit === "cup") {
-    return /\b1?\s*cup\b/i.test(normDesc);
+    return /\b1?\s*cup\b/i.test(normDesc) || normMetric === "cup";
   }
 
   if (normReqUnit === "bowl") {
-    return /\b1?\s*bowl\b/i.test(normDesc);
+    return /\b1?\s*bowl\b/i.test(normDesc) || normMetric === "bowl";
   }
 
   if (normReqUnit === "serving") {
-    return /\b1?\s*serving\b/i.test(normDesc);
+    return /\b1?\s*serving\b/i.test(normDesc) || normMetric === "serving";
   }
 
   if (normReqUnit === "tablespoon") {
     return (
       /\b1?\s*tbsp\b/i.test(normDesc) ||
-      /\b1?\s*tablespoon\b/i.test(normDesc)
+      /\b1?\s*tablespoon\b/i.test(normDesc) ||
+      normMetric === "tbsp" ||
+      normMetric === "tablespoon"
     );
   }
 
   if (normReqUnit === "teaspoon") {
     return (
       /\b1?\s*tsp\b/i.test(normDesc) ||
-      /\b1?\s*teaspoon\b/i.test(normDesc)
+      /\b1?\s*teaspoon\b/i.test(normDesc) ||
+      normMetric === "tsp" ||
+      normMetric === "teaspoon"
     );
   }
 
@@ -165,35 +174,29 @@ function findBestServing(
   requestedUnit: string | null,
   servings: FoodServingResult[]
 ): FoodServingResult | null {
-  const normReqUnit = normalizeUnit(requestedUnit);
-  if (!normReqUnit) {
+  if (!servings || servings.length === 0) {
     return null;
   }
+  const normReqUnit = normalizeUnit(requestedUnit);
 
-  // 1. Direct unit match
-  for (const s of servings) {
-    if (isUnitMatch(s, normReqUnit)) {
-      return s;
+  if (normReqUnit) {
+    // 1. Direct unit match
+    for (const s of servings) {
+      if (isUnitMatch(s, normReqUnit)) {
+        return s;
+      }
     }
   }
 
   // 2. Fallback for volumetric or generic units if gram serving is available
-  if (
-    ["tablespoon", "teaspoon", "cup", "bowl", "serving", "piece"].includes(
-      normReqUnit
-    )
-  ) {
-    for (const s of servings) {
-      if (getServingWeightInGrams(s) !== null) {
-        return s;
-      }
-    }
-    if (servings.length > 0) {
-      return servings[0];
+  for (const s of servings) {
+    if (getServingWeightInGrams(s) !== null) {
+      return s;
     }
   }
 
-  return null;
+  // 3. Ultimate fallback: first serving
+  return servings[0];
 }
 
 /**
@@ -364,7 +367,7 @@ function validateProposalNutritionSanity(
  * @param {MealProposalItem[]} items - Meal proposal items.
  * @return {NutritionData | null} Aggregated nutrition data or null.
  */
-function calculateResolvedNutritionTotal(
+export function calculateResolvedNutritionTotal(
   items: MealProposalItem[]
 ): NutritionData | null {
   const resolvedItems = items.filter(
@@ -569,14 +572,17 @@ function interpretClarificationAnswer(
   }
 
   const unitPatterns: Array<{regex: RegExp, unit: string}> = [
-    {regex: /\b(g|grams|gram|gms)\b/i, unit: "g"},
-    {regex: /\b(kg|kilograms|kilogram)\b/i, unit: "kg"},
-    {regex: /\b(cup|cups)\b/i, unit: "cup"},
-    {regex: /\b(bowl|bowls)\b/i, unit: "bowl"},
-    {regex: /\b(tbsp|tbsp\.|tablespoon|tablespoons)\b/i, unit: "tablespoon"},
-    {regex: /\b(tsp|tsp\.|teaspoon|teaspoons)\b/i, unit: "teaspoon"},
-    {regex: /\b(piece|pieces|pc|pcs)\b/i, unit: "piece"},
-    {regex: /\b(serving|servings)\b/i, unit: "serving"},
+    {regex: /(?:\d+\s*|\b)(g|grams|gram|gms)\b/i, unit: "g"},
+    {regex: /(?:\d+\s*|\b)(kg|kilograms|kilogram)\b/i, unit: "kg"},
+    {regex: /(?:\d+\s*|\b)(cup|cups)\b/i, unit: "cup"},
+    {regex: /(?:\d+\s*|\b)(bowl|bowls)\b/i, unit: "bowl"},
+    {
+      regex: /(?:\d+\s*|\b)(tbsp|tbsp\.|tablespoon|tablespoons)\b/i,
+      unit: "tablespoon",
+    },
+    {regex: /(?:\d+\s*|\b)(tsp|tsp\.|teaspoon|teaspoons)\b/i, unit: "teaspoon"},
+    {regex: /(?:\d+\s*|\b)(piece|pieces|pc|pcs)\b/i, unit: "piece"},
+    {regex: /(?:\d+\s*|\b)(serving|servings)\b/i, unit: "serving"},
   ];
 
   let detectedUnit: string | null = null;
@@ -642,13 +648,25 @@ function interpretClarificationAnswer(
  */
 export class MealOrchestrator {
   /**
+   * Calculates total nutrition summing ONLY resolved items.
+   *
+   * @param {MealProposalItem[]} items - Meal proposal items.
+   * @return {NutritionData | null} Aggregated nutrition data or null.
+   */
+  public static calculateResolvedNutritionTotal(
+    items: MealProposalItem[]
+  ): NutritionData | null {
+    return calculateResolvedNutritionTotal(items);
+  }
+
+  /**
    * Resolves a single food item independently.
    *
    * @param {InterpretedFood} food - Interpreted food item.
    * @param {NutritionProvider} nutritionProvider - Provider instance.
    * @return {Promise<MealProposalItem>} Resolved or unresolved item.
    */
-  private static async resolveProposalItem(
+  public static async resolveProposalItem(
     food: InterpretedFood,
     nutritionProvider: NutritionProvider
   ): Promise<MealProposalItem> {
@@ -816,6 +834,7 @@ export class MealOrchestrator {
 
       const candidateItem: MealProposalItem = {
         interpretedName,
+        modifiers: food.modifiers || [],
         matchedFoodId,
         matchedFoodName,
         brandName,
@@ -1013,13 +1032,15 @@ export class MealOrchestrator {
    * @param {number} itemIndex - Index of unresolved item to clarify.
    * @param {string} answer - Clarification answer text.
    * @param {NutritionProvider} nutritionProvider - Active nutrition provider.
+   * @param {AiProvider} [aiProvider] - Active AI provider instance (optional).
    * @return {Promise<MealProposal>} Updated MealProposal object.
    */
   static async resolveMealClarification(
     proposal: MealProposal,
     itemIndex: number,
     answer: string,
-    nutritionProvider: NutritionProvider
+    nutritionProvider: NutritionProvider,
+    aiProvider?: AiProvider
   ): Promise<MealProposal> {
     if (
       !proposal ||
@@ -1033,53 +1054,126 @@ export class MealOrchestrator {
     const targetItem = proposal.items[itemIndex];
     const parsed = interpretClarificationAnswer(answer, targetItem);
 
-    if (parsed.quantity === null) {
-      const question =
-        "About how much " +
-        targetItem.interpretedName +
-        " was that — grams, cups, or another serving size?";
-      const updatedItem: MealProposalItem = {
-        ...targetItem,
-        status: "needs_quantity",
-        clarificationQuestion: question,
-      };
-      const updatedItems = [...proposal.items];
-      updatedItems[itemIndex] = updatedItem;
+    let refinedName: string | null = null;
 
-      const resolvedCount = updatedItems.filter(
-        (i) => i.status === "resolved"
-      ).length;
-      const unresolvedCount = updatedItems.length - resolvedCount;
+    const normAns = normalizeStr(answer);
+    const isVagueAnswer = [
+      "a little",
+      "a bit",
+      "some",
+      "decent amount",
+      "a decent amount",
+      "good amount",
+      "a lot",
+      "plenty",
+      "small portion",
+      "large portion",
+    ].includes(normAns);
 
-      return {
-        originalText: proposal.originalText,
-        mealType: proposal.mealType,
-        mealTypeSource: proposal.mealTypeSource,
-        interpretationConfidence: proposal.interpretationConfidence,
-        items: updatedItems,
-        readyToLog: false,
-        needsClarification: true,
-        clarificationQuestion: question,
-        resolvedItemCount: resolvedCount,
-        unresolvedItemCount: unresolvedCount,
-        resolvedNutritionTotal: calculateResolvedNutritionTotal(updatedItems),
-      };
+    if (!isVagueAnswer) {
+      if (aiProvider) {
+        try {
+          const aiRes = await aiProvider.interpretMeal({
+            text: answer,
+            context: {
+              suggestedMealType: (proposal.mealType as MealType) || null,
+            },
+          });
+          if (aiRes.foods && aiRes.foods.length > 0) {
+            const extracted = aiRes.foods[0];
+            if (extracted.quantity !== null && extracted.quantity > 0) {
+              parsed.quantity = extracted.quantity;
+            }
+            if (extracted.unit !== null) {
+              parsed.unit = normalizeUnit(extracted.unit);
+            }
+            if (
+              extracted.name &&
+              extracted.name.toLowerCase().trim() !== "food" &&
+              extracted.name.length > 1
+            ) {
+              refinedName = extracted.name;
+            }
+          }
+        } catch (e) {
+          console.warn("AI clarification interpretation fallback error:", e);
+        }
+      }
+
+      if (!refinedName && parsed.quantity === null) {
+        const cleanText = answer.trim();
+        if (
+          cleanText.length > 1 &&
+          !/^\d+$/.test(cleanText) &&
+          !cleanText.toLowerCase().startsWith("log")
+        ) {
+          refinedName = cleanText;
+        }
+      }
     }
 
-    const updatedQuantity = parsed.quantity;
+    const updatedQuantity = parsed.quantity ?? targetItem.requestedQuantity;
     const updatedUnit = parsed.unit ?? targetItem.requestedUnit;
 
+    let updatedName = targetItem.interpretedName;
+    if (refinedName && refinedName.trim().length > 0) {
+      const normRefined = normalizeStr(refinedName);
+      const normOld = normalizeStr(targetItem.interpretedName);
+      if (!normRefined.includes(normOld) && !normOld.includes(normRefined)) {
+        updatedName = refinedName;
+      } else if (normRefined.length >= normOld.length) {
+        updatedName = refinedName;
+      }
+    }
+
     const updatedFood: InterpretedFood = {
-      name: targetItem.matchedFoodName || targetItem.interpretedName,
+      name: updatedName,
       quantity: updatedQuantity,
       unit: updatedUnit,
       modifiers: [],
     };
 
-    const resolvedItem = await MealOrchestrator.resolveProposalItem(
-      updatedFood,
-      nutritionProvider
-    );
+    let resolvedItem: MealProposalItem;
+
+    try {
+      resolvedItem = await MealOrchestrator.resolveProposalItem(
+        updatedFood,
+        nutritionProvider
+      );
+
+      // PRESERVE cumulative intent state across resolution turns
+      resolvedItem = {
+        ...resolvedItem,
+        interpretedName: updatedName,
+        requestedQuantity: updatedQuantity ?? resolvedItem.requestedQuantity,
+        requestedUnit: updatedUnit ?? resolvedItem.requestedUnit,
+      };
+    } catch (err) {
+      console.error(
+        `Error resolving food item "${updatedName}":`,
+        err
+      );
+      resolvedItem = {
+        interpretedName: updatedName,
+        matchedFoodId: targetItem.matchedFoodId,
+        matchedFoodName: targetItem.matchedFoodName,
+        brandName: targetItem.brandName,
+        requestedQuantity: updatedQuantity,
+        requestedUnit: updatedUnit,
+        matchedServingId: null,
+        matchedServingDescription: null,
+        resolvedQuantity: null,
+        weightGrams: null,
+        nutrition: null,
+        matchConfidence: 0.0,
+        status:
+          updatedQuantity === null ? "needs_quantity" : "needs_food_match",
+        clarificationQuestion:
+          updatedQuantity === null ?
+            `How much ${updatedName} did you have?` :
+            `Which ${updatedName} did you have?`,
+      };
+    }
 
     const updatedItems = [...proposal.items];
     updatedItems[itemIndex] = resolvedItem;

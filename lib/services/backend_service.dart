@@ -117,6 +117,40 @@ class BackendService {
     }
   }
 
+  /// Calls the `processConversationTurn` Cloud Function to execute state mutations & tool routing.
+  /// Relies on Firebase Authentication context (request.auth).
+  Future<Map<String, dynamic>> processConversationTurn({
+    required String sessionId,
+    required String message,
+    required Map<String, dynamic> todayContext,
+    Map<String, dynamic>? recommendationContext,
+  }) async {
+    try {
+      final HttpsCallable callable =
+          _functions.httpsCallable('processConversationTurn');
+      final Map<String, dynamic> payload = {
+        'sessionId': sessionId,
+        'message': message,
+        'todayContext': todayContext,
+        if (recommendationContext != null)
+          'recommendationContext': recommendationContext,
+      };
+
+      final HttpsCallableResult result = await callable.call(payload);
+
+      final normalized =
+          _normalizeFirebaseValue(result.data) as Map<String, dynamic>;
+
+      return normalized;
+    } on FirebaseFunctionsException catch (e) {
+      debugPrint('FirebaseFunctionsException in processConversationTurn: ${e.code} - ${e.message}');
+      rethrow;
+    } catch (e) {
+      debugPrint('Error calling processConversationTurn: $e');
+      rethrow;
+    }
+  }
+
   /// Calls the `resolveMealClarification` Cloud Function to update an existing proposal item.
   /// Relies on Firebase Authentication context (request.auth).
   Future<Map<String, dynamic>> resolveMealClarification({

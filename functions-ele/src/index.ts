@@ -8,6 +8,8 @@ import {getNutritionProvider} from "./nutrition/provider-factory";
 import {getAiProvider} from "./ai/provider-factory";
 import {MealType, RecommendationContextInput} from "./ai/types";
 import {MealOrchestrator} from "./ask-ele/meal-orchestrator";
+import {ConversationStateManager} from "./ask-ele/state-manager";
+import {ConversationSession} from "./ask-ele/types";
 
 if (getApps().length === 0) {
   initializeApp();
@@ -917,7 +919,7 @@ export const prepareMeal = onCall(
 
 export const resolveMealClarification = onCall(
   {
-    secrets: [fatSecretConsumerKey, fatSecretConsumerSecret],
+    secrets: [openAiApiKey, fatSecretConsumerKey, fatSecretConsumerSecret],
   },
   async (request) => {
     if (!request.auth) {
@@ -972,6 +974,7 @@ export const resolveMealClarification = onCall(
 
     const fatKey = fatSecretConsumerKey.value();
     const fatSecret = fatSecretConsumerSecret.value();
+    const aiKey = openAiApiKey.value();
 
     if (!fatKey || !fatSecret) {
       logger.error("Required backend secrets are not configured.");
@@ -982,6 +985,7 @@ export const resolveMealClarification = onCall(
     }
 
     const nutritionProvider = getNutritionProvider(fatKey, fatSecret);
+    const aiProvider = aiKey ? getAiProvider(aiKey) : undefined;
 
     try {
       const updatedProposal =
@@ -989,7 +993,8 @@ export const resolveMealClarification = onCall(
           proposal,
           itemIndex,
           answer,
-          nutritionProvider
+          nutritionProvider,
+          aiProvider
         );
 
       logger.info("Meal clarification resolved successfully", {
@@ -1262,3 +1267,113 @@ export const saveRecommendationFeedback = onCall(async (request) => {
     );
   }
 });
+
+export const processConversationTurn = onCall(
+  {
+    secrets: [openAiApiKey, fatSecretConsumerKey, fatSecretConsumerSecret],
+  },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError(
+        "unauthenticated",
+        "Authentication required to process conversation turn."
+      );
+    }
+
+    const uid = request.auth.uid;
+    const {sessionId, message, todayContext, recommendationContext} =
+      request.data || {};
+
+    if (typeof sessionId !== "string" || !sessionId.trim()) {
+      throw new HttpsError(
+        "invalid-argument",
+        "Valid sessionId string is required."
+      );
+    }
+
+    if (typeof message !== "string" || !message.trim()) {
+      throw new HttpsError(
+        "invalid-argument",
+        "Valid message string is required."
+      );
+    }
+
+    const aiKey = openAiApiKey.value();
+    const fatKey = fatSecretConsumerKey.value();
+    const fatSecret = fatSecretConsumerSecret.value();
+
+    if (!aiKey || !fatKey || !fatSecret) {
+      logger.error("Required backend secrets are not configured.");
+      throw new HttpsError(
+        "internal",
+        "Backend service credentials are not configured."
+      );
+    }
+
+    const aiProvider = getAiProvider(aiKey);
+    const nutritionProvider = getNutritionProvider(fatKey, fatSecret);
+
+    const sessionRef = db
+      .collection("users")
+      .doc(uid)
+      .collection("askEleSessions")
+      .doc(sessionId);
+
+    const docSnap = await sessionRef.get();
+    let session: ConversationSession;
+
+    if (docSnap.exists) {
+      session = docSnap.data() as ConversationSession;
+    } else {
+      session = ConversationStateManager.createDefaultSession(uid, sessionId);
+    }
+
+    if (recommendationContext && typeof recommendationContext === "object") {
+      session.recommendationContext =
+        recommendationContext as RecommendationContextInput;
+    }
+
+    try {
+      const turnResult = await ConversationStateManager.processTurn(
+        session,
+        message,
+        aiProvider,
+        nutritionProvider,
+        todayContext && typeof todayContext === "object" ?
+          (todayContext as Record<string, unknown>) :
+          {}
+      );
+
+      await sessionRef.set(turnResult.session, {merge: true});
+
+      logger.info("Conversation turn processed successfully", {
+        uid,
+        sessionId,
+        responseType: turnResult.responseType,
+        readyToLog: turnResult.proposal?.readyToLog ?? false,
+      });
+
+      return {
+        success: true,
+        session: turnResult.session,
+        responseText: turnResult.responseText,
+        proposal: turnResult.proposal,
+        recommendation: turnResult.recommendation,
+        responseType: turnResult.responseType,
+      };
+    } catch (error) {
+      const errorMsg =
+        error instanceof Error ? error.message : String(error);
+      logger.error("Conversation turn processing failed", {
+        uid,
+        sessionId,
+        error: errorMsg,
+      });
+
+      throw new HttpsError(
+        "internal",
+        "Unable to process conversation turn."
+      );
+    }
+  }
+);

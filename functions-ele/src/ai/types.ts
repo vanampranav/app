@@ -1,3 +1,5 @@
+import {ConversationSession} from "../ask-ele/types";
+
 export type MealType = "breakfast" | "lunch" | "dinner" | "snacks";
 
 export type MealTypeSource =
@@ -81,4 +83,9 @@ export interface GetGuidanceOutput {
   recommendation: MealRecommendationData | null;
   preparedMealText?: string | null;
   suggestedMealType?: MealType | null;
+}
+
+export interface ClassifyTurnInput {
+  message: string;
+  session: ConversationSession;
 }

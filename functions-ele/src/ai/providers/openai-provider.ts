@@ -1,5 +1,6 @@
 import {AiProvider} from "../ai-provider";
 import {
+  ClassifyTurnInput,
   GetGuidanceInput,
   GetGuidanceOutput,
   GuidanceResponseType,
@@ -10,6 +11,11 @@ import {
   MealType,
   MealTypeSource,
 } from "../types";
+import {
+  StateMutation,
+  TurnClassificationResult,
+  TurnType,
+} from "../../ask-ele/types";
 
 /**
  * AiProvider implementation for OpenAI Responses API.
@@ -747,6 +753,185 @@ export class OpenAiProvider implements AiProvider {
         recommendation: null,
         preparedMealText: null,
         suggestedMealType: null,
+      };
+    }
+  }
+
+  /**
+   * Classifies user turn into structured TurnClassificationResult & mutations.
+   *
+   * @param {ClassifyTurnInput} input - Message and active session state.
+   * @return {Promise<TurnClassificationResult>} Classified turn result.
+   */
+  async classifyTurnAndMutations(
+    input: ClassifyTurnInput
+  ): Promise<TurnClassificationResult> {
+    const model = process.env.ASK_ELE_MODEL || "gpt-5.6-luna";
+    const draftItems = input.session.mealDraft?.items || [];
+
+    const pendingQ =
+      input.session.pendingClarification?.question || "null";
+
+    const promptText =
+      "Active Session State:\n" +
+      `Domain: ${input.session.activeDomain}\n` +
+      `Pending Action: ${input.session.pendingAction}\n` +
+      `Active Entity ID: ${input.session.activeEntityId}\n` +
+      `Expected Slot: ${input.session.expectedSlot}\n` +
+      `Pending Question: ${pendingQ}\n` +
+      `Draft Items: ${JSON.stringify(
+        draftItems.map((i) => ({
+          itemId: i.itemId,
+          name: i.interpretedName,
+          quantity: i.requestedQuantity,
+          unit: i.requestedUnit,
+          modifiers: i.modifiers || [],
+        })),
+        null,
+        2
+      )}\n\n` +
+      `User Message: "${input.message}"`;
+
+    const requestPayload = {
+      model,
+      instructions:
+        "You are the conversation turn classifier for EleFit.\n" +
+        "Classify the user message and output required state mutations.\n\n" +
+        "turnType MUST be one of:\n" +
+        "- 'ANSWER_TO_PENDING_CLARIFICATION' (answering question)\n" +
+        "- 'MODIFICATION_OF_PENDING_TASK' (modifying task/item)\n" +
+        "- 'NEW_INTENT' (asking progress/guidance question)\n" +
+        "- 'CANCEL_PENDING_TASK' (canceling/clearing current draft)\n" +
+        "- 'LOG_COMMAND' (confirming/logging current draft)\n\n" +
+        "mutations array ops:\n" +
+        "- CHANGE_QUANTITY: { targetEntityId, quantity, unit }\n" +
+        "- UPDATE_MODIFIERS: { targetEntityId, addModifiers, " +
+        "removeModifiers }\n" +
+        "- REPLACE_ITEM: { targetEntityId, foodName, quantity, unit }\n" +
+        "- REMOVE_ITEM: { targetEntityId }\n" +
+        "- CHANGE_MEAL_TYPE: { mealType }\n",
+      input: [{role: "user", content: promptText}],
+      text: {
+        format: {
+          type: "json_schema",
+          name: "turn_classification",
+          strict: true,
+          schema: {
+            type: "object",
+            properties: {
+              turnType: {
+                type: "string",
+                enum: [
+                  "ANSWER_TO_PENDING_CLARIFICATION",
+                  "MODIFICATION_OF_PENDING_TASK",
+                  "NEW_INTENT",
+                  "CANCEL_PENDING_TASK",
+                  "LOG_COMMAND",
+                  "NEW_MEAL_LOG",
+                ],
+              },
+              intent: {type: ["string", "null"]},
+              mutations: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    op: {
+                      type: "string",
+                      enum: [
+                        "ADD_ITEM",
+                        "REMOVE_ITEM",
+                        "REPLACE_ITEM",
+                        "CHANGE_QUANTITY",
+                        "CHANGE_UNIT",
+                        "CHANGE_MEAL_TYPE",
+                        "UPDATE_MODIFIERS",
+                        "ANSWER_CLARIFICATION",
+                        "NONE",
+                      ],
+                    },
+                    targetEntityId: {type: ["string", "null"]},
+                    targetFoodName: {type: ["string", "null"]},
+                    foodName: {type: ["string", "null"]},
+                    quantity: {type: ["number", "null"]},
+                    unit: {type: ["string", "null"]},
+                    addModifiers: {
+                      type: "array",
+                      items: {type: "string"},
+                    },
+                    removeModifiers: {
+                      type: "array",
+                      items: {type: "string"},
+                    },
+                    mealType: {type: ["string", "null"]},
+                  },
+                  required: [
+                    "op",
+                    "targetEntityId",
+                    "targetFoodName",
+                    "foodName",
+                    "quantity",
+                    "unit",
+                    "addModifiers",
+                    "removeModifiers",
+                    "mealType",
+                  ],
+                  additionalProperties: false,
+                },
+              },
+            },
+            required: ["turnType", "intent", "mutations"],
+            additionalProperties: false,
+          },
+        },
+      },
+    };
+
+    const response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${this.apiKey}`,
+      },
+      body: JSON.stringify(requestPayload),
+    });
+
+    if (!response.ok) {
+      return {
+        turnType: "ANSWER_TO_PENDING_CLARIFICATION",
+        intent: "log_meal",
+        mutations: [],
+      };
+    }
+
+    const json = (await response.json()) as Record<string, unknown>;
+    let rawText: string | null = null;
+    if (typeof json.output_text === "string" && json.output_text.trim()) {
+      rawText = json.output_text;
+    }
+
+    if (!rawText) {
+      return {
+        turnType: "ANSWER_TO_PENDING_CLARIFICATION",
+        intent: "log_meal",
+        mutations: [],
+      };
+    }
+
+    try {
+      const parsed = JSON.parse(rawText) as Record<string, unknown>;
+      const tt = (parsed.turnType as TurnType) ||
+        "ANSWER_TO_PENDING_CLARIFICATION";
+      return {
+        turnType: tt,
+        intent: (parsed.intent as string) || null,
+        mutations: (parsed.mutations as StateMutation[]) || [],
+      };
+    } catch {
+      return {
+        turnType: "ANSWER_TO_PENDING_CLARIFICATION",
+        intent: "log_meal",
+        mutations: [],
       };
     }
   }
