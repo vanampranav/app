@@ -79,7 +79,13 @@ Areas: **App** = Flutter · **BE** = Python AI backend · **Web** = the-elefit-n
 - **Accuracy (measured against the real 876-exercise catalog, 50 realistic AI names): ~90% resolve to a catalog demo.** Misses (→ name-only custom, still loggable/checkable): exercises free-exercise-db lacks (Burpees, Jumping Jacks, Wall Sit) or naming variants (Chest Fly, Bicycle Crunch). Matched names sometimes map to a variant (e.g. "Bench Press" → "Bench Press - Powerlifting") — correct movement, specific variant.
 - **Known limitation:** the AI-coach parser strips per-exercise sets/reps, so imported exercises default to **3×10** (user can edit). Carrying the AI's prescribed sets/reps would need a small parser enhancement (keep the "— 4×8" and pass it through) — optional follow-up.
 
-**Phase 4** — plan → meal-log prefill (approach TBD: numeric-macro prefill vs Ask-Ele `prepareMeal`), StreakService on workout completion, Home "Today's Workout" card, rest timer, volume trend chart.
+**✅ Phase 4 (items 1-4) BUILT (2026-09-09, analyze clean):**
+- **Streak credit** — completing TODAY's workout (all sets done) calls `StreakService.recordActivity()` (once/day), so workouts count toward the daily streak like meals/weight (`workout_log_screen._creditStreakIfComplete`).
+- **Rest timer** — checking a set auto-starts a 90s countdown shown as a lime bar (`_restBar`) with **+30s** / **Skip**; cancelled on dispose.
+- **Home "Today's Workout" card** — `home_screen._buildTodayWorkoutCard` (after the macros card): shows today's `done/total` + progress bar, tap → Workout tab; "No workout yet — tap to add" when empty. Loaded via `_loadTodayWorkout`.
+- **Workout history + volume chart** — `lib/screens/workout/workout_history_screen.dart`: fl_chart volume (Σ reps×weight) trend over logged days + a per-day list (date, exercises, done/total, volume). Entry: a **history icon** in the workout top bar.
+
+**Phase 4 remaining — item 5:** plan → meal-log prefill (surface the active plan's meals in the meal log as one-tap suggestions; approach TBD: numeric-macro prefill vs Ask-Ele `prepareMeal`). Completes the unified "one plan drives meal + workout".
 
 ---
 

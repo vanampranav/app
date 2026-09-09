@@ -20,6 +20,8 @@ import '../screens/measurement_screen.dart';
 import 'log_screen.dart';
 import '../services/member_service.dart';
 import '../services/streak_service.dart';
+import '../services/workout_service.dart';
+import '../models/workout_session.dart';
 import '../models/member_model.dart';
 import '../widgets/device_scan_sheet.dart';
 import 'package:elefit_app/features/challenge/presentation/screens/participant/challenge_discovery_screen.dart';
@@ -51,6 +53,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   int _fatGoal         = 65;
   double? _latestWeight;
   int _streak          = 0;
+  WorkoutDay? _todayWorkout;
   int _waterMl         = 0;
   String _userName     = '';
   int    _stepsToday   = 0;
@@ -87,7 +90,17 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Future<void> _loadAll() async {
-    await Future.wait([_loadFitnessStats(), _loadProducts(), _loadHealthData()]);
+    await Future.wait([
+      _loadFitnessStats(),
+      _loadProducts(),
+      _loadHealthData(),
+      _loadTodayWorkout(),
+    ]);
+  }
+
+  Future<void> _loadTodayWorkout() async {
+    final w = await WorkoutService.instance.getDay(DateTime.now());
+    if (mounted) setState(() => _todayWorkout = w);
   }
 
   Future<void> _loadHealthData() async {
@@ -503,6 +516,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   const SizedBox(height: AppTheme.md),
                   _buildMacrosCard(),
                   const SizedBox(height: AppTheme.md),
+                  _buildTodayWorkoutCard(),
+                  const SizedBox(height: AppTheme.md),
                   _buildQuickActions(),
                   const SizedBox(height: AppTheme.lg),
                   _buildChallengeBanner(),
@@ -904,6 +919,78 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   // ─── Quick actions ────────────────────────────────────────────────────────────
+
+  Widget _buildTodayWorkoutCard() {
+    final w = _todayWorkout;
+    final has = w != null && w.total > 0;
+    final done = w?.completedCount ?? 0;
+    final total = w?.total ?? 0;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppTheme.md),
+      child: GestureDetector(
+        onTap: () => Navigator.of(context).pushReplacement(
+          EFPageRoute(
+            page: MainLayout(
+                currentIndex: 1, child: const LogScreen(initialTab: 1)),
+          ),
+        ),
+        child: Container(
+          padding: const EdgeInsets.all(AppTheme.md),
+          decoration: BoxDecoration(
+            color: AppTheme.surface1,
+            borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+          ),
+          child: Row(children: [
+            Container(
+              width: 44,
+              height: 44,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: AppTheme.lime.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(Icons.fitness_center_rounded,
+                  color: AppTheme.lime),
+            ),
+            const SizedBox(width: AppTheme.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text("TODAY'S WORKOUT", style: AppTheme.labelSM),
+                  const SizedBox(height: 4),
+                  if (has) ...[
+                    Text('$done of $total done',
+                        style: AppTheme.headingSM.copyWith(
+                            color: (done == total)
+                                ? AppTheme.lime
+                                : AppTheme.textPrimary)),
+                    const SizedBox(height: 8),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+                      child: LinearProgressIndicator(
+                        value: total == 0 ? 0 : done / total,
+                        minHeight: 6,
+                        backgroundColor: AppTheme.surface2,
+                        valueColor:
+                            const AlwaysStoppedAnimation(AppTheme.lime),
+                      ),
+                    ),
+                  ] else
+                    Text('No workout yet — tap to add',
+                        style: AppTheme.bodyMD
+                            .copyWith(color: AppTheme.textSecondary)),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded,
+                color: AppTheme.textTertiary),
+          ]),
+        ),
+      ),
+    );
+  }
 
   Widget _buildQuickActions() {
     return Padding(

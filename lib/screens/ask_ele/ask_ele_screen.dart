@@ -15,6 +15,8 @@ import '../../widgets/ask_ele/ask_ele_meal_recommendation_card.dart';
 import '../../widgets/ask_ele/ask_ele_message_bubble.dart';
 import '../../widgets/ask_ele/ask_ele_quick_action_chip.dart';
 import '../../widgets/ask_ele/ask_ele_summary_metric.dart';
+import '../../widgets/main_layout.dart';
+import '../home_screen.dart';
 
 enum ChatMessageType { text, mealProposal, mealRecommendation }
 enum AskEleIntent { logMeal, dailyGuidance }
@@ -722,6 +724,7 @@ class _AskEleScreenState extends State<AskEleScreen> {
         }
       });
     } catch (e) {
+      final intent = _classifyIntent(query);
 
       // 4. RECOMMENDATION FOLLOW-UP / GUIDANCE / RECOMMENDATION REQUEST
       if (_activeRecommendationContext != null ||
@@ -917,7 +920,20 @@ class _AskEleScreenState extends State<AskEleScreen> {
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded,
               color: Colors.white, size: 20),
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: () {
+            final nav = Navigator.of(context);
+            if (nav.canPop()) {
+              nav.pop();
+            } else {
+              // Opened as a bottom-nav tab (via pushReplacement) → there's
+              // nothing beneath it to pop back to, so going Home avoids the
+              // blank/black screen.
+              nav.pushReplacement(MaterialPageRoute(
+                builder: (_) =>
+                    MainLayout(currentIndex: 0, child: const HomeScreen()),
+              ));
+            }
+          },
         ),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

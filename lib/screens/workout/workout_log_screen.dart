@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -6,9 +8,11 @@ import '../../models/exercise.dart';
 import '../../models/workout_session.dart';
 import '../../services/exercise_catalog_service.dart';
 import '../../services/workout_service.dart';
+import '../../services/streak_service.dart';
 import '../../theme/app_theme.dart';
 import 'exercise_detail_screen.dart';
 import 'exercise_library_screen.dart';
+import 'workout_history_screen.dart';
 
 /// Today's workout: build a routine, follow it, log each set, check off what's
 /// done. Embeddable (returns a Column) so it lives under the Log tab's toggle.
@@ -48,10 +52,16 @@ const _templates = <_WorkoutTemplate>[
 class _WorkoutLogScreenState extends State<WorkoutLogScreen> {
   final _service = WorkoutService.instance;
   DateTime _date = _dateOnly(DateTime.now());
+  DateTime _weekAnchor = _dateOnly(DateTime.now()); // first (leftmost) day in the strip
   WorkoutDay _day = WorkoutDay(date: WorkoutDay.keyFor(DateTime.now()));
   bool _loading = true;
   final Set<int> _expanded = {};
   Set<String> _loggedDates = {}; // date keys that have a workout (week-strip dots)
+
+  // Rest timer (between sets)
+  Timer? _restTimer;
+  int _restRemaining = 0;
+  static const int _restDefaultSeconds = 90;
 
   static DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
 
@@ -59,6 +69,12 @@ class _WorkoutLogScreenState extends State<WorkoutLogScreen> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _restTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -74,12 +90,19 @@ class _WorkoutLogScreenState extends State<WorkoutLogScreen> {
 
   Future<void> _selectDate(DateTime d) async {
     final day = await _service.getDay(d);
+    final logged = await _service.loggedDates(); // refresh dots (e.g. after a plan import)
     if (!mounted) return;
     setState(() {
       _date = _dateOnly(d);
       _day = day;
+      _loggedDates = logged.toSet();
       _expanded.clear();
     });
+  }
+
+  void _shiftWeek(int deltaWeeks) {
+    setState(() =>
+        _weekAnchor = _weekAnchor.add(Duration(days: deltaWeeks * 7)));
   }
 
   Future<void> _save() async {
@@ -105,6 +128,7 @@ class _WorkoutLogScreenState extends State<WorkoutLogScreen> {
         _topBar(),
         _weekStrip(),
         if (_day.exercises.isNotEmpty) _progressBar(),
+        if (_restRemaining > 0) _restBar(),
         Expanded(
           child: _day.exercises.isEmpty
               ? _emptyState()
@@ -131,9 +155,31 @@ class _WorkoutLogScreenState extends State<WorkoutLogScreen> {
           const Text('Workout', style: AppTheme.headingLG),
           const Spacer(),
           IconButton(
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(Icons.chevron_left_rounded,
+                color: AppTheme.textSecondary),
+            onPressed: () => _shiftWeek(-1),
+          ),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(Icons.chevron_right_rounded,
+                color: AppTheme.textSecondary),
+            onPressed: () => _shiftWeek(1),
+          ),
+          IconButton(
             icon: const Icon(Icons.calendar_today_outlined,
                 color: AppTheme.textSecondary, size: 20),
             onPressed: _pickDate,
+          ),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            tooltip: 'History',
+            icon: const Icon(Icons.history_rounded,
+                color: AppTheme.textSecondary, size: 20),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const WorkoutHistoryScreen()),
+            ),
           ),
         ],
       ),
@@ -142,38 +188,41 @@ class _WorkoutLogScreenState extends State<WorkoutLogScreen> {
 
   static const _shortDays = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 
-  List<DateTime> get _last7Days {
-    final today = DateTime.now();
-    return List.generate(7, (i) {
-      final d = today.subtract(Duration(days: 6 - i));
-      return DateTime(d.year, d.month, d.day);
-    });
-  }
+  // The 7 days shown: a forward window starting at the anchor (today by
+  // default) → today is first and the rest of the plan week follows. Week
+  // arrows / calendar reach other weeks (incl. future plan days & past).
+  List<DateTime> get _weekDays =>
+      List.generate(7, (i) => _weekAnchor.add(Duration(days: i)));
 
   Future<void> _pickDate() async {
+    final today = _dateOnly(DateTime.now());
     final picked = await showDatePicker(
       context: context,
       initialDate: _date,
       firstDate: DateTime(2020),
-      lastDate: _dateOnly(DateTime.now()),
+      lastDate: today.add(const Duration(days: 365)), // allow future plan days
     );
-    if (picked != null) _selectDate(picked);
+    if (picked == null) return;
+    setState(() => _weekAnchor = _dateOnly(picked));
+    _selectDate(picked);
   }
 
   // ── 7-day strip (same style as the Nutrition tab) ──────────────────────────
   Widget _weekStrip() {
-    final days = _last7Days;
+    final days = _weekDays;
     final today = _dateOnly(DateTime.now());
     return Padding(
       padding: const EdgeInsets.fromLTRB(4, AppTheme.sm, 4, AppTheme.sm),
       child: Row(
         children: days.map((day) {
           final isActive = _dateOnly(day) == _date;
+          final isToday = _dateOnly(day) == today;
           final hasWorkout = _loggedDates.contains(WorkoutDay.keyFor(day));
-          final isFuture = day.isAfter(today);
+          final textColor =
+              (isActive || isToday) ? Colors.white : const Color(0xFF454545);
           return Expanded(
             child: GestureDetector(
-              onTap: isFuture ? null : () => _selectDate(day),
+              onTap: () => _selectDate(day),
               child: Column(children: [
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
@@ -192,11 +241,7 @@ class _WorkoutLogScreenState extends State<WorkoutLogScreen> {
                 Text(
                   day.day.toString().padLeft(2, '0'),
                   style: TextStyle(
-                    color: isFuture
-                        ? AppTheme.textTertiary
-                        : isActive
-                            ? Colors.white
-                            : const Color(0xFF454545),
+                    color: textColor,
                     fontSize: isActive ? 18 : 16,
                     fontWeight: FontWeight.w900,
                     letterSpacing: -0.5,
@@ -206,11 +251,7 @@ class _WorkoutLogScreenState extends State<WorkoutLogScreen> {
                 Text(
                   _shortDays[day.weekday % 7],
                   style: TextStyle(
-                    color: isFuture
-                        ? AppTheme.textTertiary
-                        : isActive
-                            ? Colors.white
-                            : const Color(0xFF454545),
+                    color: textColor,
                     fontSize: 10,
                     fontWeight: FontWeight.w900,
                     letterSpacing: 0.8,
@@ -569,17 +610,32 @@ class _WorkoutLogScreenState extends State<WorkoutLogScreen> {
   }
 
   // ── Actions ────────────────────────────────────────────────────────────────
-  void _openDemo(RoutineExercise ex) {
-    final full = ExerciseCatalog.instance.byId(ex.exerciseId);
-    if (full == null) return;
+  Future<void> _openDemo(RoutineExercise ex) async {
+    final catalog = ExerciseCatalog.instance;
+    // The catalog is lazy-loaded; make sure it's in memory before we look up
+    // the exercise (otherwise byId() returns null and the tap does nothing).
+    if (catalog.byId(ex.exerciseId) == null) {
+      await catalog.loadAll();
+    }
+    final full = catalog.byId(ex.exerciseId);
+    if (!mounted) return;
+    if (full == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('No demo available for this exercise.'),
+        duration: Duration(seconds: 2),
+      ));
+      return;
+    }
     Navigator.push(context,
         MaterialPageRoute(builder: (_) => ExerciseDetailScreen(exercise: full)));
   }
 
   void _toggleSet(int i, int s) {
-    setState(() => _day.exercises[i].sets[s].done =
-        !_day.exercises[i].sets[s].done);
+    final nowDone = !_day.exercises[i].sets[s].done;
+    setState(() => _day.exercises[i].sets[s].done = nowDone);
     _save();
+    if (nowDone) _startRest(); // auto-start a rest countdown after a set
+    _creditStreakIfComplete();
   }
 
   void _toggleExercise(int i) {
@@ -591,6 +647,64 @@ class _WorkoutLogScreenState extends State<WorkoutLogScreen> {
       }
     });
     _save();
+    _creditStreakIfComplete();
+  }
+
+  /// Completing TODAY's workout counts toward the daily streak (once per day).
+  Future<void> _creditStreakIfComplete() async {
+    if (_day.allDone && _dateOnly(_date) == _dateOnly(DateTime.now())) {
+      await StreakService.recordActivity();
+    }
+  }
+
+  // ── Rest timer ──────────────────────────────────────────────────────────────
+  void _startRest([int? seconds]) {
+    _restTimer?.cancel();
+    setState(() => _restRemaining = seconds ?? _restDefaultSeconds);
+    _restTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) return;
+      setState(() {
+        if (_restRemaining <= 1) {
+          _restRemaining = 0;
+          t.cancel();
+        } else {
+          _restRemaining--;
+        }
+      });
+    });
+  }
+
+  void _stopRest() {
+    _restTimer?.cancel();
+    setState(() => _restRemaining = 0);
+  }
+
+  Widget _restBar() {
+    final mm = (_restRemaining ~/ 60).toString();
+    final ss = (_restRemaining % 60).toString().padLeft(2, '0');
+    return Container(
+      margin: const EdgeInsets.fromLTRB(AppTheme.md, 0, AppTheme.md, AppTheme.sm),
+      padding: const EdgeInsets.symmetric(horizontal: AppTheme.md, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppTheme.lime.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+        border: Border.all(color: AppTheme.lime.withValues(alpha: 0.4)),
+      ),
+      child: Row(children: [
+        const Icon(Icons.timer_outlined, color: AppTheme.lime, size: 20),
+        const SizedBox(width: AppTheme.sm),
+        Text('Rest  $mm:$ss',
+            style: const TextStyle(
+                color: AppTheme.lime,
+                fontSize: 16,
+                fontWeight: FontWeight.w900)),
+        const Spacer(),
+        TextButton(
+            onPressed: () => _startRest(_restRemaining + 30),
+            child: const Text('+30s')),
+        TextButton(onPressed: _stopRest, child: const Text('Skip')),
+      ]),
+    );
   }
 
   void _addSet(int i) {
