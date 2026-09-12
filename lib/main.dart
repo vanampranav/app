@@ -69,10 +69,19 @@ void main() async {
   // Initialize Firebase (core + SDK for the Challenge feature + Crashlytics)
   try {
     AppEnvironment.validate();
-    await Firebase.initializeApp(
-      options: AppEnvironment.firebaseOptions,
-    );
+
+    if (Firebase.apps.any((a) => a.name == defaultFirebaseAppName)) {
+      debugPrint('Firebase [DEFAULT] app was pre-initialized natively.');
+    } else {
+      await Firebase.initializeApp(
+        options: AppEnvironment.firebaseOptions,
+      );
+      debugPrint('Firebase [DEFAULT] app was initialized in Dart.');
+    }
+
+    // MANDATORY POST-INITIALIZATION INVARIANT & FAIL-SAFE VERIFICATION
     AppEnvironment.verifyPostInitialization();
+
     // Route uncaught framework errors to Crashlytics
     FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
     debugPrint('Firebase initialized successfully for env="${AppEnvironment.current.name}" (project="${AppEnvironment.projectId}")');

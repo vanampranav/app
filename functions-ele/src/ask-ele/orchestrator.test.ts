@@ -1,6 +1,11 @@
 import {MealOrchestrator} from "./meal-orchestrator";
 import {ConversationStateManager} from "./state-manager";
-import {MealProposalItem, TurnClassificationResult} from "./types";
+import {FoodResolutionEngine} from "./food-resolution-engine";
+import {
+  ConversationSession,
+  MealProposalItem,
+  TurnClassificationResult,
+} from "./types";
 import {AiProvider} from "../ai/ai-provider";
 import {
   ClassifyTurnInput,
@@ -85,6 +90,114 @@ class MockAiProvider implements AiProvider {
   }
 
   /**
+   * Mock candidate reranking for semantic test scenarios.
+   *
+   * @param {import("../ai/types").RerankCandidatesInput} input - Candidate input.
+   * @return {Promise<import("../ai/types").RerankCandidatesOutput>} Reranked output.
+   */
+  async rerankFoodCandidates(
+    input: import("../ai/types").RerankCandidatesInput
+  ): Promise<import("../ai/types").RerankCandidatesOutput> {
+    const food = input.foodName.toLowerCase().trim();
+    const evaluations = input.candidates.map((cand) => {
+      const cName = cand.name.toLowerCase();
+      let score = 0.0;
+      let userLabel = cand.name;
+
+      if (food === "soy chunks") {
+        if (cName.includes("soya chunks") || cName.includes("soy chunks")) {
+          score = cand.brandName ? 0.85 : 0.95;
+          userLabel = cand.brandName ? `${cand.brandName} Soya Chunks` : "Regular Soya Chunks";
+        } else {
+          score = 0.1;
+        }
+      } else if (food === "chickpeas") {
+        if (cName.includes("garbanzo") || cName.includes("chickpea")) {
+          score = 0.95;
+          userLabel = "Boiled Garbanzo Beans";
+        }
+      } else if (food === "curd") {
+        if (cName.includes("yogurt") || cName.includes("curd")) {
+          score = 0.95;
+          userLabel = "Plain Yogurt / Curd";
+        }
+      } else if (food === "roti") {
+        if (cName.includes("roti") || cName.includes("chapati")) {
+          score = cand.brandName ? 0.75 : 0.95;
+          userLabel = cand.brandName ? `${cand.brandName} Roti` : "Whole Wheat Roti";
+        }
+      } else if (food === "apple") {
+        if (cName === "apple" || cName === "raw apple" || cName === "fresh apple") {
+          score = 0.98;
+          userLabel = "Fresh Raw Apple";
+        } else if (cName.includes("juice")) {
+          score = 0.40;
+          userLabel = "Apple Juice";
+        } else if (cName.includes("pie")) {
+          score = 0.30;
+          userLabel = "Apple Pie";
+        }
+      } else if (food === "coke") {
+        if (cName.includes("coca-cola") || cName.includes("coke")) {
+          score = 0.95;
+          userLabel = "Coca-Cola";
+        }
+      } else if (food === "poha") {
+        if (cName.includes("poha") || cName.includes("flattened rice")) {
+          score = 0.95;
+          userLabel = "Flattened Rice (Poha)";
+        }
+      } else if (food === "protein shake") {
+        if (cName.includes("whey")) {
+          score = 0.80;
+          userLabel = "Whey Protein Shake";
+        } else if (cName.includes("mass gainer")) {
+          score = 0.70;
+          userLabel = "High-Calorie Mass Gainer";
+        }
+      } else if (food === "soy") {
+        if (cName.includes("milk")) {
+          score = 0.40;
+          userLabel = "Soy Milk";
+        } else if (cName.includes("nut")) {
+          score = 0.40;
+          userLabel = "Soy Nuts";
+        } else if (cName.includes("chunk")) {
+          score = 0.40;
+          userLabel = "Soy Chunks";
+        }
+      } else if (food === "coffee") {
+        if (cName.includes("black")) {
+          score = 0.80;
+          userLabel = "Black Coffee";
+        } else if (cName.includes("latte") || cName.includes("cappuccino")) {
+          score = 0.75;
+          userLabel = "Coffee Latte / Cappuccino";
+        }
+      } else if (food === "chicken") {
+        if (cName.includes("breast")) {
+          score = 0.85;
+          userLabel = "Chicken Breast";
+        } else if (cName.includes("wing")) {
+          score = 0.75;
+          userLabel = "Chicken Wings";
+        }
+      } else {
+        score = cName.includes(food) ? 0.80 : 0.20;
+      }
+
+      return {
+        foodId: cand.foodId,
+        semanticScore: score,
+        isGeneric: !cand.brandName,
+        userLabel,
+      };
+    });
+
+    return {evaluations};
+  }
+
+  /**
    * Classifies user turn into structured TurnClassificationResult & mutations.
    *
    * @param {ClassifyTurnInput} input - Message and active session state.
@@ -124,6 +237,30 @@ class MockAiProvider implements AiProvider {
 
     // Differently worded quantity modification requests:
     // "make the chicken 250g", "change chicken to 250 grams"
+    if (text.includes("what is my dinner today")) {
+      return {
+        turnType: "NEW_INTENT",
+        intent: "daily_guidance",
+        mutations: [],
+      };
+    }
+
+    if (
+      text.includes("actually, it is dinner") ||
+      text.includes("meal type is dinner")
+    ) {
+      return {
+        turnType: "MODIFICATION_OF_PENDING_TASK",
+        intent: "log_meal",
+        mutations: [
+          {
+            op: "CHANGE_MEAL_TYPE",
+            mealType: "dinner",
+          },
+        ],
+      };
+    }
+
     if (
       text.includes("250g") ||
       text.includes("250 grams") ||
@@ -171,19 +308,57 @@ class MockAiProvider implements AiProvider {
       };
     }
 
-    if (text.includes("soy chunks") || text.includes("soy")) {
-      const target = draftItems.find((i: MealProposalItem) =>
-        i.interpretedName.toLowerCase().includes("chicken")
-      ) || draftItems[0];
+    if (
+      text.includes("snack") ||
+      text.includes("this was my snack") ||
+      text === "lunch" ||
+      text === "dinner" ||
+      text === "breakfast" ||
+      text.includes("actually make it dinner")
+    ) {
+      let mealType = "dinner";
+      if (text.includes("snack")) mealType = "snacks";
+      else if (text.includes("lunch")) mealType = "lunch";
+      else if (text.includes("breakfast")) mealType = "breakfast";
+      else if (text.includes("dinner")) mealType = "dinner";
       return {
         turnType: "ANSWER_TO_PENDING_CLARIFICATION",
         intent: "log_meal",
         mutations: [
           {
-            op: "REPLACE_ITEM",
+            op: "CHANGE_MEAL_TYPE",
+            mealType,
+          },
+        ],
+      };
+    }
+
+    if (
+      text.includes("50 gram") ||
+      text.includes("fifty gram") ||
+      text.includes("half a cup")
+    ) {
+      let qty = 50;
+      let unit = "g";
+      if (text.includes("fifty")) {
+        qty = 50;
+        unit = "g";
+      } else if (text.includes("half a cup")) {
+        qty = 0.5;
+        unit = "cup";
+      }
+      const target =
+        draftItems.find((i: MealProposalItem) => i.status !== "resolved") ||
+        draftItems[0];
+      return {
+        turnType: "ANSWER_TO_PENDING_CLARIFICATION",
+        intent: "log_meal",
+        mutations: [
+          {
+            op: "CHANGE_QUANTITY",
             targetEntityId: target ? target.itemId : "item_0",
-            targetFoodName: target ? target.interpretedName : "chicken",
-            foodName: "soy chunks",
+            quantity: qty,
+            unit,
           },
         ],
       };
@@ -526,6 +701,30 @@ export async function runOrchestratorTests(): Promise<void> {
           provider: "mock_nutrition",
         },
       ],
+      egg: [
+        {
+          foodId: "egg_1",
+          name: "Whole Egg",
+          brandName: null,
+          description: "1 egg (50g)",
+          caloriesPer100g: 155,
+          defaultServing: "1 egg (50g)",
+          imageUrl: null,
+          provider: "mock_nutrition",
+        },
+      ],
+      eggs: [
+        {
+          foodId: "egg_1",
+          name: "Whole Egg",
+          brandName: null,
+          description: "1 egg (50g)",
+          caloriesPer100g: 155,
+          defaultServing: "1 egg (50g)",
+          imageUrl: null,
+          provider: "mock_nutrition",
+        },
+      ],
     },
     {
       dal_1: {
@@ -713,6 +912,28 @@ export async function runOrchestratorTests(): Promise<void> {
               fat: 0,
               carbs: 0.5,
               protein: 0,
+            },
+          },
+        ],
+      },
+      egg_1: {
+        foodId: "egg_1",
+        name: "Whole Egg",
+        brandName: null,
+        imageUrl: null,
+        provider: "mock_nutrition",
+        servings: [
+          {
+            servingId: "s_egg",
+            description: "1 egg (50g)",
+            metricAmount: 50,
+            metricUnit: "g",
+            nutrition: {
+              ...emptyNutr,
+              calories: 78,
+              fat: 5,
+              carbs: 0.6,
+              protein: 6.3,
             },
           },
         ],
@@ -1061,6 +1282,67 @@ export async function runOrchestratorTests(): Promise<void> {
     readonly name = "rec_mock_ai";
 
     /**
+     * Classifies user turn into structured TurnClassificationResult & mutations.
+     *
+     * @param {ClassifyTurnInput} input - Message and active session state.
+     * @return {Promise<TurnClassificationResult>} Classified turn result.
+     */
+    async classifyTurnAndMutations(
+      input: ClassifyTurnInput
+    ): Promise<TurnClassificationResult> {
+      const text = (input.message || "").toLowerCase().trim();
+      if (
+        text.includes("any ideas") ||
+        text.includes("not sure") ||
+        text.includes("help me figure") ||
+        text.includes("could you give me") ||
+        text.includes("what is my dinner today") ||
+        text.includes("what should i eat for dinner")
+      ) {
+        return {
+          turnType: "NEW_INTENT",
+          intent: "daily_guidance",
+          mutations: [],
+        };
+      }
+      if (text.includes("actually those eggs were three")) {
+        const target = input.session.mealDraft?.items[0];
+        return {
+          turnType: "MODIFICATION_OF_PENDING_TASK",
+          intent: "log_meal",
+          mutations: [
+            {
+              op: "CHANGE_QUANTITY",
+              targetEntityId: target ? target.itemId : "item_0",
+              quantity: 3,
+              unit: "piece",
+            },
+          ],
+        };
+      }
+      if (
+        text.includes("actually, it is dinner") ||
+        text.includes("meal type is dinner")
+      ) {
+        return {
+          turnType: "MODIFICATION_OF_PENDING_TASK",
+          intent: "log_meal",
+          mutations: [
+            {
+              op: "CHANGE_MEAL_TYPE",
+              mealType: "dinner",
+            },
+          ],
+        };
+      }
+      return {
+        turnType: "NEW_MEAL_LOG",
+        intent: "log_meal",
+        mutations: [],
+      };
+    }
+
+    /**
      * Interprets mock meal.
      *
      * @param {InterpretMealInput} input - Input context.
@@ -1069,6 +1351,40 @@ export async function runOrchestratorTests(): Promise<void> {
     async interpretMeal(
       input: InterpretMealInput
     ): Promise<MealInterpretation> {
+      const text = input.text.toLowerCase();
+      if (text.includes("chicken") && text.includes("rice")) {
+        return {
+          foods: [
+            {name: "chicken", quantity: 200, unit: "g", modifiers: []},
+            {name: "rice", quantity: 150, unit: "g", modifiers: []},
+          ],
+          mealType: "dinner",
+          mealTypeSource: "context",
+          confidence: 0.95,
+          needsClarification: false,
+          clarificationQuestion: null,
+        };
+      }
+      if (text.includes("eggs") || text.includes("egg")) {
+        return {
+          foods: [{name: "egg", quantity: 2, unit: "piece", modifiers: []}],
+          mealType: "breakfast",
+          mealTypeSource: "explicit",
+          confidence: 0.95,
+          needsClarification: false,
+          clarificationQuestion: null,
+        };
+      }
+      if (text.includes("rice")) {
+        return {
+          foods: [{name: "rice", quantity: 1, unit: "bowl", modifiers: []}],
+          mealType: "dinner",
+          mealTypeSource: "explicit",
+          confidence: 0.95,
+          needsClarification: false,
+          clarificationQuestion: null,
+        };
+      }
       return {
         foods: [
           {name: "chicken", quantity: 200, unit: "g", modifiers: []},
@@ -1091,7 +1407,14 @@ export async function runOrchestratorTests(): Promise<void> {
     async getGuidance(input: GetGuidanceInput): Promise<GetGuidanceOutput> {
       const msg = input.message.toLowerCase();
 
-      if (msg.includes("what should i eat for dinner")) {
+      if (
+        msg.includes("what should i eat for dinner") ||
+        msg.includes("what is my dinner today") ||
+        msg.includes("any ideas") ||
+        msg.includes("not sure") ||
+        msg.includes("help me figure") ||
+        msg.includes("could you give me")
+      ) {
         return {
           responseType: "meal_recommendation",
           responseText: "Here are 3 good dinner options:",
@@ -2311,6 +2634,162 @@ export async function runOrchestratorTests(): Promise<void> {
     "PASS Part K Test 10: Normal direct logging: readyToLog=true"
   );
 
+  // NEW ARCHITECTURAL SEMANTIC REGRESSION TESTS
+  console.log("\n--------------------------------------------------------");
+  console.log("RUNNING ARCHITECTURAL SEMANTIC REGRESSION TESTS");
+  console.log("--------------------------------------------------------\n");
+
+  // Semantic Test 1: "50 grams" and "snack" flow
+  let semSess1 = ConversationStateManager.createDefaultSession("u_sem1", "s_sem1");
+  const semAi = new MockAiProvider({
+    foods: [{name: "rice", quantity: null, unit: "cup", modifiers: []}],
+    mealType: null,
+    mealTypeSource: "unknown",
+    confidence: 0.9,
+    needsClarification: true,
+    clarificationQuestion: "How much rice did you have?",
+  });
+
+  const st1 = await ConversationStateManager.processTurn(
+    semSess1, "I had rice", semAi, sharedNutrition, {}
+  );
+  semSess1 = st1.session;
+  if (!semSess1.mealDraft?.needsClarification || semSess1.expectedSlot !== "quantity") {
+    throw new Error("Semantic Test 1 failed: expected quantity slot");
+  }
+
+  const st2 = await ConversationStateManager.processTurn(
+    semSess1, "50 grams", semAi, sharedNutrition, {}
+  );
+  semSess1 = st2.session;
+  if (semSess1.mealDraft?.items[0].status !== "resolved" || semSess1.expectedSlot !== "meal_type") {
+    throw new Error("Semantic Test 1 failed: '50 grams' quantity resolution or expectedSlot meal_type");
+  }
+
+  const st3 = await ConversationStateManager.processTurn(
+    semSess1, "snack", semAi, sharedNutrition, {}
+  );
+  semSess1 = st3.session;
+  if (semSess1.mealDraft?.mealType !== "snacks" || !semSess1.mealDraft?.readyToLog) {
+    throw new Error("Semantic Test 1 failed: 'snack' mealType update");
+  }
+  console.log("PASS Semantic Test 1: '50 grams' -> 'snack' complete flow (readyToLog=true)");
+
+  // Semantic Test 2: "about fifty grams" and "this was my snack"
+  let semSess2 = ConversationStateManager.createDefaultSession("u_sem2", "s_sem2");
+  let tA = await ConversationStateManager.processTurn(semSess2, "I had rice", semAi, sharedNutrition, {});
+  let tB = await ConversationStateManager.processTurn(tA.session, "about fifty grams", semAi, sharedNutrition, {});
+  if (
+    tB.session.mealDraft?.items[0].weightGrams !== 50 ||
+    (tB.session.mealDraft?.items[0].nutrition?.calories ?? 999) > 100
+  ) {
+    throw new Error(
+      "Semantic Test 2 failed: incorrect quantity/unit semantics for 'about fifty grams' " +
+      `(weightGrams=${tB.session.mealDraft?.items[0].weightGrams}, calories=${tB.session.mealDraft?.items[0].nutrition?.calories})`
+    );
+  }
+  let tC = await ConversationStateManager.processTurn(tB.session, "this was my snack", semAi, sharedNutrition, {});
+  if (tC.session.mealDraft?.mealType !== "snacks" || !tC.session.mealDraft?.readyToLog) {
+    throw new Error("Semantic Test 2 failed: 'about fifty grams' + 'this was my snack'");
+  }
+  console.log("PASS Semantic Test 2: 'about fifty grams' + 'this was my snack' -> readyToLog=true");
+
+  // Semantic Test 3: "half a cup", "lunch", "actually make it dinner"
+  let semSess3 = ConversationStateManager.createDefaultSession("u_sem3", "s_sem3");
+  let lA = await ConversationStateManager.processTurn(semSess3, "I had rice", semAi, sharedNutrition, {});
+  let lB = await ConversationStateManager.processTurn(lA.session, "half a cup", semAi, sharedNutrition, {});
+  let lC = await ConversationStateManager.processTurn(lB.session, "lunch", semAi, sharedNutrition, {});
+  let lD = await ConversationStateManager.processTurn(lC.session, "actually make it dinner", semAi, sharedNutrition, {});
+  if (lD.session.mealDraft?.mealType !== "dinner" || !lD.session.mealDraft?.readyToLog) {
+    throw new Error("Semantic Test 3 failed: 'lunch' -> 'actually make it dinner'");
+  }
+  console.log("PASS Semantic Test 3: 'half a cup' -> 'lunch' -> 'actually make it dinner' -> mealType=dinner");
+
+  // Semantic Test 4: Multi-item quantity clarification with state invariant assertions & instrumentation
+  let semSess4 = ConversationStateManager.createDefaultSession("u_sem4", "s_sem4");
+  const multiClarifyAi = new MockAiProvider({
+    foods: [
+      {name: "rice", quantity: null, unit: "cup", modifiers: []},
+      {name: "dal", quantity: null, unit: "g", modifiers: []},
+    ],
+    mealType: "dinner",
+    mealTypeSource: "explicit",
+    confidence: 0.9,
+    needsClarification: true,
+    clarificationQuestion: "How much rice did you have?",
+  });
+  let m1 = await ConversationStateManager.processTurn(semSess4, "rice and dal", multiClarifyAi, sharedNutrition, {});
+  let m2 = await ConversationStateManager.processTurn(m1.session, "1 cup", multiClarifyAi, sharedNutrition, {});
+
+  const riceItemBefore = JSON.stringify(m2.session.mealDraft?.items[0]);
+
+  let resolveCountRice = 0;
+  let resolveCountDal = 0;
+  const originalResolve = MealOrchestrator.resolveProposalItem.bind(MealOrchestrator);
+  MealOrchestrator.resolveProposalItem = async (food, nutrition) => {
+    if (food.name.toLowerCase().includes("rice")) resolveCountRice++;
+    if (food.name.toLowerCase().includes("dal")) resolveCountDal++;
+    return originalResolve(food, nutrition);
+  };
+
+  let m3 = await ConversationStateManager.processTurn(m2.session, "100 grams", multiClarifyAi, sharedNutrition, {});
+  MealOrchestrator.resolveProposalItem = originalResolve;
+
+  const riceItemAfter = JSON.stringify(m3.session.mealDraft?.items[0]);
+  if (riceItemBefore !== riceItemAfter) {
+    throw new Error("Semantic Test 4 failed: Already-resolved rice item was mutated/reinterpreted during dal clarification");
+  }
+  if (resolveCountRice !== 0 || resolveCountDal !== 1) {
+    throw new Error(`Semantic Test 4 failed: resolve counts incorrect (rice: ${resolveCountRice}, dal: ${resolveCountDal}, expected rice=0, dal=1)`);
+  }
+
+  const rItem = m3.session.mealDraft?.items[0];
+  const dItem = m3.session.mealDraft?.items[1];
+
+  if (rItem?.requestedQuantity !== 1 || rItem?.requestedUnit !== "cup" || Math.abs((rItem?.weightGrams ?? 0) - 158) > 2) {
+    throw new Error(`Semantic Test 4 failed: Rice semantic values incorrect (qty: ${rItem?.requestedQuantity}, unit: ${rItem?.requestedUnit}, wt: ${rItem?.weightGrams})`);
+  }
+  if (dItem?.requestedQuantity !== 100 || dItem?.requestedUnit !== "g" || dItem?.weightGrams !== 100 || Math.abs((dItem?.nutrition?.calories ?? 0) - 150) > 2) {
+    throw new Error(`Semantic Test 4 failed: Dal semantic values incorrect (qty: ${dItem?.requestedQuantity}, unit: ${dItem?.requestedUnit}, wt: ${dItem?.weightGrams}, cal: ${dItem?.nutrition?.calories})`);
+  }
+  console.log("PASS Semantic Test 4: Multi-item clarification invariant verified (rice unmutated, dal resolved to 100g, resolve counts rice=0, dal=1)");
+
+  // Semantic Tests 5-8: Equivalent quantity/unit clarification bindings ("50 grams", "100 g", "half a cup", "2 tablespoons")
+  const cupClarifyAi = new MockAiProvider({
+    foods: [{name: "rice", quantity: null, unit: "cup", modifiers: []}],
+    mealType: "lunch",
+    mealTypeSource: "context",
+    confidence: 0.9,
+    needsClarification: true,
+    clarificationQuestion: "How much rice?",
+  });
+
+  for (const [clarificationText, expectedQty, expectedUnit, provider] of [
+    ["50 grams", 50, "g", ai6],
+    ["100 g", 100, "g", ai6],
+    ["half a cup", 0.5, "cup", cupClarifyAi],
+    ["2 tablespoons", 2, "tablespoon", cupClarifyAi],
+  ] as const) {
+    const eqSess = ConversationStateManager.createDefaultSession("eq_u", "eq_s");
+    const initEq = await ConversationStateManager.processTurn(eqSess, "rice", provider, sharedNutrition, {});
+    const eqRes = await ConversationStateManager.processTurn(initEq.session, clarificationText, provider, sharedNutrition, {});
+    const item = eqRes.session.mealDraft?.items[0];
+    if (
+      item?.requestedQuantity !== expectedQty ||
+      item?.requestedUnit !== expectedUnit
+    ) {
+      throw new Error(
+        `Clarification binding test failed for "${clarificationText}": ` +
+        `got qty=${item?.requestedQuantity}, unit=${item?.requestedUnit} ` +
+        `(expected ${expectedQty}, ${expectedUnit})`
+      );
+    }
+  }
+  console.log(
+    "PASS Semantic Tests 5-8: Equivalent quantity/unit clarifications bound correctly " +
+    "('50 grams', '100 g', 'half a cup', '2 tablespoons')"
+  );
+
   console.log("\n--------------------------------------------------------");
   console.log("RUNNING TARGET ENTITY VALIDATION SAFETY HARDENING TESTS");
   console.log("--------------------------------------------------------\n");
@@ -2519,6 +2998,686 @@ export async function runOrchestratorTests(): Promise<void> {
     );
   }
   console.log("PASS Safety Test F: no target information -> rejected");
+
+  console.log("\n--------------------------------------------------------");
+  console.log("RUNNING CLARIFICATION QUANTITY ANSWER REGRESSION TEST");
+  console.log("--------------------------------------------------------\n");
+
+  const dualAi = new MockAiProvider({
+    foods: [
+      {name: "idli", quantity: 4, unit: "piece", modifiers: []},
+      {name: "chutney", quantity: null, unit: "g", modifiers: []},
+    ],
+    mealType: "breakfast",
+    mealTypeSource: "explicit",
+    confidence: 0.95,
+    needsClarification: true,
+    clarificationQuestion: "How much chutney did you have?",
+  });
+
+  let dualSession = ConversationStateManager.createDefaultSession(
+    "dual_u",
+    "dual_s"
+  );
+  const dualInit = await ConversationStateManager.processTurn(
+    dualSession,
+    "I had 4 idlis and chutney for breakfast",
+    dualAi,
+    sharedNutrition,
+    {}
+  );
+  dualSession = dualInit.session;
+
+  if (
+    !dualSession.pendingClarification ||
+    dualSession.activeEntityId !== "item_1" ||
+    dualSession.mealDraft?.items[1].requestedQuantity !== null
+  ) {
+    throw new Error("Clarification Regression Test setup failed");
+  }
+
+  // User replies with standalone quantity answer: "50 grams"
+  const dualAns = await ConversationStateManager.processTurn(
+    dualSession,
+    "50 grams",
+    dualAi,
+    sharedNutrition,
+    {}
+  );
+  dualSession = dualAns.session;
+  const dualDraft = dualSession.mealDraft;
+
+  if (
+    !dualDraft ||
+    dualDraft.items[1].requestedQuantity !== 50 ||
+    !dualDraft.readyToLog ||
+    dualDraft.needsClarification ||
+    dualSession.pendingClarification !== null ||
+    dualSession.activeEntityId !== null
+  ) {
+    throw new Error(
+      "Clarification Regression Test failed: Standalone quantity " +
+        "answer '50 grams' failed to resolve item or clear clarification"
+    );
+  }
+  console.log(
+    "PASS Clarification Regression Test: '50 grams' bound to pending " +
+      "entity, resolved draft, and cleared clarification"
+  );
+
+  // State Immutability & Mutation Scope Tests
+  console.log("\n--------------------------------------------------------");
+  console.log("RUNNING STATE IMMUTABILITY & MUTATION SCOPE TESTS");
+  console.log("--------------------------------------------------------\n");
+
+  const immutSession = ConversationStateManager.createDefaultSession("immut_u", "immut_s");
+  const baseProposal = await MealOrchestrator.prepareMeal(
+    {text: "100 g rice"},
+    ai2,
+    sharedNutrition
+  );
+  immutSession.mealDraft = {
+    ...baseProposal,
+    items: baseProposal.items.map((i, idx) =>
+      ConversationStateManager.ensureStableItemIdentity(i, idx)
+    ),
+    mealType: "breakfast",
+    mealTypeSource: "explicit",
+    readyToLog: true,
+  };
+
+  let interpretMealCalls = 0;
+  let resolveProposalItemCalls = 0;
+
+  const originalInterpretMeal = ai2.interpretMeal.bind(ai2);
+  ai2.interpretMeal = async (input) => {
+    interpretMealCalls++;
+    return originalInterpretMeal(input);
+  };
+
+  const originalResolveProposalItem =
+    MealOrchestrator.resolveProposalItem.bind(MealOrchestrator);
+  MealOrchestrator.resolveProposalItem = async (food, nutrition) => {
+    resolveProposalItemCalls++;
+    return originalResolveProposalItem(food, nutrition);
+  };
+
+  const beforeJson = JSON.stringify(immutSession.mealDraft.items);
+  const immutRes = await ConversationStateManager.processTurn(
+    immutSession,
+    "actually, it is dinner",
+    ai2, // Pass AI provider instance to prove isolation works even when aiProvider is present
+    sharedNutrition,
+    {}
+  );
+  const afterJson = JSON.stringify(immutRes.session.mealDraft?.items);
+
+  ai2.interpretMeal = originalInterpretMeal;
+  MealOrchestrator.resolveProposalItem = originalResolveProposalItem;
+
+  if (interpretMealCalls !== 0) {
+    throw new Error(
+      `State Immutability Test failed: interpretMeal calls = ${interpretMealCalls} (expected 0)`
+    );
+  }
+  if (resolveProposalItemCalls !== 0) {
+    throw new Error(
+      `State Immutability Test failed: resolveProposalItem calls = ${resolveProposalItemCalls} (expected 0)`
+    );
+  }
+  if (beforeJson !== afterJson) {
+    throw new Error(
+      "State Immutability Test failed: items were modified during CHANGE_MEAL_TYPE"
+    );
+  }
+  if (immutRes.session.mealDraft?.mealType !== "dinner") {
+    throw new Error("State Immutability Test failed: mealType did not update");
+  }
+  console.log(
+    `PASS State Immutability Test: interpretMeal calls = ${interpretMealCalls}, ` +
+    `resolveProposalItem calls = ${resolveProposalItemCalls}, items identical`
+  );
+
+  // Regression A & B Tests
+  console.log("\n--------------------------------------------------------");
+  console.log("RUNNING REGRESSION A & B TESTS");
+  console.log("--------------------------------------------------------\n");
+
+  let regASess = ConversationStateManager.createDefaultSession("u_rega", "s_rega");
+  regASess.mealDraft = {
+    originalText: "4 idlis for breakfast",
+    mealType: "breakfast",
+    mealTypeSource: "explicit",
+    interpretationConfidence: 0.98,
+    items: [
+      {
+        itemId: "item_idli_1",
+        interpretedName: "idli",
+        requestedQuantity: 4,
+        requestedUnit: "piece",
+        matchedFoodId: "idli_1",
+        matchedFoodName: "Idli",
+        brandName: null,
+        matchedServingId: "s_idli",
+        matchedServingDescription: "1 idli (55g)",
+        resolvedQuantity: 4,
+        weightGrams: 220,
+        nutrition: null,
+        matchConfidence: 0.98,
+        status: "resolved",
+        clarificationQuestion: null,
+      },
+    ],
+    readyToLog: true,
+    needsClarification: false,
+    clarificationQuestion: null,
+    resolvedItemCount: 1,
+    unresolvedItemCount: 0,
+    resolvedNutritionTotal: null,
+  };
+
+  const regARes = await ConversationStateManager.processTurn(
+    regASess,
+    "actually, it is dinner",
+    recAi,
+    sharedNutrition,
+    {}
+  );
+  if (
+    regARes.session.mealDraft?.mealType !== "dinner" ||
+    !regARes.session.mealDraft?.readyToLog ||
+    regARes.session.mealDraft?.items.length !== 1
+  ) {
+    throw new Error("Regression A test failed: readyToLog mealType did not update to dinner");
+  }
+  console.log("PASS Regression A: Modifying readyToLog meal type -> mealType=dinner, readyToLog=true");
+
+  let regBSess = ConversationStateManager.createDefaultSession("u_regb", "s_regb");
+  const regBRes = await ConversationStateManager.processTurn(
+    regBSess,
+    "what is my dinner today?",
+    recAi,
+    sharedNutrition,
+    {}
+  );
+  if (
+    regBRes.session.mealDraft !== null ||
+    regBRes.responseType !== "meal_recommendation"
+  ) {
+    throw new Error("Regression B test failed: Guidance question created a meal draft or failed recommendation routing");
+  }
+  console.log("PASS Regression B: Guidance question when fresh -> responseType=meal_recommendation, mealDraft=null");
+
+  // LIVE END-TO-END VERIFICATION SUITE (7 CONVERSATIONAL SEQUENCES)
+  console.log("\n--------------------------------------------------------");
+  console.log("RUNNING LIVE END-TO-END VERIFICATION SUITE (7 SEQUENCES)");
+  console.log("--------------------------------------------------------\n");
+
+  /**
+   * Helper to trace and log turn execution.
+   */
+  async function traceTurn(
+    session: ConversationSession,
+    message: string,
+    ai: AiProvider
+  ) {
+    const classResult = await ConversationStateManager.classifyTurn(
+      session,
+      message,
+      ai
+    );
+    const draftBefore = session.mealDraft ?
+      JSON.parse(JSON.stringify(session.mealDraft)) :
+      null;
+    let recoveryInvoked = false;
+    let turnOutput;
+    try {
+      turnOutput = await ConversationStateManager.processTurn(
+        session,
+        message,
+        ai,
+        sharedNutrition,
+        {}
+      );
+    } catch (err) {
+      if (err instanceof Error && err.message === "NO_MEAL_ENTITIES") {
+        recoveryInvoked = true;
+      }
+      throw err;
+    }
+    const draftAfter = turnOutput.session.mealDraft ?
+      JSON.parse(JSON.stringify(turnOutput.session.mealDraft)) :
+      null;
+
+    console.log(`[E2E Sequence Trace] message: "${message}"`);
+    console.log(`  - classifier turnType: ${classResult.turnType}`);
+    console.log(`  - mutations: ${JSON.stringify(classResult.mutations)}`);
+    console.log(`  - responseType: ${turnOutput.responseType}`);
+    console.log(
+      "  - mealDraft before: " +
+      (draftBefore ?
+        `${draftBefore.mealType} (items: ${draftBefore.items.length}, readyToLog: ${draftBefore.readyToLog})` :
+        "null")
+    );
+    console.log(
+      "  - mealDraft after: " +
+      (draftAfter ?
+        `${draftAfter.mealType} (items: ${draftAfter.items.length}, readyToLog: ${draftAfter.readyToLog})` :
+        "null")
+    );
+    console.log(`  - readyToLog: ${draftAfter?.readyToLog ?? false}`);
+    console.log(`  - activeEntityId: ${turnOutput.session.activeEntityId}`);
+    console.log(`  - NO_MEAL_ENTITIES recovery invoked: ${recoveryInvoked}`);
+    console.log("--------------------------------------------------------");
+
+    return turnOutput;
+  }
+
+  // 1. "Any ideas for a high protein evening meal?"
+  let e2eS1 = ConversationStateManager.createDefaultSession("e2e_1", "s_1");
+  let e2eT1 = await traceTurn(e2eS1, "Any ideas for a high protein evening meal?", recAi);
+  if (e2eT1.session.mealDraft !== null) {
+    throw new Error("E2E Test 1 failed: mealDraft should be null");
+  }
+
+  // 2. "I'm not sure what to have tonight."
+  let e2eS2 = ConversationStateManager.createDefaultSession("e2e_2", "s_2");
+  let e2eT2 = await traceTurn(e2eS2, "I'm not sure what to have tonight.", recAi);
+  if (e2eT2.session.mealDraft !== null) {
+    throw new Error("E2E Test 2 failed: mealDraft should be null");
+  }
+
+  // 3. "Help me figure out lunch."
+  let e2eS3 = ConversationStateManager.createDefaultSession("e2e_3", "s_3");
+  let e2eT3 = await traceTurn(e2eS3, "Help me figure out lunch.", recAi);
+  if (e2eT3.session.mealDraft !== null) {
+    throw new Error("E2E Test 3 failed: mealDraft should be null");
+  }
+
+  // 4. "I ate a bowl of rice."
+  let e2eS4 = ConversationStateManager.createDefaultSession("e2e_4", "s_4");
+  let e2eT4 = await traceTurn(e2eS4, "I ate a bowl of rice.", recAi);
+  if (!e2eT4.session.mealDraft?.readyToLog) {
+    throw new Error("E2E Test 4 failed: meal should be readyToLog");
+  }
+
+  // 5. "Put down two eggs for breakfast."
+  let e2eS5 = ConversationStateManager.createDefaultSession("e2e_5", "s_5");
+  let e2eT5 = await traceTurn(e2eS5, "Put down two eggs for breakfast.", recAi);
+  if (!e2eT5.session.mealDraft?.readyToLog || e2eT5.session.mealDraft.mealType !== "breakfast") {
+    throw new Error("E2E Test 5 failed: meal should be readyToLog for breakfast");
+  }
+
+  // 6. "Actually those eggs were three." (Modifying existing eggs meal draft)
+  let e2eT6 = await traceTurn(e2eT5.session, "Actually those eggs were three.", recAi);
+  if (e2eT6.session.mealDraft?.items[0].requestedQuantity !== 3) {
+    throw new Error("E2E Test 6 failed: eggs quantity should be modified to 3");
+  }
+
+  // 7. Existing ready-to-log meal (from test 4): "Could you give me another dinner idea?"
+  let e2eS7 = ConversationStateManager.createDefaultSession("e2e_7", "s_7");
+  e2eS7.mealDraft = e2eT4.session.mealDraft;
+  let e2eT7 = await traceTurn(e2eS7, "Could you give me another dinner idea?", recAi);
+  if (e2eT7.session.mealDraft === null || e2eT7.session.mealDraft.mealType !== "dinner") {
+    throw new Error("E2E Test 7 failed: existing mealDraft should be preserved unchanged");
+  }
+
+  console.log(
+    "PASS All 7 Live End-to-End Verification Sequences Successfully Completed"
+  );
+
+  // PHASE 4 SEMANTIC INVARIANT TESTS
+  console.log("\n--------------------------------------------------------");
+  console.log("RUNNING PHASE 4 SEMANTIC INVARIANT TESTS");
+  console.log("--------------------------------------------------------\n");
+
+  const pendingChutneyAi = new MockAiProvider({
+    foods: [
+      {name: "idli", quantity: 2, unit: "piece", modifiers: []},
+      {name: "chutney", quantity: null, unit: "g", modifiers: []},
+    ],
+    mealType: "breakfast",
+    mealTypeSource: "explicit",
+    confidence: 0.95,
+    needsClarification: true,
+    clarificationQuestion: "How much chutney did you have?",
+  });
+
+  class SoyRiceDalMockAi extends MockAiProvider {
+    async classifyTurnAndMutations(input: ClassifyTurnInput): Promise<TurnClassificationResult> {
+      return {
+        turnType: "NEW_MEAL_LOG",
+        intent: "log_meal",
+        mutations: [],
+      };
+    }
+    async interpretMeal(input: InterpretMealInput): Promise<MealInterpretation> {
+      return {
+        foods: [
+          {name: "soy chunks", quantity: null, unit: "g", modifiers: []},
+          {name: "rice", quantity: null, unit: "cup", modifiers: []},
+          {name: "dal", quantity: null, unit: "bowl", modifiers: []},
+        ],
+        mealType: null,
+        mealTypeSource: "unknown",
+        confidence: 0.95,
+        needsClarification: true,
+        clarificationQuestion: "How much soy chunks did you have?",
+      };
+    }
+  }
+
+  const soyRiceDalAi = new SoyRiceDalMockAi({
+    foods: [
+      {name: "soy chunks", quantity: null, unit: "g", modifiers: []},
+      {name: "rice", quantity: null, unit: "cup", modifiers: []},
+      {name: "dal", quantity: null, unit: "bowl", modifiers: []},
+    ],
+    mealType: null,
+    mealTypeSource: "unknown",
+    confidence: 0.95,
+    needsClarification: true,
+    clarificationQuestion: "How much soy chunks did you have?",
+  });
+
+  // Base Session Setup: 2 idlis (resolved) + chutney (unresolved, needs_quantity)
+  let baseSess = ConversationStateManager.createDefaultSession("u_p4", "s_p4");
+  const initTurn = await ConversationStateManager.processTurn(
+    baseSess,
+    "I had 2 idlis with chutney",
+    pendingChutneyAi,
+    sharedNutrition,
+    {}
+  );
+  baseSess = initTurn.session;
+
+  if (
+    !baseSess.pendingClarification ||
+    baseSess.activeEntityId !== "item_1" ||
+    baseSess.mealDraft?.items[1].interpretedName !== "chutney"
+  ) {
+    throw new Error("Phase 4 Base Session Setup failed");
+  }
+
+  // 1. pending quantity -> "2 tablespoons"
+  const p4Sess1 = JSON.parse(JSON.stringify(baseSess));
+  const class1 = await ConversationStateManager.classifyTurn(p4Sess1, "2 tablespoons", pendingChutneyAi);
+  if (class1.turnType !== "ANSWER_TO_PENDING_CLARIFICATION") {
+    throw new Error(`Phase 4 Test 1 classification failed: got ${class1.turnType}`);
+  }
+  const turn1 = await ConversationStateManager.processTurn(p4Sess1, "2 tablespoons", pendingChutneyAi, sharedNutrition, {});
+  if (
+    turn1.session.mealDraft?.items[1].requestedQuantity !== 2 ||
+    turn1.session.mealDraft?.items[1].requestedUnit !== "tablespoon" ||
+    !turn1.session.mealDraft?.readyToLog
+  ) {
+    throw new Error("Phase 4 Test 1 state verification failed: '2 tablespoons'");
+  }
+  console.log("PASS Phase 4 Test 1: pending quantity -> '2 tablespoons' (turnType=ANSWER_TO_PENDING_CLARIFICATION, readyToLog=true)");
+
+  // 2. pending quantity -> "about fifty grams"
+  const p4Sess2 = JSON.parse(JSON.stringify(baseSess));
+  const class2 = await ConversationStateManager.classifyTurn(p4Sess2, "about fifty grams", pendingChutneyAi);
+  if (class2.turnType !== "ANSWER_TO_PENDING_CLARIFICATION") {
+    throw new Error(`Phase 4 Test 2 classification failed: got ${class2.turnType}`);
+  }
+  const turn2 = await ConversationStateManager.processTurn(p4Sess2, "about fifty grams", pendingChutneyAi, sharedNutrition, {});
+  if (
+    turn2.session.mealDraft?.items[1].requestedQuantity !== 50 ||
+    !turn2.session.mealDraft?.readyToLog
+  ) {
+    throw new Error("Phase 4 Test 2 state verification failed: 'about fifty grams'");
+  }
+  console.log("PASS Phase 4 Test 2: pending quantity -> 'about fifty grams' (turnType=ANSWER_TO_PENDING_CLARIFICATION, readyToLog=true)");
+
+  // 3. pending quantity -> "actually no chutney"
+  class NoChutneyMockAi extends MockAiProvider {
+    async classifyTurnAndMutations(input: ClassifyTurnInput): Promise<TurnClassificationResult> {
+      return {
+        turnType: "MODIFICATION_OF_PENDING_TASK",
+        intent: "log_meal",
+        mutations: [
+          {
+            op: "REMOVE_ITEM",
+            targetEntityId: "item_1",
+            targetFoodName: "chutney",
+            foodName: null,
+            quantity: null,
+            unit: null,
+            addModifiers: [],
+            removeModifiers: [],
+            mealType: null,
+          },
+        ],
+      };
+    }
+  }
+  const noChutneyAi = new NoChutneyMockAi({
+    foods: [{name: "idli", quantity: 2, unit: "piece", modifiers: []}],
+    mealType: "breakfast",
+    mealTypeSource: "explicit",
+    confidence: 0.95,
+    needsClarification: false,
+    clarificationQuestion: null,
+  });
+  const p4Sess3 = JSON.parse(JSON.stringify(baseSess));
+  const class3 = await ConversationStateManager.classifyTurn(p4Sess3, "actually no chutney", noChutneyAi);
+  if (class3.turnType !== "MODIFICATION_OF_PENDING_TASK") {
+    throw new Error(`Phase 4 Test 3 classification failed: got ${class3.turnType}`);
+  }
+  const turn3 = await ConversationStateManager.processTurn(p4Sess3, "actually no chutney", noChutneyAi, sharedNutrition, {});
+  if (
+    turn3.session.mealDraft?.items.length !== 1 ||
+    turn3.session.mealDraft?.items[0].interpretedName !== "idli" ||
+    !turn3.session.mealDraft?.readyToLog
+  ) {
+    throw new Error("Phase 4 Test 3 state verification failed: 'actually no chutney'");
+  }
+  console.log("PASS Phase 4 Test 3: pending quantity -> 'actually no chutney' (turnType=MODIFICATION_OF_PENDING_TASK, item removed, readyToLog=true)");
+
+  // 4. pending quantity -> "I had soy chunks, rice, and dal"
+  const p4Sess4 = JSON.parse(JSON.stringify(baseSess));
+  const class4 = await ConversationStateManager.classifyTurn(p4Sess4, "I had soy chunks, rice, and dal", soyRiceDalAi);
+  if (class4.turnType !== "NEW_MEAL_LOG") {
+    throw new Error(`Phase 4 Test 4 classification failed: expected NEW_MEAL_LOG but got ${class4.turnType}`);
+  }
+  const turn4 = await ConversationStateManager.processTurn(p4Sess4, "I had soy chunks, rice, and dal", soyRiceDalAi, sharedNutrition, {});
+  const newDraft = turn4.session.mealDraft;
+  if (!newDraft || newDraft.items.length !== 3) {
+    throw new Error(`Phase 4 Test 4 failed: expected 3 items in new draft, got ${newDraft?.items.length}`);
+  }
+  const itemNames4 = newDraft.items.map((i) => i.interpretedName);
+  if (
+    !itemNames4.includes("soy chunks") ||
+    !itemNames4.includes("rice") ||
+    !itemNames4.includes("dal")
+  ) {
+    throw new Error(`Phase 4 Test 4 failed: items ${JSON.stringify(itemNames4)} do not match expected [soy chunks, rice, dal]`);
+  }
+  if (itemNames4.includes("idli") || itemNames4.includes("chutney")) {
+    throw new Error("Phase 4 Test 4 failed: previous idli/chutney draft was incorrectly merged into new meal draft");
+  }
+  console.log("PASS Phase 4 Test 4: pending quantity -> 'I had soy chunks, rice, and dal' (classified as NEW_MEAL_LOG, 3 items survived, isolated from old draft)");
+
+  // 5. pending quantity -> "What should I eat for dinner?"
+  class GuidanceQuestionMockAi extends MockAiProvider {
+    async classifyTurnAndMutations(input: ClassifyTurnInput): Promise<TurnClassificationResult> {
+      return {
+        turnType: "NEW_INTENT",
+        intent: "daily_guidance",
+        mutations: [],
+      };
+    }
+  }
+  const guidanceAi = new GuidanceQuestionMockAi({
+    foods: [],
+    mealType: null,
+    mealTypeSource: "unknown",
+    confidence: 0.9,
+    needsClarification: false,
+    clarificationQuestion: null,
+  });
+  const p4Sess5 = JSON.parse(JSON.stringify(baseSess));
+  const class5 = await ConversationStateManager.classifyTurn(p4Sess5, "What should I eat for dinner?", guidanceAi);
+  if (class5.turnType !== "NEW_INTENT") {
+    throw new Error(`Phase 4 Test 5 classification failed: expected NEW_INTENT but got ${class5.turnType}`);
+  }
+  const turn5 = await ConversationStateManager.processTurn(p4Sess5, "What should I eat for dinner?", guidanceAi, sharedNutrition, {});
+  if (turn5.session.mealDraft === null || turn5.session.mealDraft.items.length !== 2) {
+    throw new Error("Phase 4 Test 5 failed: previous draft was destroyed on guidance intent interruption");
+  }
+  console.log("PASS Phase 4 Test 5: pending quantity -> 'What should I eat for dinner?' (classified as NEW_INTENT, draft preserved)");
+
+  // P1 FOOD RESOLUTION DECISION LAYER SUITE
+  console.log("\n--------------------------------------------------------");
+  console.log("RUNNING P1 FOOD RESOLUTION DECISION LAYER SUITE (11 SCENARIOS)");
+  console.log("--------------------------------------------------------\n");
+
+  const resolutionEngine = new FoodResolutionEngine();
+
+  // Scenario 1: "soy chunks" -> Soya Chunks (AUTO_SELECT)
+  const p1Res1 = await resolutionEngine.resolveCandidates(
+    "soy chunks",
+    [
+      {foodId: "s1", name: "Soya Chunks", brandName: "Bansi", caloriesPer100g: 325, provider: "fatsecret"},
+      {foodId: "s2", name: "Pineapple Chunks", brandName: null, caloriesPer100g: 86, provider: "fatsecret"},
+    ],
+    stateAi
+  );
+  if (p1Res1.type !== "AUTO_SELECT" || p1Res1.selectedCandidate?.foodId !== "s1") {
+    throw new Error(`P1 Scenario 1 failed: expected AUTO_SELECT for Soya Chunks, got ${p1Res1.type}`);
+  }
+  console.log("PASS P1 Scenario 1: 'soy chunks' -> Soya Chunks (AUTO_SELECT, no food match question)");
+
+  // Scenario 2: "chickpeas" -> Garbanzo Beans (AUTO_SELECT)
+  const p1Res2 = await resolutionEngine.resolveCandidates(
+    "chickpeas",
+    [{foodId: "c1", name: "Garbanzo Beans", brandName: null, caloriesPer100g: 164, provider: "fatsecret"}],
+    stateAi
+  );
+  if (p1Res2.type !== "AUTO_SELECT" || p1Res2.selectedCandidate?.foodId !== "c1") {
+    throw new Error("P1 Scenario 2 failed: expected AUTO_SELECT for Garbanzo Beans");
+  }
+  console.log("PASS P1 Scenario 2: 'chickpeas' -> Garbanzo Beans (AUTO_SELECT)");
+
+  // Scenario 3: "curd" -> Yogurt (AUTO_SELECT)
+  const p1Res3 = await resolutionEngine.resolveCandidates(
+    "curd",
+    [{foodId: "cu1", name: "Plain Yogurt", brandName: null, caloriesPer100g: 61, provider: "fatsecret"}],
+    stateAi
+  );
+  if (p1Res3.type !== "AUTO_SELECT" || p1Res3.selectedCandidate?.foodId !== "cu1") {
+    throw new Error("P1 Scenario 3 failed: expected AUTO_SELECT for Yogurt");
+  }
+  console.log("PASS P1 Scenario 3: 'curd' -> Yogurt (AUTO_SELECT)");
+
+  // Scenario 4: "roti" -> generic vs branded (AUTO_SELECT generic)
+  const p1Res4 = await resolutionEngine.resolveCandidates(
+    "roti",
+    [
+      {foodId: "r1", name: "Whole Wheat Roti", brandName: null, caloriesPer100g: 260, provider: "fatsecret"},
+      {foodId: "r2", name: "Branded Roti", brandName: "Deep", caloriesPer100g: 280, provider: "fatsecret"},
+    ],
+    stateAi
+  );
+  if (p1Res4.type !== "AUTO_SELECT" || p1Res4.selectedCandidate?.foodId !== "r1") {
+    throw new Error("P1 Scenario 4 failed: expected generic Roti to win over branded");
+  }
+  console.log("PASS P1 Scenario 4: 'roti' -> generic vs branded (AUTO_SELECT generic)");
+
+  // Scenario 5: "apple" -> Apple vs Apple Juice vs Apple Pie (AUTO_SELECT raw Apple)
+  const p1Res5 = await resolutionEngine.resolveCandidates(
+    "apple",
+    [
+      {foodId: "a1", name: "Raw Apple", brandName: null, caloriesPer100g: 52, provider: "fatsecret"},
+      {foodId: "a2", name: "Apple Juice", brandName: null, caloriesPer100g: 46, provider: "fatsecret"},
+      {foodId: "a3", name: "Apple Pie", brandName: null, caloriesPer100g: 237, provider: "fatsecret"},
+    ],
+    stateAi
+  );
+  if (p1Res5.type !== "AUTO_SELECT" || p1Res5.selectedCandidate?.foodId !== "a1") {
+    throw new Error("P1 Scenario 5 failed: expected raw Apple auto-selected over Juice/Pie");
+  }
+  console.log("PASS P1 Scenario 5: 'apple' -> Raw Apple selected over Juice/Pie (AUTO_SELECT)");
+
+  // Scenario 6: "protein shake" -> meaningful alternatives (OFFER_OPTIONS)
+  const p1Res6 = await resolutionEngine.resolveCandidates(
+    "protein shake",
+    [
+      {foodId: "ps1", name: "Whey Protein Shake", brandName: "Optimum", caloriesPer100g: 120, provider: "fatsecret"},
+      {foodId: "ps2", name: "Mass Gainer Shake", brandName: "Serious Mass", caloriesPer100g: 450, provider: "fatsecret"},
+    ],
+    stateAi
+  );
+  if (p1Res6.type !== "OFFER_OPTIONS" || !p1Res6.options || p1Res6.options.length < 2) {
+    throw new Error("P1 Scenario 6 failed: expected OFFER_OPTIONS for protein shake");
+  }
+  console.log("PASS P1 Scenario 6: 'protein shake' -> OFFER_OPTIONS with user-friendly labels");
+
+  // Scenario 7: "soy" -> Soy Milk vs Soy Nuts vs Soy Chunks (ASK_CLARIFICATION)
+  const p1Res7 = await resolutionEngine.resolveCandidates(
+    "soy",
+    [
+      {foodId: "s1", name: "Soy Milk", brandName: null, caloriesPer100g: 54, provider: "fatsecret"},
+      {foodId: "s2", name: "Soy Nuts", brandName: null, caloriesPer100g: 471, provider: "fatsecret"},
+      {foodId: "s3", name: "Soy Chunks", brandName: null, caloriesPer100g: 345, provider: "fatsecret"},
+    ],
+    stateAi
+  );
+  if (p1Res7.type !== "ASK_CLARIFICATION" || !p1Res7.options || p1Res7.options.length < 3) {
+    throw new Error("P1 Scenario 7 failed: expected ASK_CLARIFICATION for generic 'soy'");
+  }
+  console.log("PASS P1 Scenario 7: 'soy' -> ASK_CLARIFICATION for distinct soy products");
+
+  // Scenario 8: "coke" -> Coca-Cola vs unrelated (AUTO_SELECT)
+  const p1Res8 = await resolutionEngine.resolveCandidates(
+    "coke",
+    [{foodId: "ck1", name: "Coca-Cola", brandName: null, caloriesPer100g: 38, provider: "fatsecret"}],
+    stateAi
+  );
+  if (p1Res8.type !== "AUTO_SELECT" || p1Res8.selectedCandidate?.foodId !== "ck1") {
+    throw new Error("P1 Scenario 8 failed: expected AUTO_SELECT for Coca-Cola");
+  }
+  console.log("PASS P1 Scenario 8: 'coke' -> Coca-Cola (AUTO_SELECT)");
+
+  // Scenario 9: "chicken" -> chicken breast vs wings (OFFER_OPTIONS)
+  const p1Res9 = await resolutionEngine.resolveCandidates(
+    "chicken",
+    [
+      {foodId: "ch1", name: "Chicken Breast", brandName: null, caloriesPer100g: 165, provider: "fatsecret"},
+      {foodId: "ch2", name: "Chicken Wings", brandName: null, caloriesPer100g: 290, provider: "fatsecret"},
+    ],
+    stateAi
+  );
+  if (p1Res9.type !== "OFFER_OPTIONS" || !p1Res9.options || p1Res9.options.length < 2) {
+    throw new Error("P1 Scenario 9 failed: expected OFFER_OPTIONS for chicken breast vs wings");
+  }
+  console.log("PASS P1 Scenario 9: 'chicken' -> OFFER_OPTIONS for breast vs wings");
+
+  // Scenario 10: "coffee" -> black coffee vs latte/cappuccino (OFFER_OPTIONS)
+  const p1Res10 = await resolutionEngine.resolveCandidates(
+    "coffee",
+    [
+      {foodId: "cof1", name: "Black Coffee", brandName: null, caloriesPer100g: 2, provider: "fatsecret"},
+      {foodId: "cof2", name: "Coffee Latte", brandName: null, caloriesPer100g: 110, provider: "fatsecret"},
+    ],
+    stateAi
+  );
+  if (p1Res10.type !== "OFFER_OPTIONS" || !p1Res10.options || p1Res10.options.length < 2) {
+    throw new Error("P1 Scenario 10 failed: expected OFFER_OPTIONS for black coffee vs latte");
+  }
+  console.log("PASS P1 Scenario 10: 'coffee' -> OFFER_OPTIONS for black coffee vs latte");
+
+  // Scenario 11: Regional Indian food "poha" -> Flattened Rice (AUTO_SELECT)
+  const p1Res11 = await resolutionEngine.resolveCandidates(
+    "poha",
+    [{foodId: "poh1", name: "Flattened Rice (Poha)", brandName: null, caloriesPer100g: 325, provider: "fatsecret"}],
+    stateAi
+  );
+  if (p1Res11.type !== "AUTO_SELECT" || p1Res11.selectedCandidate?.foodId !== "poh1") {
+    throw new Error("P1 Scenario 11 failed: expected AUTO_SELECT for Poha");
+  }
+  console.log("PASS P1 Scenario 11: 'poha' -> Flattened Rice (Poha) (AUTO_SELECT)");
 
   console.log(
     "\n========================================================\n" +

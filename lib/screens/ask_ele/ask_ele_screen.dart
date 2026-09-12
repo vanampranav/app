@@ -19,6 +19,7 @@ import '../../widgets/main_layout.dart';
 import '../home_screen.dart';
 
 enum ChatMessageType { text, mealProposal, mealRecommendation }
+
 enum AskEleIntent { logMeal, dailyGuidance }
 
 class ChatMessage {
@@ -554,11 +555,13 @@ class _AskEleScreenState extends State<AskEleScreen> {
     MealRecommendationOption option,
   ) {
     try {
-      _backendService.saveRecommendationFeedback(
+      _backendService
+          .saveRecommendationFeedback(
         action: 'selected',
         recommendationId: rec.recommendationId,
         optionId: option.optionId,
-      ).catchError((e) {
+      )
+          .catchError((e) {
         debugPrint('Feedback save error (ignored): $e');
         return <String, dynamic>{};
       });
@@ -577,12 +580,29 @@ class _AskEleScreenState extends State<AskEleScreen> {
     _handleSendMessage("I'll choose ${option.title}");
   }
 
+  void _handleFoodOptionSelection(
+    MealProposalItem item,
+    FoodResolutionOption option,
+  ) {
+    final selectedOptionMap = {
+      'optionId': option.optionId,
+      'providerFoodId': option.providerFoodId,
+      'targetEntityId': item.itemId ?? '',
+      'semanticFoodName': option.semanticFoodName,
+    };
+
+    final displayText = 'Selected ${option.label}';
+    _handleSendMessage(displayText, selectedOptionMap);
+  }
+
   void _handleRecommendationRefresh(MealRecommendationResponse rec) {
     try {
-      _backendService.saveRecommendationFeedback(
+      _backendService
+          .saveRecommendationFeedback(
         action: 'refreshed',
         recommendationId: rec.recommendationId,
-      ).catchError((e) {
+      )
+          .catchError((e) {
         debugPrint('Feedback save error (ignored): $e');
         return <String, dynamic>{};
       });
@@ -599,11 +619,13 @@ class _AskEleScreenState extends State<AskEleScreen> {
     String action,
   ) {
     try {
-      _backendService.saveRecommendationFeedback(
+      _backendService
+          .saveRecommendationFeedback(
         action: action,
         recommendationId: recommendationId,
         optionId: optionId,
-      ).catchError((e) {
+      )
+          .catchError((e) {
         debugPrint('Feedback save error (ignored): $e');
         return <String, dynamic>{};
       });
@@ -612,7 +634,8 @@ class _AskEleScreenState extends State<AskEleScreen> {
     }
   }
 
-  Future<void> _handleSendMessage([String? overrideText]) async {
+  Future<void> _handleSendMessage(
+      [String? overrideText, Map<String, dynamic>? selectedOption]) async {
     final query = (overrideText ?? _inputController.text).trim();
 
     FocusScope.of(context).unfocus();
@@ -659,6 +682,7 @@ class _AskEleScreenState extends State<AskEleScreen> {
         message: query,
         todayContext: todayContext.toJson(),
         recommendationContext: _activeRecommendationContext?.toJson(),
+        selectedOption: selectedOption,
       );
 
       if (!mounted) return;
@@ -669,8 +693,23 @@ class _AskEleScreenState extends State<AskEleScreen> {
       if (turnResult['proposal'] is Map<String, dynamic>) {
         final proposalMap =
             Map<String, dynamic>.from(turnResult['proposal'] as Map);
+
+        debugPrint(
+            '[FLUTTER DIAGNOSTIC 2] Immediately before MealProposal.fromJson(proposalMap):');
+        debugPrint('  - proposalMap.keys: ${proposalMap.keys.toList()}');
+        final pItems2 = proposalMap['items'] as List?;
+        debugPrint('  - proposalMap["items"].length: ${pItems2?.length}');
+        debugPrint(
+            '  - item names: ${pItems2?.map((i) => (i is Map) ? i['interpretedName'] : 'unknown').toList()}');
+
         _updateActiveProposalAndPendingClarification(proposalMap);
         final proposal = MealProposal.fromJson(proposalMap);
+
+        debugPrint(
+            '[FLUTTER DIAGNOSTIC 4] Immediately after MealProposal.fromJson():');
+        debugPrint('  - proposal.items.length: ${proposal.items.length}');
+        debugPrint(
+            '  - proposal item names: ${proposal.items.map((i) => i.interpretedName).toList()}');
 
         setState(() {
           if (responseText.isNotEmpty &&
@@ -679,14 +718,20 @@ class _AskEleScreenState extends State<AskEleScreen> {
               !responseText.startsWith('Updated meal')) {
             _messages.add(ChatMessage.text(text: responseText, isUser: false));
           }
+
+          debugPrint(
+              '[FLUTTER DIAGNOSTIC 5] Immediately before ChatMessage.proposal(proposal: proposal):');
+          debugPrint('  - proposal.items.length: ${proposal.items.length}');
+          debugPrint(
+              '  - item names: ${proposal.items.map((i) => i.interpretedName).toList()}');
+
           _messages.add(ChatMessage.proposal(proposal: proposal));
 
           if (proposal.needsClarification &&
               proposal.clarificationQuestion != null &&
               proposal.clarificationQuestion!.isNotEmpty) {
             final nextQ = proposal.clarificationQuestion!;
-            final lastText =
-                _messages.isNotEmpty ? _messages.last.text : null;
+            final lastText = _messages.isNotEmpty ? _messages.last.text : null;
             if (lastText != nextQ) {
               _messages.add(ChatMessage.text(text: nextQ, isUser: false));
             }
@@ -699,15 +744,14 @@ class _AskEleScreenState extends State<AskEleScreen> {
       if (turnResult['recommendation'] is Map<String, dynamic>) {
         final recMap =
             Map<String, dynamic>.from(turnResult['recommendation'] as Map);
-        _activeRecommendationContext =
-            RecommendationContext.fromJson(recMap);
+        _activeRecommendationContext = RecommendationContext.fromJson(recMap);
         if (recMap['options'] is List &&
             (recMap['options'] as List).isNotEmpty) {
           final structuredRec = MealRecommendationResponse.fromJson(recMap);
           setState(() {
             if (responseText.isNotEmpty) {
-              _messages.add(
-                  ChatMessage.text(text: responseText, isUser: false));
+              _messages
+                  .add(ChatMessage.text(text: responseText, isUser: false));
             }
             _messages.add(
               ChatMessage.recommendation(recommendation: structuredRec),
@@ -738,16 +782,14 @@ class _AskEleScreenState extends State<AskEleScreen> {
 
         if (!mounted) return;
 
-        final responseText =
-            guidanceData['responseText'] as String? ?? '';
+        final responseText = guidanceData['responseText'] as String? ?? '';
 
         // Update recommendation context if returned
         MealRecommendationResponse? structuredRec;
         if (guidanceData['recommendation'] is Map<String, dynamic>) {
-          final recMap = Map<String, dynamic>.from(
-              guidanceData['recommendation'] as Map);
-          _activeRecommendationContext =
-              RecommendationContext.fromJson(recMap);
+          final recMap =
+              Map<String, dynamic>.from(guidanceData['recommendation'] as Map);
+          _activeRecommendationContext = RecommendationContext.fromJson(recMap);
           if (recMap['options'] is List &&
               (recMap['options'] as List).isNotEmpty) {
             structuredRec = MealRecommendationResponse.fromJson(recMap);
@@ -756,8 +798,8 @@ class _AskEleScreenState extends State<AskEleScreen> {
 
         // If backend returned a prepared proposal (because quantities were provided for recommendation)
         if (guidanceData['proposal'] is Map<String, dynamic>) {
-          final proposalMap = Map<String, dynamic>.from(
-              guidanceData['proposal'] as Map);
+          final proposalMap =
+              Map<String, dynamic>.from(guidanceData['proposal'] as Map);
           _updateActiveProposalAndPendingClarification(proposalMap);
           final proposal = MealProposal.fromJson(proposalMap);
 
@@ -789,15 +831,13 @@ class _AskEleScreenState extends State<AskEleScreen> {
         }
 
         // If backend returned preparedMealText (fallback if proposal not pre-computed)
-        final preparedMealText =
-            guidanceData['preparedMealText'] as String?;
-        final suggestedMealType =
-            guidanceData['suggestedMealType'] as String?;
+        final preparedMealText = guidanceData['preparedMealText'] as String?;
+        final suggestedMealType = guidanceData['suggestedMealType'] as String?;
         if (preparedMealText != null && preparedMealText.isNotEmpty) {
           final proposalMap = await _backendService.prepareMeal(
             preparedMealText,
-            suggestedMealType: suggestedMealType ??
-                _activeRecommendationContext?.mealType,
+            suggestedMealType:
+                suggestedMealType ?? _activeRecommendationContext?.mealType,
           );
           final proposal = MealProposal.fromJson(proposalMap);
 
@@ -835,8 +875,7 @@ class _AskEleScreenState extends State<AskEleScreen> {
         // Standard guidance or structured recommendation cards
         setState(() {
           if (responseText.isNotEmpty) {
-            _messages
-                .add(ChatMessage.text(text: responseText, isUser: false));
+            _messages.add(ChatMessage.text(text: responseText, isUser: false));
           }
           if (structuredRec != null) {
             _messages.add(
@@ -872,8 +911,7 @@ class _AskEleScreenState extends State<AskEleScreen> {
               proposal.clarificationQuestion != null &&
               proposal.clarificationQuestion!.isNotEmpty) {
             final question = proposal.clarificationQuestion!;
-            final lastMsg =
-                _messages.isNotEmpty ? _messages.last.text : null;
+            final lastMsg = _messages.isNotEmpty ? _messages.last.text : null;
             if (lastMsg != question) {
               _messages.add(
                 ChatMessage.text(
@@ -1036,176 +1074,181 @@ class _AskEleScreenState extends State<AskEleScreen> {
                     ScrollViewKeyboardDismissBehavior.onDrag,
                 padding: const EdgeInsets.all(AppTheme.md),
                 children: [
-                // Ele Initial Welcome Card
-                Container(
-                  padding: const EdgeInsets.all(AppTheme.md),
-                  decoration: BoxDecoration(
-                    gradient: AppTheme.purpleGradient,
-                    borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-                    border: Border.all(
-                      color: AppTheme.purple.withValues(alpha: 0.5),
-                    ),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: AppTheme.lime.withValues(alpha: 0.15),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.auto_awesome_rounded,
-                          color: AppTheme.lime,
-                          size: 20,
-                        ),
+                  // Ele Initial Welcome Card
+                  Container(
+                    padding: const EdgeInsets.all(AppTheme.md),
+                    decoration: BoxDecoration(
+                      gradient: AppTheme.purpleGradient,
+                      borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                      border: Border.all(
+                        color: AppTheme.purple.withValues(alpha: 0.5),
                       ),
-                      const SizedBox(width: AppTheme.md),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Hi! I\'m Ele, your AI fitness assistant.',
-                              style: AppTheme.headingSM.copyWith(fontSize: 15),
-                            ),
-                            const SizedBox(height: AppTheme.xs),
-                            Text(
-                              'You can ask me anything about nutrition, workouts, progress, or your goals.',
-                              style: AppTheme.bodyMD.copyWith(
-                                color: AppTheme.textPrimary.withValues(alpha: 0.9),
-                                height: 1.35,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: AppTheme.lg),
-
-                // Quick Prompts Section
-                if (_messages.isEmpty) ...[
-                  Text(
-                    'Try something like:',
-                    style: AppTheme.labelMD.copyWith(
-                      color: AppTheme.textSecondary,
                     ),
-                  ),
-                  const SizedBox(height: AppTheme.sm),
-                  Wrap(
-                    spacing: AppTheme.xs,
-                    runSpacing: AppTheme.xs,
-                    children: _quickPrompts.map((prompt) {
-                      return AskEleQuickActionChip(
-                        label: prompt,
-                        icon: Icons.chat_bubble_outline_rounded,
-                        onTap: () {
-                          _inputController.text = prompt;
-                          _handleSendMessage();
-                        },
-                      );
-                    }).toList(),
-                  ),
-                  const SizedBox(height: AppTheme.lg),
-                ],
-
-                // Conversation Message List
-                ..._messages.map((msg) {
-                  if (msg.type == ChatMessageType.mealProposal &&
-                      msg.proposal != null) {
-                    final isLogged = _loggedOriginalTexts.contains(
-                        msg.proposal!.originalText);
-                    return AskEleMealProposalCard(
-                      proposal: msg.proposal!,
-                      onConfirmAndLog: () => _handleConfirmAndLog(msg.proposal!),
-                      isLogging: _isLoggingMeal,
-                      isLogged: isLogged,
-                    );
-                  }
-                  if (msg.type == ChatMessageType.mealRecommendation &&
-                      msg.recommendation != null) {
-                    return AskEleMealRecommendationCard(
-                      recommendation: msg.recommendation!,
-                      selectedOptionId:
-                          _activeRecommendationContext?.selectedOptionId,
-                      onOptionSelected: (option) => _handleOptionSelection(
-                          msg.recommendation!, option),
-                      onFeedback: (optionId, action) => _handleOptionFeedback(
-                          msg.recommendation!.recommendationId,
-                          optionId,
-                          action),
-                      onRefresh: () =>
-                          _handleRecommendationRefresh(msg.recommendation!),
-                    );
-                  }
-                  return AskEleMessageBubble(
-                    text: msg.text ?? '',
-                    isUser: msg.isUser,
-                  );
-                }),
-
-                // Ele Loading State
-                if (_isLoading) ...[
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8.0),
                     child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Container(
-                          width: 28,
-                          height: 28,
+                          width: 36,
+                          height: 36,
                           decoration: BoxDecoration(
-                            color: AppTheme.purple,
+                            color: AppTheme.lime.withValues(alpha: 0.15),
                             shape: BoxShape.circle,
-                            border: Border.all(
-                              color: AppTheme.lime.withValues(alpha: 0.5),
-                            ),
                           ),
                           child: const Icon(
                             Icons.auto_awesome_rounded,
                             color: AppTheme.lime,
-                            size: 14,
+                            size: 20,
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Ele is working it out...',
-                          style: AppTheme.bodySM.copyWith(
-                            color: AppTheme.textSecondary,
-                            fontStyle: FontStyle.italic,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        const SizedBox(
-                          width: 12,
-                          height: 12,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 1.5,
-                            color: AppTheme.lime,
+                        const SizedBox(width: AppTheme.md),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Hi! I\'m Ele, your AI fitness assistant.',
+                                style:
+                                    AppTheme.headingSM.copyWith(fontSize: 15),
+                              ),
+                              const SizedBox(height: AppTheme.xs),
+                              Text(
+                                'You can ask me anything about nutrition, workouts, progress, or your goals.',
+                                style: AppTheme.bodyMD.copyWith(
+                                  color: AppTheme.textPrimary
+                                      .withValues(alpha: 0.9),
+                                  height: 1.35,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
                     ),
                   ),
-                ],
-              ],
-            ),
-          ),
+                  const SizedBox(height: AppTheme.lg),
 
-          // ── Bottom Persistent Input Bar ────────────────────────────────────
-          AskEleInputBar(
-            controller: _inputController,
-            onSend: _handleSendMessage,
-            onMicTap: _handleMicTap,
-            isLoading: _isLoading || _isLoggingMeal,
-            isListening: _isListening,
-          ),
-        ],
+                  // Quick Prompts Section
+                  if (_messages.isEmpty) ...[
+                    Text(
+                      'Try something like:',
+                      style: AppTheme.labelMD.copyWith(
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: AppTheme.sm),
+                    Wrap(
+                      spacing: AppTheme.xs,
+                      runSpacing: AppTheme.xs,
+                      children: _quickPrompts.map((prompt) {
+                        return AskEleQuickActionChip(
+                          label: prompt,
+                          icon: Icons.chat_bubble_outline_rounded,
+                          onTap: () {
+                            _inputController.text = prompt;
+                            _handleSendMessage();
+                          },
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: AppTheme.lg),
+                  ],
+
+                  // Conversation Message List
+                  ..._messages.map((msg) {
+                    if (msg.type == ChatMessageType.mealProposal &&
+                        msg.proposal != null) {
+                      final isLogged = _loggedOriginalTexts
+                          .contains(msg.proposal!.originalText);
+                      return AskEleMealProposalCard(
+                        proposal: msg.proposal!,
+                        onConfirmAndLog: () =>
+                            _handleConfirmAndLog(msg.proposal!),
+                        onOptionSelected: (item, option) =>
+                            _handleFoodOptionSelection(item, option),
+                        isLogging: _isLoggingMeal,
+                        isLogged: isLogged,
+                      );
+                    }
+                    if (msg.type == ChatMessageType.mealRecommendation &&
+                        msg.recommendation != null) {
+                      return AskEleMealRecommendationCard(
+                        recommendation: msg.recommendation!,
+                        selectedOptionId:
+                            _activeRecommendationContext?.selectedOptionId,
+                        onOptionSelected: (option) =>
+                            _handleOptionSelection(msg.recommendation!, option),
+                        onFeedback: (optionId, action) => _handleOptionFeedback(
+                            msg.recommendation!.recommendationId,
+                            optionId,
+                            action),
+                        onRefresh: () =>
+                            _handleRecommendationRefresh(msg.recommendation!),
+                      );
+                    }
+                    return AskEleMessageBubble(
+                      text: msg.text ?? '',
+                      isUser: msg.isUser,
+                    );
+                  }),
+
+                  // Ele Loading State
+                  if (_isLoading) ...[
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8.0),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 28,
+                            height: 28,
+                            decoration: BoxDecoration(
+                              color: AppTheme.purple,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: AppTheme.lime.withValues(alpha: 0.5),
+                              ),
+                            ),
+                            child: const Icon(
+                              Icons.auto_awesome_rounded,
+                              color: AppTheme.lime,
+                              size: 14,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Ele is working it out...',
+                            style: AppTheme.bodySM.copyWith(
+                              color: AppTheme.textSecondary,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          const SizedBox(
+                            width: 12,
+                            height: 12,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 1.5,
+                              color: AppTheme.lime,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+
+            // ── Bottom Persistent Input Bar ────────────────────────────────────
+            AskEleInputBar(
+              controller: _inputController,
+              onSend: _handleSendMessage,
+              onMicTap: _handleMicTap,
+              isLoading: _isLoading || _isLoggingMeal,
+              isListening: _isListening,
+            ),
+          ],
+        ),
       ),
-    ),
-  );
-}
+    );
+  }
 }

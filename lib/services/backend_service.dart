@@ -124,6 +124,7 @@ class BackendService {
     required String message,
     required Map<String, dynamic> todayContext,
     Map<String, dynamic>? recommendationContext,
+    Map<String, dynamic>? selectedOption,
   }) async {
     try {
       final HttpsCallable callable =
@@ -134,12 +135,29 @@ class BackendService {
         'todayContext': todayContext,
         if (recommendationContext != null)
           'recommendationContext': recommendationContext,
+        if (selectedOption != null) 'selectedOption': selectedOption,
       };
 
       final HttpsCallableResult result = await callable.call(payload);
 
       final normalized =
           _normalizeFirebaseValue(result.data) as Map<String, dynamic>;
+
+      debugPrint('[FLUTTER DIAGNOSTIC 1] Raw callable response received from Firebase:');
+      debugPrint('  - responseType: ${normalized['responseType']}');
+      final prop1 = normalized['proposal'];
+      debugPrint('  - proposal exists: ${prop1 != null}');
+      if (prop1 is Map) {
+        final items = prop1['items'];
+        debugPrint('  - proposal["items"] runtimeType: ${items?.runtimeType}');
+        if (items is List) {
+          debugPrint('  - proposal["items"].length: ${items.length}');
+          final names = items.map((i) => (i is Map) ? i['interpretedName'] : 'unknown').toList();
+          debugPrint('  - interpretedName of each item: $names');
+        } else {
+          debugPrint('  - proposal["items"] is not a List!');
+        }
+      }
 
       return normalized;
     } on FirebaseFunctionsException catch (e) {

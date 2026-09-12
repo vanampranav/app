@@ -1,0 +1,6 @@
+- [ ] Review implementation plan with user
+- [ ] Implement zero-food invariant in `prepareMeal()`
+- [ ] Update `validateTurnClassification()` and `applyMutationsToMealDraft()` for proposal-level `CHANGE_MEAL_TYPE`
+- [ ] Strengthen `OpenAiProvider.classifyTurnAndMutations()` instructions
+- [ ] Add regression tests for Regression A, Regression B, and negative cases
+- [ ] Run test suite and verify 0 failures

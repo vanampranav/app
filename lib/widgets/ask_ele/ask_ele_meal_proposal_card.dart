@@ -5,6 +5,7 @@ import '../../theme/app_theme.dart';
 class AskEleMealProposalCard extends StatelessWidget {
   final MealProposal proposal;
   final VoidCallback? onConfirmAndLog;
+  final Function(MealProposalItem item, FoodResolutionOption option)? onOptionSelected;
   final bool isLogging;
   final bool isLogged;
 
@@ -12,6 +13,7 @@ class AskEleMealProposalCard extends StatelessWidget {
     super.key,
     required this.proposal,
     this.onConfirmAndLog,
+    this.onOptionSelected,
     this.isLogging = false,
     this.isLogged = false,
   });
@@ -43,6 +45,10 @@ class AskEleMealProposalCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    debugPrint('[FLUTTER DIAGNOSTIC 6] Inside AskEleMealProposalCard build():');
+    debugPrint('  - proposal.items.length: ${proposal.items.length}');
+    debugPrint('  - item names: ${proposal.items.map((i) => i.interpretedName).toList()}');
+
     final totalNutr = proposal.resolvedNutritionTotal;
 
     return Container(
@@ -372,6 +378,35 @@ class AskEleMealProposalCard extends StatelessWidget {
                 ),
             ],
           ),
+          if (item.resolutionOptions != null &&
+              item.resolutionOptions!.isNotEmpty &&
+              !item.isResolved) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: item.resolutionOptions!.map((opt) {
+                return ActionChip(
+                  elevation: 0,
+                  pressElevation: 0,
+                  backgroundColor: AppTheme.purple.withValues(alpha: 0.15),
+                  side: BorderSide(
+                    color: AppTheme.purple.withValues(alpha: 0.5),
+                  ),
+                  label: Text(
+                    opt.label,
+                    style: AppTheme.labelSM.copyWith(
+                      color: AppTheme.textPrimary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  onPressed: onOptionSelected != null
+                      ? () => onOptionSelected!(item, opt)
+                      : null,
+                );
+              }).toList(),
+            ),
+          ],
         ],
       ),
     );

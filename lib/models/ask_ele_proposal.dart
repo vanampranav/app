@@ -1,6 +1,34 @@
+import 'package:flutter/foundation.dart';
 import 'food_models.dart';
 
+class FoodResolutionOption {
+  final String optionId;
+  final String label;
+  final String providerFoodId;
+  final String semanticFoodName;
+  final String? brandName;
+
+  FoodResolutionOption({
+    required this.optionId,
+    required this.label,
+    required this.providerFoodId,
+    required this.semanticFoodName,
+    this.brandName,
+  });
+
+  factory FoodResolutionOption.fromJson(Map<String, dynamic> json) {
+    return FoodResolutionOption(
+      optionId: json['optionId'] as String? ?? 'opt_1',
+      label: json['label'] as String? ?? 'Option',
+      providerFoodId: json['providerFoodId'] as String? ?? '',
+      semanticFoodName: json['semanticFoodName'] as String? ?? '',
+      brandName: json['brandName'] as String?,
+    );
+  }
+}
+
 class MealProposalItem {
+  final String? itemId;
   final String interpretedName;
   final String? matchedFoodId;
   final String? matchedFoodName;
@@ -15,10 +43,12 @@ class MealProposalItem {
   final double matchConfidence;
   final String status;
   final String? clarificationQuestion;
+  final List<FoodResolutionOption>? resolutionOptions;
 
   bool get isResolved => status == 'resolved';
 
   MealProposalItem({
+    this.itemId,
     required this.interpretedName,
     this.matchedFoodId,
     this.matchedFoodName,
@@ -33,6 +63,7 @@ class MealProposalItem {
     required this.matchConfidence,
     required this.status,
     this.clarificationQuestion,
+    this.resolutionOptions,
   });
 
   factory MealProposalItem.fromJson(Map<String, dynamic> json) {
@@ -43,7 +74,16 @@ class MealProposalItem {
       );
     }
 
+    List<FoodResolutionOption>? opts;
+    if (json['resolutionOptions'] is List) {
+      opts = (json['resolutionOptions'] as List)
+          .map((e) => FoodResolutionOption.fromJson(
+              Map<String, dynamic>.from(e as Map)))
+          .toList();
+    }
+
     return MealProposalItem(
+      itemId: json['itemId'] as String?,
       interpretedName: json['interpretedName'] as String? ?? 'Unknown Food',
       matchedFoodId: json['matchedFoodId'] as String?,
       matchedFoodName: json['matchedFoodName'] as String?,
@@ -58,6 +98,7 @@ class MealProposalItem {
       matchConfidence: (json['matchConfidence'] as num?)?.toDouble() ?? 0.0,
       status: json['status'] as String? ?? 'needs_food_match',
       clarificationQuestion: json['clarificationQuestion'] as String?,
+      resolutionOptions: opts,
     );
   }
 }
@@ -96,6 +137,13 @@ class MealProposal {
             MealProposalItem.fromJson(Map<String, dynamic>.from(e as Map)))
         .toList();
 
+    debugPrint('[FLUTTER DIAGNOSTIC 3] Inside MealProposal.fromJson():');
+    debugPrint('  - rawItems runtimeType: ${json['items']?.runtimeType}');
+    debugPrint('  - rawItems.length: ${rawItems.length}');
+    debugPrint('  - resulting itemsList.length: ${itemsList.length}');
+    debugPrint(
+        '  - resulting interpretedName values: ${itemsList.map((i) => i.interpretedName).toList()}');
+
     NutritionData? totalNutr;
     if (json['resolvedNutritionTotal'] is Map<String, dynamic>) {
       totalNutr = NutritionData.fromJson(
@@ -109,7 +157,8 @@ class MealProposal {
     if (readyToLog) {
       for (final item in itemsList) {
         if (item.isResolved) {
-          if (item.weightGrams == null || item.weightGrams! <= 0) {
+          final wg = item.weightGrams;
+          if (wg == null || wg <= 0) {
             readyToLog = false;
             break;
           }
@@ -121,7 +170,7 @@ class MealProposal {
             readyToLog = false;
             break;
           }
-          if (item.weightGrams! > 0 && c / item.weightGrams! > 10.0) {
+          if (c / wg > 10.0) {
             readyToLog = false;
             break;
           }

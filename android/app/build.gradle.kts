@@ -38,7 +38,18 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+    }
 
+    flavorDimensions += "environment"
+    productFlavors {
+        create("dev") {
+            dimension = "environment"
+            applicationId = "com.theelefit.app"
+        }
+        create("prod") {
+            dimension = "environment"
+            applicationId = "com.theelefit.app"
+        }
     }
 
     signingConfigs {

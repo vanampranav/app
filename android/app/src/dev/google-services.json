@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "854625609432",
+    "project_id": "elefit-dev",
+    "storage_bucket": "elefit-dev.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:854625609432:android:8152c4b2b7e799c20f99ad",
+        "android_client_info": {
+          "package_name": "com.theelefit.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDCLLkh2E_tOjmGaXPn7IvxH_Gu2_Sly8U"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

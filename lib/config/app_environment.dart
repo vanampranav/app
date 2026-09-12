@@ -8,9 +8,9 @@ enum Environment { dev, prod }
 /// Guarantees that ALL Firebase access paths (SDK, REST, Custom Tokens, Functions)
 /// use the exact same target environment.
 class AppEnvironment {
-  static const String _envRaw = String.fromEnvironment('ENV', defaultValue: 'prod');
+  static const String _envRaw = String.fromEnvironment('ENV', defaultValue: '');
 
-  /// Active environment. Validated on startup.
+  /// Active environment. Validated on startup. Fails closed if ENV is missing or invalid.
   static Environment get current {
     final norm = _envRaw.trim().toLowerCase();
     if (norm == 'dev') {
@@ -20,7 +20,9 @@ class AppEnvironment {
       return Environment.prod;
     }
     throw StateError(
-      'FATAL: Invalid ENV="$_envRaw". Allowed values are "dev" or "prod".',
+      'FATAL CONFIGURATION ERROR: Invalid or missing ENV="$_envRaw". '
+      'You MUST explicitly supply --dart-define=ENV=dev or --dart-define=ENV=prod. '
+      'Refusing to start or default to production!',
     );
   }
 
@@ -40,6 +42,11 @@ class AppEnvironment {
     defaultValue: '',
   );
 
+  static const String _devIosApiKeyOverride = String.fromEnvironment(
+    'DEV_IOS_FIREBASE_API_KEY',
+    defaultValue: 'AIzaSyCr6EIfuM1svipTOUA-4o5Q_6Agwt85iLs',
+  );
+
   static const String _devAndroidAppIdOverride = String.fromEnvironment(
     'DEV_ANDROID_APP_ID',
     defaultValue: '1:854625609432:android:8152c4b2b7e799c20f99ad',
@@ -47,7 +54,7 @@ class AppEnvironment {
 
   static const String _devIosAppIdOverride = String.fromEnvironment(
     'DEV_IOS_APP_ID',
-    defaultValue: '1:854625609432:ios:b91ef3b946e0fc990f99ad',
+    defaultValue: '1:854625609432:ios:f41a3a9b7945c98c0f99ad',
   );
 
   static const String _devMessagingSenderIdOverride = String.fromEnvironment(
@@ -76,7 +83,17 @@ class AppEnvironment {
 
   static String get firebaseApiKey {
     if (isDev) {
-      return _devApiKeyOverride.isNotEmpty ? _devApiKeyOverride : Secrets.devFirebaseApiKey;
+      if (defaultTargetPlatform == TargetPlatform.iOS) {
+        return _devIosApiKeyOverride.isNotEmpty
+            ? _devIosApiKeyOverride
+            : Secrets.devIosFirebaseApiKey;
+      }
+      return _devApiKeyOverride.isNotEmpty
+          ? _devApiKeyOverride
+          : Secrets.devFirebaseApiKey;
+    }
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      return Secrets.prodIosFirebaseApiKey;
     }
     return Secrets.firebaseApiKey;
   }

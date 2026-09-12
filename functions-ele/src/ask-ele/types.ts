@@ -11,6 +11,27 @@ export type MealProposalItemStatus =
   | "needs_serving"
   | "needs_food_match";
 
+export interface FoodResolutionOption {
+  optionId: string;
+  label: string;
+  providerFoodId: string;
+  semanticFoodName: string;
+  brandName?: string | null;
+}
+
+export type FoodResolutionDecisionType =
+  | "AUTO_SELECT"
+  | "OFFER_OPTIONS"
+  | "ASK_CLARIFICATION";
+
+export interface FoodResolutionDecision {
+  type: FoodResolutionDecisionType;
+  selectedCandidate?: import("../nutrition/types").FoodSearchResult | null;
+  options?: FoodResolutionOption[];
+  confidence: number;
+  question?: string | null;
+}
+
 export interface MealProposalItem {
   itemId?: string;
   originalText?: string;
@@ -37,6 +58,8 @@ export interface MealProposalItem {
   status: MealProposalItemStatus;
 
   clarificationQuestion: string | null;
+
+  resolutionOptions?: FoodResolutionOption[];
 }
 
 export interface MealProposal {
@@ -75,6 +98,7 @@ export type ActiveDomain =
 
 export type PendingAction =
   | "clarify_meal_item"
+  | "clarify_meal_type"
   | "confirm_meal_log"
   | "select_recommendation_option"
   | "none";
@@ -125,7 +149,15 @@ export type MutationOperation =
   | "CHANGE_MEAL_TYPE"
   | "UPDATE_MODIFIERS"
   | "ANSWER_CLARIFICATION"
+  | "SELECT_OPTION"
   | "NONE";
+
+export interface SelectedOptionInput {
+  optionId: string;
+  providerFoodId: string;
+  targetEntityId: string;
+  semanticFoodName?: string | null;
+}
 
 export interface StateMutation {
   op: MutationOperation;
@@ -137,6 +169,8 @@ export interface StateMutation {
   addModifiers?: string[];
   removeModifiers?: string[];
   mealType?: string | null;
+  optionId?: string | null;
+  providerFoodId?: string | null;
 }
 
 export interface TurnClassificationResult {

@@ -42,4 +42,14 @@ export interface AiProvider {
   classifyTurnAndMutations?(
     input: ClassifyTurnInput
   ): Promise<TurnClassificationResult>;
+
+  /**
+   * Reranks candidate food search results semantically against target user food concept.
+   *
+   * @param {import("./types").RerankCandidatesInput} input - Food name and candidates.
+   * @return {Promise<import("./types").RerankCandidatesOutput>} Reranked candidate evaluations.
+   */
+  rerankFoodCandidates?(
+    input: import("./types").RerankCandidatesInput
+  ): Promise<import("./types").RerankCandidatesOutput>;
 }

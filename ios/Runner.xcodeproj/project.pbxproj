@@ -220,6 +220,7 @@
 			buildConfigurationList = 97C147051CF9000F007C117D /* Build configuration list for PBXNativeTarget "Runner" */;
 			buildPhases = (
 				84705B11C58EF1DC6AD4D903 /* [CP] Check Pods Manifest.lock */,
+				A1B2C3D4E5F6789012345678 /* Select Environment GoogleService-Info.plist */,
 				9740EEB61CF901F6004384FC /* Run Script */,
 				97C146EA1CF9000F007C117D /* Sources */,
 				97C146EB1CF9000F007C117D /* Frameworks */,
@@ -406,6 +407,22 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-resources.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+		A1B2C3D4E5F6789012345678 /* Select Environment GoogleService-Info.plist */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Select Environment GoogleService-Info.plist";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "ENVIRONMENT=\"\"\nif [ -f \"${SRCROOT}/Flutter/ephemeral/flutter_export_environment.sh\" ]; then\n    source \"${SRCROOT}/Flutter/ephemeral/flutter_export_environment.sh\"\nfi\nif [[ \"$DART_DEFINES\" == *\"ENV=dev\"* ]] || [[ \"$DART_DEFINES\" == *\"ENV%3Ddev\"* ]] || [[ \"$DART_DEFINES\" == *\"RU5WPWRldg==\"* ]] || [[ \"$CONFIGURATION\" == *\"dev\"* ]] || [[ \"$CONFIGURATION\" == *\"DEV\"* ]]; then\n    ENVIRONMENT=\"dev\"\nelif [[ \"$DART_DEFINES\" == *\"ENV=prod\"* ]] || [[ \"$DART_DEFINES\" == *\"ENV%3Dprod\"* ]] || [[ \"$DART_DEFINES\" == *\"RU5WPXByb2Q=\"* ]] || [[ \"$CONFIGURATION\" == *\"prod\"* ]] || [[ \"$CONFIGURATION\" == *\"PROD\"* ]]; then\n    ENVIRONMENT=\"prod\"\nfi\nif [ -z \"$ENVIRONMENT\" ]; then\n    echo \"error: FATAL ENVIRONMENT ERROR: Missing or unsupported ENV in DART_DEFINES (\\\"$DART_DEFINES\\\") or CONFIGURATION (\\\"$CONFIGURATION\\\"). You MUST explicitly supply --dart-define=ENV=dev or --dart-define=ENV=prod. Refusing to default to production!\" >&2\n    exit 1\nfi\nPLIST_SOURCE=\"${SRCROOT}/Runner/Firebase/${ENVIRONMENT}/GoogleService-Info.plist\"\nPLIST_DEST=\"${SRCROOT}/Runner/GoogleService-Info.plist\"\nif [ ! -f \"$PLIST_SOURCE\" ]; then\n    echo \"error: FATAL CONFIGURATION ERROR: Source plist file for environment '$ENVIRONMENT' not found at '$PLIST_SOURCE'!\" >&2\n    exit 1\nfi\necho \"Copying $ENVIRONMENT GoogleService-Info.plist from $PLIST_SOURCE to $PLIST_DEST\"\ncp -f \"$PLIST_SOURCE\" \"$PLIST_DEST\"\n";
 			showEnvVarsInLog = 0;
 		};
 /* End PBXShellScriptBuildPhase section */

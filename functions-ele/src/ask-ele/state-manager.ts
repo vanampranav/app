@@ -2,6 +2,7 @@ import {
   ConversationSession,
   MealProposal,
   MealProposalItem,
+  SelectedOptionInput,
   StateMutation,
   TurnClassificationResult,
 } from "./types";
@@ -10,6 +11,7 @@ import {NutritionProvider} from "../nutrition/nutrition-provider";
 import {MealOrchestrator} from "./meal-orchestrator";
 import {
   InterpretedFood,
+  MealType,
 } from "../ai/types";
 
 /**
@@ -20,6 +22,39 @@ import {
  */
 function normalizeStr(str: string): string {
   return str.toLowerCase().trim().replace(/\s+/g, " ");
+}
+
+/**
+ * Normalizes unit string aliases.
+ *
+ * @param {string | null} unit - Raw unit string.
+ * @return {string | null} Normalized unit string.
+ */
+function normalizeUnit(unit: string | null): string | null {
+  if (!unit) return null;
+  const u = normalizeStr(unit);
+  if (["piece", "pieces", "pc", "pcs", "idli", "idlis"].includes(u)) {
+    return "piece";
+  }
+  if (["cup", "cups"].includes(u)) {
+    return "cup";
+  }
+  if (["bowl", "bowls"].includes(u)) {
+    return "bowl";
+  }
+  if (["g", "gram", "grams", "gms"].includes(u)) {
+    return "g";
+  }
+  if (["serving", "servings"].includes(u)) {
+    return "serving";
+  }
+  if (["tbsp", "tablespoon", "tablespoons"].includes(u)) {
+    return "tablespoon";
+  }
+  if (["tsp", "teaspoon", "teaspoons"].includes(u)) {
+    return "teaspoon";
+  }
+  return u;
 }
 
 /**
@@ -102,6 +137,15 @@ export class ConversationStateManager {
       return null;
     }
 
+    if (rawResult.turnType === "NEW_MEAL_LOG") {
+      return {
+        turnType: "NEW_MEAL_LOG",
+        intent: rawResult.intent || "log_meal",
+        mutations: [],
+        newQueryText: rawResult.newQueryText,
+      };
+    }
+
     const draftItems = session.mealDraft?.items || [];
     const validatedMutations: StateMutation[] = [];
 
@@ -114,6 +158,7 @@ export class ConversationStateManager {
       "CHANGE_MEAL_TYPE",
       "UPDATE_MODIFIERS",
       "ANSWER_CLARIFICATION",
+      "SELECT_OPTION",
       "NONE",
     ];
 
@@ -176,8 +221,7 @@ export class ConversationStateManager {
           }
         }
 
-        // Target Resolution Step 3: Otherwise, use session.activeEntityId
-        // ONLY if it exists in the current draft.
+        // Target Resolution Step 3: Use session.activeEntityId
         if (
           !resolvedTargetId &&
           session.activeEntityId &&
@@ -186,7 +230,26 @@ export class ConversationStateManager {
           resolvedTargetId = session.activeEntityId;
         }
 
-        // Target Resolution Step 4: Otherwise, REJECT/DROP mutation safely
+        const pendingTargetId = session.pendingClarification?.targetEntityId;
+        if (
+          !resolvedTargetId &&
+          pendingTargetId &&
+          draftItems.some((i) => i.itemId === pendingTargetId)
+        ) {
+          resolvedTargetId = pendingTargetId;
+        }
+
+        // Target Resolution Step 4: If 1 unresolved item in draft, resolve
+        if (!resolvedTargetId) {
+          const unresolved = draftItems.filter(
+            (i) => i.status !== "resolved"
+          );
+          if (unresolved.length === 1) {
+            resolvedTargetId = unresolved[0].itemId || null;
+          }
+        }
+
+        // Target Resolution Step 5: Otherwise, REJECT/DROP mutation safely
         if (!resolvedTargetId) {
           continue; // Never guess or default to draftItems[0]
         }
@@ -219,8 +282,26 @@ export class ConversationStateManager {
   static async classifyTurn(
     session: ConversationSession,
     message: string,
-    aiProvider?: AiProvider
+    aiProvider?: AiProvider,
+    selectedOption?: SelectedOptionInput | null
   ): Promise<TurnClassificationResult> {
+    // 0. STRUCTURED OPTION SELECTION FAST PATH (Zero LLM classifier call)
+    if (selectedOption && selectedOption.optionId && selectedOption.providerFoodId) {
+      return {
+        turnType: "MODIFICATION_OF_PENDING_TASK",
+        intent: "log_meal",
+        mutations: [
+          {
+            op: "SELECT_OPTION",
+            targetEntityId: selectedOption.targetEntityId,
+            optionId: selectedOption.optionId,
+            providerFoodId: selectedOption.providerFoodId,
+            foodName: selectedOption.semanticFoodName || null,
+          },
+        ],
+      };
+    }
+
     const norm = normalizeStr(message);
 
     // 1. DETERMINISTIC PROTOCOL FAST PATHS
@@ -287,6 +368,95 @@ export class ConversationStateManager {
   }
 
   /**
+   * Generic helper to extract numeric quantity and unit.
+   *
+   * @param {string} text - User message text.
+   * @return {Object | null} Extracted quantity/unit or null.
+   */
+  static extractQuantityAndUnit(
+    text: string
+  ): {quantity: number; unit: string | null} | null {
+    const norm = normalizeStr(text);
+    if (!norm) return null;
+
+    const qtyUnits =
+      "gram|grams|g|kg|ml|cup|cups|bowl|bowls|piece|pieces|pc|pcs|" +
+      "tbsp|tablespoon|tablespoons|tsp|teaspoon|teaspoons|" +
+      "serving|servings";
+
+    let qty: number | null = null;
+    let remaining = norm;
+
+    remaining = remaining.replace(/^about\s+/, "").trim();
+
+    if (remaining.startsWith("half a ") || remaining.startsWith("half ")) {
+      qty = 0.5;
+      remaining = remaining.replace(/^half(\s+a)?\s+/, "");
+    } else if (
+      remaining.startsWith("a quarter ") ||
+      remaining.startsWith("quarter ")
+    ) {
+      qty = 0.25;
+      remaining = remaining.replace(/^(a\s+)?quarter\s+/, "");
+    } else {
+      const matchNum = remaining.match(/^(\d+(?:\.\d+)?|[a-z]+)\s*(.*)$/);
+      if (matchNum) {
+        const token = matchNum[1].toLowerCase();
+        remaining = matchNum[2].trim();
+        const wordVals: Record<string, number> = {
+          "half": 0.5,
+          "a": 1,
+          "an": 1,
+          "one": 1,
+          "two": 2,
+          "three": 3,
+          "four": 4,
+          "five": 5,
+          "six": 6,
+          "seven": 7,
+          "eight": 8,
+          "nine": 9,
+          "ten": 10,
+          "twenty": 20,
+          "thirty": 30,
+          "forty": 40,
+          "fifty": 50,
+          "sixty": 60,
+          "seventy": 70,
+          "eighty": 80,
+          "ninety": 90,
+          "hundred": 100,
+        };
+        if (/^\d+(\.\d+)?$/.test(token)) {
+          qty = parseFloat(token);
+        } else if (wordVals[token] !== undefined) {
+          qty = wordVals[token];
+        } else {
+          return null;
+        }
+      } else {
+        return null;
+      }
+    }
+
+    if (qty === null || isNaN(qty) || qty <= 0) return null;
+
+    if (remaining.startsWith("a ")) {
+      remaining = remaining.replace(/^a\s+/, "").trim();
+    }
+
+    const unitMatch = remaining.match(new RegExp(`^(${qtyUnits})\\b`, "i"));
+    const rawUnit = unitMatch ?
+      unitMatch[1] :
+      (remaining.length > 0 ? remaining : null);
+
+    return {
+      quantity: qty,
+      unit: normalizeUnit(rawUnit),
+    };
+  }
+
+  /**
    * Applies deterministic state mutations to a MealProposal.
    *
    * @param {MealProposal} draft - Current meal proposal draft.
@@ -309,6 +479,67 @@ export class ConversationStateManager {
       this.ensureStableItemIdentity(i, idx)
     );
 
+    const isMetadataOnly =
+      mutations.length > 0 &&
+      mutations.every((m) => m.op === "CHANGE_MEAL_TYPE") &&
+      !ConversationStateManager.extractQuantityAndUnit(answerMessage);
+
+    if (isMetadataOnly) {
+      for (const mut of mutations) {
+        if (mut.op === "CHANGE_MEAL_TYPE" && mut.mealType) {
+          const validTypes = ["breakfast", "lunch", "dinner", "snacks", "snack"];
+          const normType = mut.mealType.toLowerCase().trim();
+          if (validTypes.includes(normType)) {
+            draft.mealType =
+              normType === "snack" ? "snacks" : (normType as MealType);
+            draft.mealTypeSource = "explicit";
+          }
+        }
+      }
+
+      const resolvedItemCount = items.filter(
+        (i) => i.status === "resolved"
+      ).length;
+      const unresolvedItemCount = items.length - resolvedItemCount;
+      const hasUnresolvedItem = unresolvedItemCount > 0;
+      const isMealTypeUnknown = draft.mealType === null;
+      const needsClarification = hasUnresolvedItem || isMealTypeUnknown;
+
+      let clarificationQuestion: string | null = null;
+      if (needsClarification) {
+        const firstUnresolved = items.find((i) => i.status !== "resolved");
+        if (firstUnresolved) {
+          clarificationQuestion = firstUnresolved.clarificationQuestion;
+        } else if (isMealTypeUnknown) {
+          clarificationQuestion =
+            "Was this breakfast, lunch, dinner, or a snack?";
+        }
+      }
+
+      const resolvedNutritionTotal =
+        MealOrchestrator.calculateResolvedNutritionTotal(items);
+
+      const readyToLog =
+        draft.mealType !== null &&
+        !needsClarification &&
+        items.length > 0 &&
+        items.every((i) => i.status === "resolved");
+
+      return {
+        originalText: draft.originalText,
+        mealType: draft.mealType,
+        mealTypeSource: draft.mealTypeSource,
+        interpretationConfidence: draft.interpretationConfidence,
+        items,
+        readyToLog,
+        needsClarification,
+        clarificationQuestion,
+        resolvedItemCount,
+        unresolvedItemCount,
+        resolvedNutritionTotal,
+      };
+    }
+
     // 1. APPLY EXPLICIT MUTATIONS
     for (const mut of mutations) {
       if (mut.op === "CHANGE_QUANTITY") {
@@ -328,6 +559,56 @@ export class ConversationStateManager {
           }
           return item;
         });
+      } else if (mut.op === "CHANGE_UNIT") {
+        items = items.map((item) => {
+          if (
+            (mut.targetEntityId && item.itemId === mut.targetEntityId) ||
+            (mut.targetFoodName &&
+              item.interpretedName
+                .toLowerCase()
+                .includes(mut.targetFoodName.toLowerCase()))
+          ) {
+            return {
+              ...item,
+              requestedUnit: mut.unit ?? item.requestedUnit,
+            };
+          }
+          return item;
+        });
+      } else if (mut.op === "CHANGE_MEAL_TYPE") {
+        if (mut.mealType) {
+          const validTypes = ["breakfast", "lunch", "dinner", "snacks", "snack"];
+          const normType = mut.mealType.toLowerCase().trim();
+          if (validTypes.includes(normType)) {
+            draft.mealType =
+              normType === "snack" ? "snacks" : (normType as MealType);
+            draft.mealTypeSource = "explicit";
+          }
+        }
+      } else if (mut.op === "ADD_ITEM") {
+        if (mut.foodName || mut.targetFoodName) {
+          const newName = mut.foodName || mut.targetFoodName || "food";
+          items.push({
+            itemId: `item_${items.length}`,
+            interpretedName: newName,
+            requestedQuantity: mut.quantity ?? null,
+            requestedUnit: mut.unit ?? null,
+            matchedFoodId: null,
+            matchedFoodName: null,
+            brandName: null,
+            matchedServingId: null,
+            matchedServingDescription: null,
+            resolvedQuantity: null,
+            weightGrams: null,
+            nutrition: null,
+            matchConfidence: 0.0,
+            status:
+              mut.quantity !== undefined && mut.quantity !== null ?
+                "needs_food_match" :
+                "needs_quantity",
+            clarificationQuestion: `How much ${newName} did you have?`,
+          });
+        }
       } else if (mut.op === "UPDATE_MODIFIERS") {
         items = items.map((item) => {
           if (
@@ -385,6 +666,62 @@ export class ConversationStateManager {
           }
           return item;
         });
+      } else if (mut.op === "SELECT_OPTION") {
+        const updatedItemList: MealProposalItem[] = [];
+        for (const item of items) {
+          const isTarget =
+            (mut.targetEntityId && item.itemId === mut.targetEntityId) ||
+            (mut.targetFoodName &&
+              item.interpretedName
+                .toLowerCase()
+                .includes(mut.targetFoodName.toLowerCase())) ||
+            (activeEntityId && item.itemId === activeEntityId) ||
+            (items.length === 1);
+
+          if (!isTarget) {
+            // INVARIANT: Unrelated items are left completely untouched!
+            updatedItemList.push(item);
+            continue;
+          }
+
+          // Validate that the target item has matching resolutionOptions if present
+          let matchedOption = item.resolutionOptions?.find(
+            (opt) =>
+              opt.optionId === mut.optionId ||
+              opt.providerFoodId === mut.providerFoodId
+          );
+
+          const providerFoodId =
+            matchedOption?.providerFoodId || mut.providerFoodId;
+
+          if (!providerFoodId) {
+            // Stale or unknown option ID -> safely reject mutation
+            updatedItemList.push(item);
+            continue;
+          }
+
+          const semanticName =
+            matchedOption?.semanticFoodName || mut.foodName || item.interpretedName;
+
+          const brandName = matchedOption?.brandName || null;
+
+          let updatedItem: MealProposalItem = {
+            ...item,
+            interpretedName: semanticName,
+            matchedFoodId: providerFoodId,
+            matchedFoodName: semanticName,
+            brandName,
+            resolutionOptions: [], // Clear options after valid selection!
+            status: item.requestedQuantity !== null ? "resolved" : "needs_quantity",
+            clarificationQuestion:
+              item.requestedQuantity === null ?
+                `How much ${semanticName} did you have?` :
+                null,
+          };
+
+          updatedItemList.push(updatedItem);
+        }
+        items = updatedItemList;
       } else if (mut.op === "REMOVE_ITEM") {
         items = items.filter(
           (item) =>
@@ -396,57 +733,133 @@ export class ConversationStateManager {
                   .includes(mut.targetFoodName.toLowerCase()))
             )
         );
+      } else if (mut.op === "ANSWER_CLARIFICATION") {
+        const lowerAnswer = answerMessage.toLowerCase().trim();
+        if (
+          ["breakfast", "lunch", "dinner", "snack", "snacks"].includes(
+            lowerAnswer
+          )
+        ) {
+          draft.mealType =
+            lowerAnswer === "snack" ? "snacks" : (lowerAnswer as MealType);
+          draft.mealTypeSource = "explicit";
+        }
       }
+    }
+
+    // Bounded safety fallback for meal-type if answered in text
+    const lowerAnswer = answerMessage.toLowerCase().trim();
+    if (
+      draft.mealType === null &&
+      ["breakfast", "lunch", "dinner", "snack", "snacks"].includes(lowerAnswer)
+    ) {
+      draft.mealType =
+        lowerAnswer === "snack" ? "snacks" : (lowerAnswer as MealType);
+      draft.mealTypeSource = "explicit";
     }
 
     // 2. CHECK MULTI-ENTITY OR CLARIFICATION ANSWER IN MESSAGE
-    if (aiProvider && answerMessage.trim().length > 0) {
-      try {
-        const aiRes = await aiProvider.interpretMeal({
-          text: answerMessage,
-        });
+    const hasQuantityMutation = mutations.some(
+      (m) => m.op === "CHANGE_QUANTITY"
+    );
+    const shouldExtractQty =
+      mutations.length === 0 ||
+      mutations.every((m) => m.op === "ANSWER_CLARIFICATION");
 
-        if (aiRes.foods && aiRes.foods.length > 0) {
-          // Check multi-entity clarification ("1 cup rice, 200g chicken")
-          for (const f of aiRes.foods) {
-            const target = items.find(
-              (i) =>
-                i.interpretedName
-                  .toLowerCase()
-                  .includes(f.name.toLowerCase()) ||
-                f.name
-                  .toLowerCase()
-                  .includes(i.interpretedName.toLowerCase()) ||
-                (activeEntityId && i.itemId === activeEntityId)
-            );
+    if (shouldExtractQty && !hasQuantityMutation) {
+      const parsedQty =
+        ConversationStateManager.extractQuantityAndUnit(answerMessage);
+      if (parsedQty) {
+        const unresolvedItems = items.filter((i) => i.status !== "resolved");
+        const targetItem =
+          (activeEntityId && items.find((i) => i.itemId === activeEntityId)) ||
+          (unresolvedItems.length === 1 ? unresolvedItems[0] : null);
 
-            if (target) {
-              target.requestedQuantity =
-                f.quantity ?? target.requestedQuantity;
-              if (f.unit) {
-                target.requestedUnit = f.unit;
-              }
-              if (
-                f.name &&
-                f.name.length > 1 &&
-                f.name.toLowerCase() !== "food" &&
-                !f.name.toLowerCase().includes("cup") &&
-                !f.name.toLowerCase().includes("gram")
-              ) {
-                target.interpretedName = f.name;
+        if (targetItem) {
+          targetItem.requestedQuantity = parsedQty.quantity;
+          if (parsedQty.unit) {
+            targetItem.requestedUnit = parsedQty.unit;
+          }
+        }
+      } else if (aiProvider && answerMessage.trim().length > 0) {
+        try {
+          const aiRes = await aiProvider.interpretMeal({
+            text: answerMessage,
+          });
+
+          if (aiRes.mealType && draft.mealType === null) {
+            draft.mealType = aiRes.mealType;
+            draft.mealTypeSource = aiRes.mealTypeSource || "explicit";
+          }
+
+          if (aiRes.foods && aiRes.foods.length > 0) {
+            // Check multi-entity clarification ("1 cup rice, 200g chicken")
+            for (const f of aiRes.foods) {
+              const targetByName = items.find(
+                (i) =>
+                  i.interpretedName
+                    .toLowerCase()
+                    .includes(f.name.toLowerCase()) ||
+                  f.name
+                    .toLowerCase()
+                    .includes(i.interpretedName.toLowerCase())
+              );
+
+              const activeItem = activeEntityId ?
+                items.find((i) => i.itemId === activeEntityId) :
+                null;
+
+              const target =
+                targetByName ||
+                (aiRes.foods.length === 1 ? activeItem : null);
+
+              if (target) {
+                target.requestedQuantity =
+                  f.quantity ?? target.requestedQuantity;
+                if (f.unit) {
+                  target.requestedUnit = f.unit;
+                }
+                if (
+                  f.name &&
+                  f.name.length > 1 &&
+                  f.name.toLowerCase() !== "food" &&
+                  !f.name.toLowerCase().includes("cup") &&
+                  !f.name.toLowerCase().includes("gram")
+                ) {
+                  target.interpretedName = f.name;
+                }
               }
             }
           }
+        } catch (e) {
+          console.warn("AI multi-entity interpretation error:", e);
         }
-      } catch (e) {
-        console.warn("AI multi-entity interpretation error:", e);
       }
     }
 
-    // 3. RE-RESOLVE ALL ITEMS WITH STATE PRESERVATION
+    // 3. RE-RESOLVE ONLY TARGETED OR UNRESOLVED ITEMS WITH STATE PRESERVATION
     const updatedItems: MealProposalItem[] = [];
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
+
+      const wasTargetedInTurn =
+        mutations.some((mut) => {
+          return (
+            (mut.targetEntityId && item.itemId === mut.targetEntityId) ||
+            (mut.targetFoodName &&
+              item.interpretedName
+                .toLowerCase()
+                .includes(mut.targetFoodName.toLowerCase()))
+          );
+        }) ||
+        (activeEntityId && item.itemId === activeEntityId) ||
+        (item.status !== "resolved");
+
+      if (item.status === "resolved" && !wasTargetedInTurn) {
+        updatedItems.push(item);
+        continue;
+      }
+
       const baseName = item.interpretedName.split(" with ")[0].trim();
       let foodNameWithMods = baseName;
       if (item.modifiers && item.modifiers.length > 0) {
@@ -463,7 +876,8 @@ export class ConversationStateManager {
       try {
         let resolved = await MealOrchestrator.resolveProposalItem(
           updatedFood,
-          nutritionProvider
+          nutritionProvider,
+          aiProvider
         );
 
         // State Preservation Invariant: Preserve intent on failure
@@ -557,7 +971,8 @@ export class ConversationStateManager {
     message: string,
     aiProvider: AiProvider,
     nutritionProvider: NutritionProvider,
-    todayContext: Record<string, unknown>
+    todayContext: Record<string, unknown>,
+    selectedOption?: SelectedOptionInput | null
   ): Promise<{
     session: ConversationSession;
     responseText: string;
@@ -568,7 +983,8 @@ export class ConversationStateManager {
     const classification = await this.classifyTurn(
       session,
       message,
-      aiProvider
+      aiProvider,
+      selectedOption
     );
 
     console.log(
@@ -647,18 +1063,23 @@ export class ConversationStateManager {
         const firstUnresolved = updatedDraft.items.find(
           (i) => i.status !== "resolved"
         );
-        session.pendingAction = "clarify_meal_item";
+        session.pendingAction = firstUnresolved ?
+          "clarify_meal_item" :
+          "clarify_meal_type";
         session.activeEntityId = firstUnresolved?.itemId || null;
-        session.expectedSlot =
-          firstUnresolved?.status === "needs_quantity" ?
+        session.expectedSlot = firstUnresolved ?
+          firstUnresolved.status === "needs_quantity" ?
             "quantity" :
-            "food_identity";
+            "food_identity" :
+          "meal_type";
         session.pendingClarification = {
           targetEntityId: firstUnresolved?.itemId || null,
           targetFoodName: firstUnresolved?.interpretedName || null,
           question:
             updatedDraft.clarificationQuestion ||
-            "Could you clarify the meal details?",
+            (firstUnresolved ?
+              "Could you clarify the meal details?" :
+              "Was this breakfast, lunch, dinner, or a snack?"),
           expectedSlot: session.expectedSlot,
         };
       } else {
@@ -681,13 +1102,41 @@ export class ConversationStateManager {
     }
 
     // 4. NEW MEAL LOG ACTION
-    const newProposal = await MealOrchestrator.prepareMeal(
-      {
-        text: message,
-      },
-      aiProvider,
-      nutritionProvider
-    );
+    let newProposal: MealProposal;
+    try {
+      newProposal = await MealOrchestrator.prepareMeal(
+        {
+          text: message,
+        },
+        aiProvider,
+        nutritionProvider
+      );
+    } catch (err) {
+      if (err instanceof Error && err.message === "NO_MEAL_ENTITIES") {
+        const guidanceResult = await aiProvider.getGuidance({
+          message,
+          todayContext,
+          recommendationContext: session.recommendationContext,
+          uid: session.uid,
+        });
+
+        session.activeDomain = "guidance";
+        session.lastToolResult = guidanceResult as unknown as Record<
+          string,
+          unknown
+        >;
+        session.updatedAt = Date.now();
+
+        return {
+          session,
+          responseText: guidanceResult.responseText,
+          proposal: session.mealDraft, // Preserved existing draft unchanged
+          recommendation: guidanceResult.recommendation ?? null,
+          responseType: guidanceResult.responseType,
+        };
+      }
+      throw err;
+    }
 
     // Assign stable itemIds to new proposal items
     newProposal.items = newProposal.items.map((i, idx) =>
@@ -701,18 +1150,23 @@ export class ConversationStateManager {
       const firstUnresolved = newProposal.items.find(
         (i) => i.status !== "resolved"
       );
-      session.pendingAction = "clarify_meal_item";
+      session.pendingAction = firstUnresolved ?
+        "clarify_meal_item" :
+        "clarify_meal_type";
       session.activeEntityId = firstUnresolved?.itemId || null;
-      session.expectedSlot =
-        firstUnresolved?.status === "needs_quantity" ?
+      session.expectedSlot = firstUnresolved ?
+        firstUnresolved.status === "needs_quantity" ?
           "quantity" :
-          "food_identity";
+          "food_identity" :
+        "meal_type";
       session.pendingClarification = {
         targetEntityId: firstUnresolved?.itemId || null,
         targetFoodName: firstUnresolved?.interpretedName || null,
         question:
           newProposal.clarificationQuestion ||
-          "Could you clarify the meal details?",
+          (firstUnresolved ?
+            "Could you clarify the meal details?" :
+            "Was this breakfast, lunch, dinner, or a snack?"),
         expectedSlot: session.expectedSlot,
       };
     } else {

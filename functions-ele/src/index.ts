@@ -1281,7 +1281,7 @@ export const processConversationTurn = onCall(
     }
 
     const uid = request.auth.uid;
-    const {sessionId, message, todayContext, recommendationContext} =
+    const {sessionId, message, todayContext, recommendationContext, selectedOption} =
       request.data || {};
 
     if (typeof sessionId !== "string" || !sessionId.trim()) {
@@ -1297,6 +1297,12 @@ export const processConversationTurn = onCall(
         "Valid message string is required."
       );
     }
+
+    logger.info("[DIAGNOSTIC] processConversationTurn incoming:", {
+      sessionId,
+      message,
+      hasSelectedOption: !!selectedOption,
+    });
 
     const aiKey = openAiApiKey.value();
     const fatKey = fatSecretConsumerKey.value();
@@ -1341,16 +1347,23 @@ export const processConversationTurn = onCall(
         nutritionProvider,
         todayContext && typeof todayContext === "object" ?
           (todayContext as Record<string, unknown>) :
-          {}
+          {},
+        selectedOption && typeof selectedOption === "object" ?
+          (selectedOption as import("./ask-ele/types").SelectedOptionInput) :
+          null
       );
 
       await sessionRef.set(turnResult.session, {merge: true});
 
-      logger.info("Conversation turn processed successfully", {
+      logger.info("[DIAGNOSTIC] processConversationTurn final turnResult:", {
         uid,
         sessionId,
         responseType: turnResult.responseType,
+        proposalItemsCount: turnResult.proposal?.items?.length ?? 0,
+        proposalItemNames:
+          turnResult.proposal?.items?.map((i) => i.interpretedName) ?? [],
         readyToLog: turnResult.proposal?.readyToLog ?? false,
+        needsClarification: turnResult.proposal?.needsClarification ?? false,
       });
 
       return {
@@ -1377,3 +1390,4 @@ export const processConversationTurn = onCall(
     }
   }
 );
+

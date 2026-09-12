@@ -88,4 +88,28 @@ export interface GetGuidanceOutput {
 export interface ClassifyTurnInput {
   message: string;
   session: ConversationSession;
+  selectedOption?: import("../ask-ele/types").SelectedOptionInput | null;
+}
+
+export interface RerankCandidateInputItem {
+  foodId: string;
+  name: string;
+  brandName?: string | null;
+  caloriesPer100g?: number | null;
+}
+
+export interface RerankCandidatesInput {
+  foodName: string;
+  candidates: RerankCandidateInputItem[];
+}
+
+export interface CandidateRerankResult {
+  foodId: string;
+  semanticScore: number;
+  isGeneric: boolean;
+  userLabel: string;
+}
+
+export interface RerankCandidatesOutput {
+  evaluations: CandidateRerankResult[];
 }

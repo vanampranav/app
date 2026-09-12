@@ -1,8 +1,8 @@
+import * as logger from "firebase-functions/logger";
 import {AiProvider} from "../ai/ai-provider";
 import {InterpretedFood, MealType} from "../ai/types";
 import {NutritionProvider} from "../nutrition/nutrition-provider";
 import {
-  FoodSearchResult,
   FoodServingResult,
   NutritionData,
 } from "../nutrition/types";
@@ -11,6 +11,7 @@ import {
   MealProposalItem,
   PrepareMealInput,
 } from "./types";
+import {FoodResolutionEngine} from "./food-resolution-engine";
 
 /**
  * Normalizes a string by trimming, lowercasing, and collapsing spaces.
@@ -57,34 +58,7 @@ function normalizeUnit(unit: string | null): string | null {
   return u;
 }
 
-/**
- * Scores a candidate search result against an interpreted food name.
- *
- * @param {string} interpretedName - Name from AI interpretation.
- * @param {FoodSearchResult} candidate - Candidate search result item.
- * @return {number} Deterministic match confidence score (0.0 to 1.0).
- */
-function scoreFoodMatch(
-  interpretedName: string,
-  candidate: FoodSearchResult
-): number {
-  const normInterpreted = normalizeStr(interpretedName);
-  const normCandidate = normalizeStr(candidate.name);
 
-  if (normCandidate === normInterpreted && !candidate.brandName) {
-    return 1.0;
-  }
-  if (normCandidate === normInterpreted) {
-    return 0.95;
-  }
-  if (
-    normCandidate.includes(normInterpreted) ||
-    normInterpreted.includes(normCandidate)
-  ) {
-    return candidate.brandName ? 0.8 : 0.85;
-  }
-  return 0.0;
-}
 
 /**
  * Checks whether a serving option explicitly matches a normalized unit.
@@ -664,11 +638,13 @@ export class MealOrchestrator {
    *
    * @param {InterpretedFood} food - Interpreted food item.
    * @param {NutritionProvider} nutritionProvider - Provider instance.
+   * @param {AiProvider} [aiProvider] - Active AI provider instance.
    * @return {Promise<MealProposalItem>} Resolved or unresolved item.
    */
   public static async resolveProposalItem(
     food: InterpretedFood,
-    nutritionProvider: NutritionProvider
+    nutritionProvider: NutritionProvider,
+    aiProvider?: AiProvider
   ): Promise<MealProposalItem> {
     const interpretedName = food.name;
     const requestedQuantity = food.quantity;
@@ -681,18 +657,18 @@ export class MealOrchestrator {
         {maxResults: 10}
       );
 
-      let bestCandidate: FoodSearchResult | null = null;
-      let bestScore = 0.0;
+      // 2. Evaluate candidates via FoodResolutionEngine
+      const engine = new FoodResolutionEngine();
+      const decision = await engine.resolveCandidates(
+        interpretedName,
+        searchResults,
+        aiProvider
+      );
 
-      for (const candidate of searchResults) {
-        const score = scoreFoodMatch(interpretedName, candidate);
-        if (score > bestScore) {
-          bestScore = score;
-          bestCandidate = candidate;
-        }
-      }
-
-      if (!bestCandidate || bestScore < 0.85) {
+      if (
+        decision.type !== "AUTO_SELECT" ||
+        !decision.selectedCandidate
+      ) {
         return {
           interpretedName,
           matchedFoodId: null,
@@ -705,12 +681,17 @@ export class MealOrchestrator {
           resolvedQuantity: null,
           weightGrams: null,
           nutrition: null,
-          matchConfidence: bestScore,
+          matchConfidence: decision.confidence,
           status: "needs_food_match",
-          clarificationQuestion: `Which ${interpretedName} did you have?`,
+          clarificationQuestion:
+            decision.question ||
+            `Which ${interpretedName} did you have?`,
+          resolutionOptions: decision.options || [],
         };
       }
 
+      const bestCandidate = decision.selectedCandidate;
+      const bestScore = decision.confidence;
       const matchedFoodId = bestCandidate.foodId;
       const matchedFoodName = bestCandidate.name;
       const brandName = bestCandidate.brandName || null;
@@ -928,28 +909,15 @@ export class MealOrchestrator {
     const interpretationConfidence = interpretation.confidence;
 
     if (interpretation.foods.length === 0) {
-      return {
-        originalText: input.text,
-        mealType,
-        mealTypeSource,
-        interpretationConfidence,
-        items: [],
-        readyToLog: false,
-        needsClarification: true,
-        clarificationQuestion:
-          interpretation.clarificationQuestion ||
-          "What did you have?",
-        resolvedItemCount: 0,
-        unresolvedItemCount: 0,
-        resolvedNutritionTotal: null,
-      };
+      throw new Error("NO_MEAL_ENTITIES");
     }
 
     const items: MealProposalItem[] = [];
     for (const food of interpretation.foods) {
       const item = await MealOrchestrator.resolveProposalItem(
         food,
-        nutritionProvider
+        nutritionProvider,
+        aiProvider
       );
       items.push(item);
     }
@@ -1009,6 +977,15 @@ export class MealOrchestrator {
       isTotalPlausible &&
       items.length > 0 &&
       items.every((i) => i.status === "resolved");
+
+    logger.info("[DIAGNOSTIC] MealOrchestrator.prepareMeal output:", {
+      itemCount: items.length,
+      itemNames: items.map((i) => i.interpretedName),
+      resolvedItemCount,
+      unresolvedItemCount,
+      readyToLog,
+      needsClarification,
+    });
 
     return {
       originalText: input.text,
@@ -1138,7 +1115,8 @@ export class MealOrchestrator {
     try {
       resolvedItem = await MealOrchestrator.resolveProposalItem(
         updatedFood,
-        nutritionProvider
+        nutritionProvider,
+        aiProvider
       );
 
       // PRESERVE cumulative intent state across resolution turns
