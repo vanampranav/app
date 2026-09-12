@@ -61,3 +61,4 @@ backend/.env
 
 # iOS build artifacts (should never be committed)
 ios/build/
+.artifacts/
