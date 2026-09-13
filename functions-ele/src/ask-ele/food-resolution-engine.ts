@@ -82,6 +82,9 @@ export class FoodResolutionEngine {
     for (const c of candidates) {
       const normCand = normalizeMechanicalStr(c.name);
       if (normCand === normFood && !c.brandName) {
+        console.log(
+          `[FOOD_RESOLUTION_DIAGNOSTIC] Fast path exact generic match: "${c.name}"`
+        );
         return {
           type: "AUTO_SELECT",
           selectedCandidate: c,
@@ -93,6 +96,9 @@ export class FoodResolutionEngine {
     for (const c of candidates) {
       const normCand = normalizeMechanicalStr(c.name);
       if (normCand === normFood) {
+        console.log(
+          `[FOOD_RESOLUTION_DIAGNOSTIC] Fast path exact match: "${c.name}"`
+        );
         return {
           type: "AUTO_SELECT",
           selectedCandidate: c,
@@ -198,6 +204,18 @@ export class FoodResolutionEngine {
       secondCandidate !== undefined &&
       secondCandidate.semanticScore >= 0.60 &&
       macroDeltaRatio > this.macroDeltaThreshold;
+
+    console.log(
+      `[FOOD_RESOLUTION_DIAGNOSTIC] Engine evaluation summary for "${foodName}":`,
+      JSON.stringify({
+        topCandidateName: topCandidate?.candidate.name ?? null,
+        topCandidateScore: topCandidate?.semanticScore ?? null,
+        secondCandidateName: secondCandidate?.candidate.name ?? null,
+        secondCandidateScore: secondCandidate?.semanticScore ?? null,
+        macroDeltaRatio,
+        hasHighMacroVariance,
+      })
+    );
 
     // A. AUTO_SELECT: High semantic confidence & no high macro variance between plausible alternatives
     if (

@@ -324,7 +324,7 @@ export class FatSecretProvider implements NutritionProvider {
     };
 
     const methodParams: Record<string, string> = {
-      method: "foods.search.v3",
+      method: "foods.search.v5",
       search_expression: query,
       max_results: options?.maxResults ? String(options.maxResults) : "20",
       include_food_images: "1",
@@ -345,12 +345,40 @@ export class FatSecretProvider implements NutritionProvider {
     const queryParams = new URLSearchParams(allParams).toString();
     const requestUrl = `${this.baseUrl}?${queryParams}`;
 
+    console.log(`[FatSecret] Calling method: ${methodParams.method}`);
+
     const response = await fetch(requestUrl);
     if (!response.ok) {
-      throw new Error(`FatSecret API returned HTTP ${response.status}`);
+      let errorBody = "";
+      try {
+        errorBody = await response.text();
+      } catch {
+        // ignore
+      }
+      console.error(
+        `[FatSecret] HTTP ${response.status} error:`,
+        errorBody
+      );
+      throw new Error(
+        `FatSecret API returned HTTP ${response.status}${
+          errorBody ? `: ${errorBody}` : ""
+        }`
+      );
     }
 
     const json = (await response.json()) as Record<string, unknown>;
+
+    if (json.error) {
+      console.error(
+        "[FatSecret] API error:",
+        JSON.stringify(json.error)
+      );
+
+      throw new Error(
+        `FatSecret API error: ${JSON.stringify(json.error)}`
+      );
+    }
+
     const foodsSearch = json.foods_search as
       | {results?: {food?: unknown}}
       | undefined;
@@ -396,10 +424,36 @@ export class FatSecretProvider implements NutritionProvider {
 
     const response = await fetch(requestUrl);
     if (!response.ok) {
-      throw new Error(`FatSecret API returned HTTP ${response.status}`);
+      let errorBody = "";
+      try {
+        errorBody = await response.text();
+      } catch {
+        // ignore
+      }
+      console.error(
+        `[FatSecret] HTTP ${response.status} error:`,
+        errorBody
+      );
+      throw new Error(
+        `FatSecret API returned HTTP ${response.status}${
+          errorBody ? `: ${errorBody}` : ""
+        }`
+      );
     }
 
     const json = (await response.json()) as Record<string, unknown>;
+
+    if (json.error) {
+      console.error(
+        "[FatSecret] API error:",
+        JSON.stringify(json.error)
+      );
+
+      throw new Error(
+        `FatSecret API error: ${JSON.stringify(json.error)}`
+      );
+    }
+
     const rawFood = json.food;
     if (!rawFood) {
       throw new Error(`Food with ID '${foodId}' not found`);

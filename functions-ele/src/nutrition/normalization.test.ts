@@ -71,3 +71,72 @@ export function runNormalizationTests(): void {
     throw new Error("Multiple results test failed");
   }
 }
+
+/**
+ * Runs unit tests for FatSecret searchFoods error diagnostics.
+ *
+ * @return {Promise<void>}
+ */
+export async function runFatSecretDiagnosticTests(): Promise<void> {
+  const provider = new FatSecretProvider("dummy_key", "dummy_secret");
+  const originalFetch = global.fetch;
+
+  try {
+    // Test API error response (HTTP 200 with JSON error)
+    global.fetch = (async () => {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          error: {
+            code: 8,
+            message: "Invalid OAuth signature",
+          },
+        }),
+      } as Response;
+    }) as typeof global.fetch;
+
+    let apiErrorThrown = false;
+    try {
+      await provider.searchFoods("eggs");
+    } catch (e: unknown) {
+      if (
+        e instanceof Error &&
+        e.message.includes("FatSecret API error:") &&
+        e.message.includes("Invalid OAuth signature")
+      ) {
+        apiErrorThrown = true;
+      }
+    }
+    if (!apiErrorThrown) {
+      throw new Error("FatSecret API error response diagnostic test failed");
+    }
+
+    // Test non-2xx HTTP response
+    global.fetch = (async () => {
+      return {
+        ok: false,
+        status: 401,
+        text: async () => "Unauthorized client",
+      } as Response;
+    }) as typeof global.fetch;
+
+    let httpErrorThrown = false;
+    try {
+      await provider.searchFoods("eggs");
+    } catch (e: unknown) {
+      if (
+        e instanceof Error &&
+        e.message.includes("FatSecret API returned HTTP 401") &&
+        e.message.includes("Unauthorized client")
+      ) {
+        httpErrorThrown = true;
+      }
+    }
+    if (!httpErrorThrown) {
+      throw new Error("FatSecret HTTP non-2xx diagnostic test failed");
+    }
+  } finally {
+    global.fetch = originalFetch;
+  }
+}

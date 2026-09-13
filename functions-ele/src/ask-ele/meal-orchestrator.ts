@@ -657,6 +657,23 @@ export class MealOrchestrator {
         {maxResults: 10}
       );
 
+      console.log(
+        `[FOOD_RESOLUTION_DIAGNOSTIC] Interpreted food name: "${interpretedName}"`
+      );
+      console.log(
+        `[FOOD_RESOLUTION_DIAGNOSTIC] Candidate count: ${searchResults.length}`
+      );
+      const top5Candidates = searchResults.slice(0, 5).map((c) => ({
+        foodId: c.foodId,
+        name: c.name,
+        brandName: c.brandName || null,
+        description: c.description || null,
+      }));
+      console.log(
+        `[FOOD_RESOLUTION_DIAGNOSTIC] Top 5 candidates:`,
+        JSON.stringify(top5Candidates, null, 2)
+      );
+
       // 2. Evaluate candidates via FoodResolutionEngine
       const engine = new FoodResolutionEngine();
       const decision = await engine.resolveCandidates(
@@ -664,6 +681,27 @@ export class MealOrchestrator {
         searchResults,
         aiProvider
       );
+
+      console.log(
+        `[FOOD_RESOLUTION_DIAGNOSTIC] Decision type: ${decision.type}`
+      );
+      console.log(
+        `[FOOD_RESOLUTION_DIAGNOSTIC] Confidence: ${decision.confidence}`
+      );
+      if (decision.selectedCandidate) {
+        console.log(
+          `[FOOD_RESOLUTION_DIAGNOSTIC] Selected candidate name: "${decision.selectedCandidate.name}"`
+        );
+      }
+      if (decision.options && decision.options.length > 0) {
+        const optionLabels = decision.options.map(
+          (o) => o.label || o.semanticFoodName
+        );
+        console.log(
+          `[FOOD_RESOLUTION_DIAGNOSTIC] Option labels/names:`,
+          JSON.stringify(optionLabels)
+        );
+      }
 
       if (
         decision.type !== "AUTO_SELECT" ||
