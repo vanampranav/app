@@ -191,6 +191,7 @@ class FitDaysSDKManager: NSObject, ICDeviceManagerDelegate, ICScanDeviceDelegate
         if data.imp != 0 {
             weightData["bmi"] = data.bmi
             weightData["bodyFat"] = data.bodyFatPercent
+            weightData["subcutaneousFat"] = data.subcutaneousFatPercent
             weightData["muscle"] = data.musclePercent
             weightData["water"] = data.moisturePercent
             weightData["boneMass"] = data.boneMass
